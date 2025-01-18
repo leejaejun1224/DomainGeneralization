@@ -3,15 +3,6 @@ import torch.nn as nn
 
 
 
-
-
-
-
-
-
-
-
-
 """
 input : image, kernal, stride, padding
 
