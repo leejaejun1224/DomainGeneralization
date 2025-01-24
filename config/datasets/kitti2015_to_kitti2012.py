@@ -1,5 +1,6 @@
 
-
+batch_size = 2
+num_workers = 2
 
 
 kitti_2015_pipeline = [
@@ -22,13 +23,15 @@ data = dict(
             data_root='/home/jaejun/dataset/kitti/kitti2015',
             img_dir='image_2',
             ann_dir='2015 disparity gt 저장된 곳',
+            file_list='./filenames/kitti15.txt',
             pipeline=kitti_2015_pipeline 
         ),
         target=dict(
-            type='kitti2012',
-            data_root='/home/jaejun/dataset/kitti/kitti2012',
+            type='kitti2015',
+            data_root='/home/jaejun/dataset/kitti/kitti2015',
             img_dir='image_2',
             ann_dir='2012 disparity gt 저장된 곳',
+            file_list='./filenames/kitti15.txt',
             pipeline=kitti_2012_pipeline
         )
     ),
