@@ -21,6 +21,8 @@ parser.add_argument('--model_config', default='', help='UDA model preparation')
 parser.add_argument('--seed', default=1, metavar='S', help='random seed(default = 1)')
 parser.add_argument('--log_dir', default='./log', help='log directory')
 
+
+
 args = parser.parse_args()
 torch.manual_seed(args.seed)
 torch.cuda.manual_seed(args.seed)
