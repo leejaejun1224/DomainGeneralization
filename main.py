@@ -17,6 +17,7 @@ cudnn.benchmark = True
 os.environ['CUDA_VISIBLE_DEVICES'] = '0, 1'
 
 
+
 def train_step(model, data_batch, optimizer, cfg):
     model.train()
     optimizer.zero_grad()
