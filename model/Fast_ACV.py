@@ -278,7 +278,6 @@ class Fast_ACVNet(nn.Module):
         pred_att = torch.squeeze(att_weights, 1)
         pred_att_prob = F.softmax(pred_att, dim=1)
         pred_att = disparity_regression(pred_att_prob, self.maxdisp // 4)
-        print("pred att shape", pred_att.shape)
         pred_variance = disparity_variance(pred_att_prob, self.maxdisp // 4, pred_att.unsqueeze(1))
         pred_variance = self.beta + self.gamma * pred_variance
         pred_variance = torch.sigmoid(pred_variance)
@@ -325,7 +324,9 @@ class Fast_ACVNet(nn.Module):
             else:
                 pred = regression_topk(cost.squeeze(1), disparity_sample_topk, 2)
                 pred_up = context_upsample(pred, spx_pred)
-                return [pred_up*4, pred.squeeze(1)*4, pred_att_up*4, pred_att*4]
+                # pred_up이 final result임 [batch_size,256,512] 
+                max_values, _ = att_prob.max(dim=1, keepdim=True)
+                return [pred_up*4, pred.squeeze(1)*4, pred_att_up*4, pred_att*4], max_values.squeeze(1)
 
         else:
             if self.att_weights_only:

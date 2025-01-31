@@ -18,6 +18,7 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '0, 1'
 
 
 
+# train sample one by one
 def train_step(model, data_batch, optimizer, cfg):
     model.train()
     optimizer.zero_grad()
@@ -72,7 +73,7 @@ def main():
     model.init_ema() 
 
     # optimizer 좀 더 고민해보자.
-    # optimizer = torch.optim.Adam(model.parameters(), lr=cfg.optimizer.lr)
+    optimizer = torch.optim.Adam(model.parameters(), lr=cfg['optimizer']['lr'])
     
     # 시작하자잉
     # for epoch in range(cfg.train.num_epochs):
@@ -87,8 +88,8 @@ def main():
                 if isinstance(data_batch[key], torch.Tensor):
                     data_batch[key] = data_batch[key].cuda()
                     # print(data_batch[key])
-        print(epoch)
-        #     log_vars = train_step(model, data_batch, optimizer, cfg)
+            log_vars = train_step(model, data_batch, optimizer, cfg)
+            # print("batch_idx : ", batch_idx)
         #     train_losses.append(log_vars['loss'])
             
         #     if batch_idx % cfg.train.log_interval == 0:

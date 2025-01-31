@@ -21,14 +21,18 @@ class StereoDepthUDA(nn.Module):
         # flag for initializing EMA weights
         self.ema_initialized = False
 
-    def forward(self, data_batch):
-        
-        return self.model(data_batch['left'], data_batch['right'])
+    def forward(self, left, right):
+        output, _ = self.model(left, right)
+        return output
     
 
     @torch.no_grad()
-    def ema_forward(self, data_batch):
-        return self.ema_model(data_batch['left'], data_batch['right'])
+    def ema_forward(self, left, right, return_confidence=True):
+        output, confidence_map = self.ema_model(left, right)
+        if return_confidence:
+            return output[1], confidence_map
+        else:
+            return output[1]
 
     def update_ema(self, alpha=0.99):
         for ema_param, param in zip(self.ema_model.parameters(), self.model.parameters()):

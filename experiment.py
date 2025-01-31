@@ -22,7 +22,20 @@ def prepare_cfg(arg):
             tgt_filelist = dataset_config.data['train']['target']['file_list']
         ),
         batch_size = dataset_config.batch_size,
-        num_workers = dataset_config.num_workers
-        
+        num_workers = dataset_config.num_workers,
+        model = dict(
+                name = 'Fast_ACVNet',
+                maxdisp = 192,
+                att_weights_only = False
+            ),
+        optimizer = dict(
+            lr = 1e-4
+        ),
+        uda = dict(
+            threshold = 0.5
+        )
     )
+
+
+
     return cfg
