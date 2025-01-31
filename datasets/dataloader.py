@@ -44,7 +44,6 @@ class PrepareDataset(Dataset):
 
     def __getitem__(self, index):
         
-        print(self.source_datapath)
         src_left_img = self.load_image(os.path.join(self.source_datapath, self.source_left_filenames[index]))
         src_right_img = self.load_image(os.path.join(self.source_datapath, self.source_right_filenames[index]))
         src_disparity = self.load_disp(os.path.join(self.source_datapath, self.source_disp_filenames[index]))

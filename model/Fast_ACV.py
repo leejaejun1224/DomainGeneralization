@@ -4,8 +4,8 @@ import torch.nn as nn
 import torch.utils.data
 from torch.autograd import Variable
 import torch.nn.functional as F
-from submodule import *
-from loss import get_loss
+from model.submodules import *
+from model.loss import get_loss
 import math
 import gc
 import time
@@ -338,12 +338,3 @@ class Fast_ACVNet(nn.Module):
             pred = regression_topk(cost.squeeze(1), disparity_sample_topk, 2)
             pred_up = context_upsample(pred, spx_pred)
             return [pred_up*4]
-    
-
-    def forward_train(self, left, right, gt):
-
-        pred_disp = self.forward(left,right)
-
-        loss = self.get_loss(pred_disp, gt)
-
-        return loss

@@ -2,52 +2,41 @@ import math
 import numpy as np
 import torch
 import torch.nn as nn
-from tools import get_model
 from copy import deepcopy
-from .model import build_stereo_model
+from model.Fast_ACV import Fast_ACVNet
+from model.loss import get_loss
 
 
 class StereoDepthUDA(nn.Module):
     def __init__(self, cfg):
         super().__init__()
         
-        ema_cfg = deepcopy(cfg['model'])
-        self.ema_model = build_stereo_model(ema_cfg)
-
-    # for train
-    # 여기에서 model은 그대로 있고 data_batch만 받아서 student 모델을 학습을 하고 loss를 돌려줌.
-    def forward_train(self, data_batch):
+        # student model
+        self.model = Fast_ACVNet(maxdisp=192, att_weights_only=False)
         
-        if self.init_weight == True:
-            self._init_ema_weight()
+        # ema teacher model
+        # ema_cfg = deepcopy(cfg['model'])
+        self.ema_model = Fast_ACVNet(maxdisp=192, att_weights_only=False)
         
-        if self.ema_upate == True:
-            self._init_ema_update()
+        # flag for initializing EMA weights
+        self.ema_initialized = False
 
-
-        outputs = dict()
-        outputs['loss'] = 0
-        outputs['log_vars'] = 0
-        return outputs
-
-    # aka teacher network
-    def get_model(self):
-        return get_model(self.ema_model)
-
-
-
-    def ema_forward():
-        return
+    def forward(self, data_batch):
+        
+        return self.model(data_batch['left'], data_batch['right'])
     
-    def _update_ema_weight(alpha):
-        return 
-    
-    def _init_ema_weight():
-        return 
-    
-    def _calc_supervised_loss():
-        return 
-    
-    def _calc_pseudo_loss():
-        return 
-    
+
+    @torch.no_grad()
+    def ema_forward(self, data_batch):
+        return self.ema_model(data_batch['left'], data_batch['right'])
+
+    def update_ema(self, alpha=0.99):
+        for ema_param, param in zip(self.ema_model.parameters(), self.model.parameters()):
+            ema_param.data.mul_(alpha).add_(param.data, alpha=1 - alpha)
+
+    def init_ema(self):
+        for ema_param, param in zip(self.ema_model.parameters(), self.model.parameters()):
+            ema_param.data.copy_(param.data)    
+        self.ema_initialized = True
+
+
