@@ -10,6 +10,8 @@ from model.loss import get_loss
 class StereoDepthUDA(nn.Module):
     def __init__(self, cfg):
         super().__init__()
+
+        self.alpha = cfg['uda']['alpha']
         
         # student model
         self.model = Fast_ACVNet(maxdisp=192, att_weights_only=False)
@@ -25,7 +27,6 @@ class StereoDepthUDA(nn.Module):
         output, _ = self.model(left, right)
         return output
     
-
     @torch.no_grad()
     def ema_forward(self, left, right, return_confidence=True):
         output, confidence_map = self.ema_model(left, right)
@@ -34,9 +35,17 @@ class StereoDepthUDA(nn.Module):
         else:
             return output[1]
 
-    def update_ema(self, alpha=0.99):
+    def update_ema(self, iter, alpha=0.99):
+        alpha_teacher = min(1 - 1 / (iter + 1), self.alpha)
         for ema_param, param in zip(self.ema_model.parameters(), self.model.parameters()):
-            ema_param.data.mul_(alpha).add_(param.data, alpha=1 - alpha)
+            if not param.data.shape:  # scalar tensor
+                ema_param.data = \
+                    alpha_teacher * ema_param.data + \
+                    (1 - alpha_teacher) * param.data
+            else:
+                ema_param.data[:] = \
+                    alpha_teacher * ema_param[:].data[:] + \
+                    (1 - alpha_teacher) * param[:].data[:]
 
     def init_ema(self):
         for ema_param, param in zip(self.ema_model.parameters(), self.model.parameters()):
@@ -44,3 +53,5 @@ class StereoDepthUDA(nn.Module):
         self.ema_initialized = True
 
 
+    def ema_state_dict(self):
+        return self.ema_model.state_dict()

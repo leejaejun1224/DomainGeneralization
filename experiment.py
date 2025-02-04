@@ -4,12 +4,18 @@ import importlib.util
 
 def prepare_cfg(arg):
     
-    module_name = 'dataset_config'
-    file_path = arg.dataset_config
-    
-    dataset_spec = importlib.util.spec_from_file_location(module_name, file_path)
+    dataset_name = 'dataset_config'
+    dataset_path = arg.dataset_config
+    dataset_spec = importlib.util.spec_from_file_location(dataset_name, dataset_path)
     dataset_config = importlib.util.module_from_spec(dataset_spec)
     dataset_spec.loader.exec_module(dataset_config)
+
+
+    uda_name = 'uda_config'
+    uda_path = arg.uda_config
+    uda_spec = importlib.util.spec_from_file_location(uda_name, uda_path)
+    uda_config = importlib.util.module_from_spec(uda_spec)
+    uda_spec.loader.exec_module(uda_config)
     
     # 이러면 train, val, test를 다 나눠야 하는데 이게 맞나...
     cfg = dict(
@@ -23,16 +29,19 @@ def prepare_cfg(arg):
         ),
         batch_size = dataset_config.batch_size,
         num_workers = dataset_config.num_workers,
+
         model = dict(
-                name = 'Fast_ACVNet',
-                maxdisp = 192,
-                att_weights_only = False
-            ),
+            name = uda_config.depth_model['name'],
+            maxdisp = uda_config.depth_model['maxdisp'],
+            att_weights_only = uda_config.depth_model['att_weights_only']
+        ),
         optimizer = dict(
-            lr = 1e-4
+            optimizer = uda_config.optimizer['optimizer'],
+            lr = uda_config.optimizer['lr']
         ),
         uda = dict(
-            threshold = 0.5
+            threshold = uda_config.uda['threshold'],
+            alpha = uda_config.uda['alpha']
         )
     )
 

@@ -51,6 +51,9 @@ def compute_uda_loss(model, data_batch, cfg):
 
     pseudo_loss = calc_pseudo_loss(tgt_pred, pseudo_disp, confidence_map, threshold)
     total_loss = supervised_loss + pseudo_loss
+
+    print("supervised loss : ", supervised_loss)
+    print("pseudo loss : ", pseudo_loss)
     # 로그용
     log_vars = {
         'loss': total_loss.item(),
