@@ -12,7 +12,6 @@ def calc_supervised_loss(pred_disp, gt_disp, gt_disp_low):
     # scale별 weight 예시
     weights = [1.0, 0.3, 0.5, 0.3]
     loss = get_loss(pred_disp, gt_disps, masks, weights)
-    print("supervised loss : ", loss)
     return loss
 
 def calc_pseudo_loss(pred_disp, pseudo_disp, confidence_map, threshold):
@@ -20,14 +19,11 @@ def calc_pseudo_loss(pred_disp, pseudo_disp, confidence_map, threshold):
     mask = (pseudo_disp[0] > 0) & (pseudo_disp[0] < 192) & (confidence_map.float() >= threshold)
     mask = mask.tolist()
     weights = [1.0]
-
     confidence_mask = confidence_map.float() >= threshold
     true_count = confidence_mask.sum(dim=(0,1,2)) 
     total_pixels = confidence_mask.numel() // confidence_mask.shape[0]
     true_ratio = true_count.float() / total_pixels
-    print("true_ratio : ", true_ratio)
     pseudo_label_loss = get_loss(pred_disp, pseudo_disp, mask, weights)
-    print("pseudo_label_loss : ", pseudo_label_loss)
     return pseudo_label_loss*true_ratio
 
 
