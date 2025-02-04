@@ -13,12 +13,15 @@ class StereoDepthUDA(nn.Module):
 
         self.alpha = cfg['uda']['alpha']
         
+        model = cfg['model']['name']
+
         # student model
-        self.model = Fast_ACVNet(maxdisp=192, att_weights_only=False)
-        
+        self.model = model(maxdisp=cfg['model']['maxdisp'], 
+                                          att_weights_only=cfg['model']['att_weights_only'])
+
         # ema teacher model
-        # ema_cfg = deepcopy(cfg['model'])
-        self.ema_model = Fast_ACVNet(maxdisp=192, att_weights_only=False)
+        self.ema_model = model(maxdisp=cfg['model']['maxdisp'],
+                                        att_weights_only=cfg['model']['att_weights_only'])
         
         # flag for initializing EMA weights
         self.ema_initialized = False

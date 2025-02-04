@@ -12,15 +12,23 @@ uda = dict(
     alpha = 0.99
 )
 
-
-
 optimizer = dict(
     optimizer = "Adam",
     lr = 1e-4
 )
 
-
-
 name_dataset = 'kitti2015_to_kitti2012'
 
 epoch = 100
+
+data = dict(
+    train = dict(
+        epoch = 100,
+        batch_size = 1,
+        num_workers = 2,
+        shuffle = True,
+        pin_memory = True,
+        save_interval = 10
+    )
+)
+

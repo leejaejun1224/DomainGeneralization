@@ -39,7 +39,7 @@ def main():
 
     parser = argparse.ArgumentParser(description="StereoDepth Unsupervised Domain Adaptation")
     parser.add_argument('--dataset_config', default='./config/datasets/kitti2015_to_kitti2012.py', help='source domain and target domain name')
-    parser.add_argument('--uda_config', default='./config/uda/kitti2015_to_kitti2012.py', help='UDA model preparation')
+    parser.add_argument('--uda_config', default='./config/uda/kit15_kit12.py', help='UDA model preparation')
     parser.add_argument('--seed', default=1, metavar='S', help='random seed(default = 1)')
     parser.add_argument('--log_dir', default='./log', help='log directory')
 
@@ -49,25 +49,26 @@ def main():
     os.makedirs(args.log_dir, exist_ok=True)
 
     cfg = prepare_cfg(args)
+    print(cfg)
 
-    train_dataset = PrepareDataset(source_datapath=cfg['data']['src_root'],
-                                target_datapath=cfg['data']['tgt_root'], 
-                                sourcefile_list=cfg['data']['src_filelist'],
-                                targetfile_list=cfg['data']['tgt_filelist'],
+    train_dataset = PrepareDataset(source_datapath=cfg['dataset']['src_root'],
+                                target_datapath=cfg['dataset']['tgt_root'], 
+                                sourcefile_list=cfg['dataset']['src_filelist'],
+                                targetfile_list=cfg['dataset']['tgt_filelist'],
                                 training=True)
-    test_dataset = PrepareDataset(source_datapath=cfg['data']['src_root'],
-                                target_datapath=cfg['data']['tgt_root'],
-                                sourcefile_list=cfg['data']['src_filelist'], 
-                                targetfile_list=cfg['data']['tgt_filelist'],
+    
+    test_dataset = PrepareDataset(source_datapath=cfg['dataset']['src_root'],
+                                target_datapath=cfg['dataset']['tgt_root'],
+                                sourcefile_list=cfg['dataset']['src_filelist'], 
+                                targetfile_list=cfg['dataset']['tgt_filelist'],
                                 training=False)
+    
     train_loader = DataLoader(train_dataset, batch_size=cfg['batch_size'], shuffle=True, num_workers=cfg['num_workers'], drop_last=True)
     test_loader = DataLoader(test_dataset, batch_size=cfg['batch_size'], shuffle=False, num_workers=cfg['num_workers'], drop_last=False)
-
-
     # print(cfg)
+
     model = StereoDepthUDA(cfg)
     model.to('cuda:0')
-    
     
     # 이거 init하는 조건은 좀 더 생각을 해봐야겠는데
     model.init_ema()
@@ -75,12 +76,7 @@ def main():
     # optimizer 좀 더 고민해보자.
     optimizer = torch.optim.Adam(model.parameters(), lr=cfg['optimizer']['lr'])
     # 시작하자잉
-    # for epoch in range(cfg.train.num_epochs):
-
-
-
-
-    for epoch in range(100):
+    for epoch in range(cfg['epoch']):
         model.train()
         train_losses = []
         
@@ -99,11 +95,11 @@ def main():
             #           f'Loss: {log_vars["loss"]:.4f}')
         
         avg_loss = sum(train_losses) / len(train_losses)
-        print(f'Epoch [{epoch}/{100}] Average Loss: {avg_loss:.4f}')
+        print(f'Epoch [{epoch}/{cfg["epoch"]}] Average Loss: {avg_loss:.4f}')
         
 
 
-        if (epoch + 1) % 10 == 0:
+        if (epoch + 1) % cfg['save_interval'] == 0:
             model.eval()
             val_losses = []
             
