@@ -77,6 +77,9 @@ def main():
     # 시작하자잉
     # for epoch in range(cfg.train.num_epochs):
 
+
+
+
     for epoch in range(100):
         model.train()
         train_losses = []
