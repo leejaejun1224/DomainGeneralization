@@ -17,23 +17,22 @@ cudnn.benchmark = True
 os.environ['CUDA_VISIBLE_DEVICES'] = '0, 1'
 
 
+def compute_error(pred, gt):
+    mask = (gt > 0) & (gt < 192)
+    error = torch.abs(pred[mask] - gt[mask])
+    error = error.mean()
+    return error
 
-# train sample one by one
-def train_step(model, iter, data_batch, optimizer, cfg):
-    model.train()
-    optimizer.zero_grad()
-    
-    total_loss, log_var = compute_uda_loss(model, data_batch, cfg)
 
-    total_loss.backward()
-    optimizer.step()
+def test_sample(model, left, right):
+    model.eval()
+    with torch.no_grad():
+        left = left.cuda()
+        right = right.cuda()
+        output, confidence_map = model(left, right)
+    return output[1], confidence_map
     
-    # ema update here?
-    model.update_ema(iter, alpha=0.99)
-    
-    return log_var
-    
-    
+
     
 def main():
 
@@ -42,11 +41,12 @@ def main():
     parser.add_argument('--model_config', default='', help='UDA model preparation')
     parser.add_argument('--seed', default=1, metavar='S', help='random seed(default = 1)')
     parser.add_argument('--log_dir', default='./log', help='log directory')
+    parser.add_argument('--source_only', default=True, type=int, help='batch size')
+    parser.add_argument('--checkpoint', default='', help='path to checkpoint')
 
     args = parser.parse_args()
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed(args.seed)
-    os.makedirs(args.log_dir, exist_ok=True)
 
     cfg = prepare_cfg(args)
 
@@ -64,76 +64,40 @@ def main():
     test_loader = DataLoader(test_dataset, batch_size=cfg['batch_size'], shuffle=False, num_workers=cfg['num_workers'], drop_last=False)
 
 
-    # print(cfg)
     model = StereoDepthUDA(cfg)
     model.to('cuda:0')
+
+    if args.checkpoint:
+        checkpoint = torch.load(args.checkpoint)
+        model.load_state_dict(checkpoint['model_state_dict'])
+        print(f"Loaded checkpoint from {args.checkpoint}")
     
-    
-    # 이거 init하는 조건은 좀 더 생각을 해봐야겠는데
-    model.init_ema() 
 
-    # optimizer 좀 더 고민해보자.
-    optimizer = torch.optim.Adam(model.parameters(), lr=cfg['optimizer']['lr'])
-    
-    # 시작하자잉
-    # for epoch in range(cfg.train.num_epochs):
-    for epoch in range(100):
-        model.train()
-        train_losses = []
-        
-        for batch_idx, data_batch in enumerate(train_loader):
+    model.eval()
+    total_error = 0
+    num_samples = 0
 
-            # print(data_batch)
-            for key in data_batch:
-                if isinstance(data_batch[key], torch.Tensor):
-                    data_batch[key] = data_batch[key].cuda()
-                    # print(data_batch[key])
-            log_vars = train_step(model, epoch, data_batch, optimizer, cfg)
-            train_losses.append(log_vars['loss'])
+    for batch_idx, data_batch in enumerate(test_loader):
+        if args.source_only:
+            left, right, disp_gt = data_batch['src_left'], data_batch['src_right'], data_batch['src_disparity']
+            output, confidence_map = test_sample(model, left, right)
+            error = compute_error(output, disp_gt.cuda())
+            total_error += error.item()
+            num_samples += 1
             
-            # if batch_idx % cfg.train.log_interval == 0:
-            #     print(f'Epoch [{epoch}/{cfg.train.num_epochs}] Batch [{batch_idx}/{len(train_loader)}] '
-            #           f'Loss: {log_vars["loss"]:.4f}')
-        
-        avg_loss = sum(train_losses) / len(train_losses)
-        print(f'Epoch [{epoch}/{100}] Average Loss: {avg_loss:.4f}')
-        
+            if batch_idx % 10 == 0:
+                print(f"Batch {batch_idx}: Error = {error.item():.4f}")
 
-
-        if (epoch + 1) % 10 == 0:
-            model.eval()
-            val_losses = []
+        else:
+            left, right = data_batch['tgt_left'], data_batch['tgt_right']
+            output, confidence_map = test_sample(model, left, right)
             
-            with torch.no_grad():
-                for data_batch in test_loader:
-                    # Move data to GPU
-                    for key in data_batch:
-                        if isinstance(data_batch[key], torch.Tensor):
-                            data_batch[key] = data_batch[key].cuda()
-                            
-                    # Use EMA model for validation
-                    outputs, _ = model.ema_forward(data_batch['tgt_left'], data_batch['tgt_right'])
-            #         val_losses.append(outputs['loss'].item())
-            
-            # avg_val_loss = sum(val_losses) / len(val_losses)
-            # print(f'Validation Loss: {avg_val_loss:.4f}')
-            
-            # Save checkpoint
-            checkpoint = {
-                'epoch': epoch,
-                'model_state_dict': model.state_dict(),
-                'ema_state_dict': model.ema_state_dict(),
-                'optimizer_state_dict': optimizer.state_dict()
-                # 'loss': avg_val_loss,
-            }
-            torch.save(checkpoint, os.path.join(args.log_dir, f'checkpoint_epoch{epoch+1}.pth'))
-    
-    return 0
 
 
-
+    if args.source_only:
+        avg_error = total_error / num_samples
+        print(f"\nAverage Error on Source Domain: {avg_error:.4f}")
 
 
 if __name__=="__main__":
-    # argparser
     main()

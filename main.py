@@ -1,4 +1,5 @@
 import os
+import datetime
 import argparse
 import numpy as np
 import torch
@@ -17,20 +18,21 @@ cudnn.benchmark = True
 os.environ['CUDA_VISIBLE_DEVICES'] = '0, 1'
 
 
+def val_step(model, data_batch, cfg, train=False):
+    model.eval()
+    total_loss, log_var = compute_uda_loss(model, data_batch, cfg, train=False)
+    return log_var
+
+
 
 # train sample one by one
 def train_step(model, iter, data_batch, optimizer, cfg):
     model.train()
     optimizer.zero_grad()
-    
-    total_loss, log_var = compute_uda_loss(model, data_batch, cfg)
-
+    total_loss, log_var = compute_uda_loss(model, data_batch, cfg, train=True)
     total_loss.backward()
     optimizer.step()
-    
-    # ema update here?
     model.update_ema(iter, alpha=0.99)
-    
     return log_var
     
     
@@ -46,10 +48,11 @@ def main():
     args = parser.parse_args()
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed(args.seed)
-    os.makedirs(args.log_dir, exist_ok=True)
+    dir_name = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M")
+    save_dir = args.log_dir + '/' + dir_name
+    os.makedirs(save_dir, exist_ok=True)
 
     cfg = prepare_cfg(args)
-    print(cfg)
 
     train_dataset = PrepareDataset(source_datapath=cfg['dataset']['src_root'],
                                 target_datapath=cfg['dataset']['tgt_root'], 
@@ -74,9 +77,9 @@ def main():
     model.init_ema()
 
     # optimizer 좀 더 고민해보자.
-    optimizer = torch.optim.Adam(model.parameters(), lr=cfg['optimizer']['lr'])
+    optimizer = torch.optim.Adam(model.parameters(), lr=cfg['lr'])
     # 시작하자잉
-    for epoch in range(cfg['epoch']):
+    for epoch in range(cfg['epoch']): 
         model.train()
         train_losses = []
         
@@ -99,20 +102,19 @@ def main():
         
 
 
-        if (epoch + 1) % cfg['save_interval'] == 0:
-            model.eval()
+        if (epoch + 1) % cfg['val_interval'] == 0:
             val_losses = []
             
             with torch.no_grad():
                 for data_batch in test_loader:
-                    # Move data to GPU
+                    # gpu로 옮기기
                     for key in data_batch:
                         if isinstance(data_batch[key], torch.Tensor):
                             data_batch[key] = data_batch[key].cuda()
                             
-                    # Use EMA model for validation
-                    outputs, _ = model.ema_forward(data_batch['tgt_left'], data_batch['tgt_right'])
-            #         val_losses.append(outputs['loss'].item())
+                    # EMA model로 검증
+                    log_vars = val_step(model, data_batch)
+                    val_losses.append(log_vars['loss'])
             
             # avg_val_loss = sum(val_losses) / len(val_losses)
             # print(f'Validation Loss: {avg_val_loss:.4f}')
@@ -125,7 +127,7 @@ def main():
                 'optimizer_state_dict': optimizer.state_dict()
                 # 'loss': avg_val_loss,
             }
-            torch.save(checkpoint, os.path.join(args.log_dir, f'checkpoint_epoch{epoch+1}.pth'))
+            torch.save(checkpoint, os.path.join(save_dir, f'checkpoint_epoch{epoch+1}.pth'))
     
     return 0
 

@@ -12,67 +12,64 @@ cityscapes_pipeline = [
     dict(type='Resize', img_scale=(1248, 384))
 ]
 
+source_dataset = 'kitti2015'
+target_dataset = 'kitti2015'
+
 dataset = dict(
     train = dict(
         type='UDAdataset',
         source=dict(
-            type='kitti2015',
-            data_root='/home/jaejun/dataset/kitti/kitti2015/training',
+            data_root=f'/home/jaejun/dataset/kitti/{source_dataset}/training',
             left_img_dir='image_2',
             right_img_dir='image_3',
             ann_dir='2015 disparity gt 저장된 곳',
-            file_list='./filenames/source/kitti15_train.txt',
+            file_list=f'./filenames/source/{source_dataset}_train.txt',
             pipeline=kitti_2015_pipeline
         ),
         target=dict(
-            type='kitti2015',
-            data_root='/home/jaejun/dataset/kitti/kitti2015/training',
+            data_root=f'/home/jaejun/dataset/kitti/{target_dataset}/training',
             left_img_dir='image_2',
             right_img_dir='image_3',
             ann_dir='2012 disparity gt 저장된 곳',
-            file_list='./filenames/target/kitti15_train.txt',
+            file_list=f'./filenames/target/{target_dataset}_train.txt',
             pipeline=kitti_2012_pipeline
         )
     ),
     val = dict(
         type='UDAdataset',
         source=dict(
-            type='kitti2015',
-            data_root='/home/jaejun/dataset/kitti/kitti2015/training',
+            data_root=f'/home/jaejun/dataset/kitti/{source_dataset}/training',
             left_img_dir='image_2',
             right_img_dir='image_3',
             ann_dir='2015 disparity gt 저장된 곳',
-            file_list='./filenames/source/kitti15_val.txt',
+            file_list=f'./filenames/source/{source_dataset}_val.txt',
             pipeline=kitti_2015_pipeline
         ),
         target=dict(
-            type='kitti2015',
-            data_root='/home/jaejun/dataset/kitti/kitti2015/training',
+            data_root=f'/home/jaejun/dataset/kitti/{target_dataset}/training',
             left_img_dir='image_2',
             right_img_dir='image_3',
             ann_dir='2012 disparity gt 저장된 곳',
-            file_list='./filenames/target/kitti15_val.txt',
+            file_list=f'./filenames/target/{target_dataset}_val.txt',
             pipeline=kitti_2012_pipeline
         )
     ),
     test = dict(
-                type='UDAdataset',
+        type='UDAdataset',
         source=dict(
-            type='kitti2015',
-            data_root='/home/jaejun/dataset/kitti/kitti2015/testing',
+            data_root=f'/home/jaejun/dataset/kitti/{source_dataset}/testing',
             left_img_dir='image_2',
             right_img_dir='image_3',
             ann_dir='2015 disparity gt 저장된 곳',
-            file_list='./filenames/source/kitti15_test.txt',
+            file_list=f'./filenames/source/{source_dataset}_test.txt',
             pipeline=kitti_2015_pipeline
         ),
         target=dict(
-            type='kitti2015',
-            data_root='/home/jaejun/dataset/kitti/kitti2015/testing',
+            data_root=f'/home/jaejun/dataset/kitti/{target_dataset}/testing',
             left_img_dir='image_2',
             right_img_dir='image_3',
             ann_dir='2012 disparity gt 저장된 곳',
-            file_list='./filenames/target/kitti15_test.txt',
+            file_list=f'./filenames/target/{target_dataset}_test.txt',
             pipeline=kitti_2012_pipeline
         )
     )

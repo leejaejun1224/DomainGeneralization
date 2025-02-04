@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from model.loss import get_loss
+from models.loss import get_loss
 
 
 
@@ -27,7 +27,7 @@ def calc_pseudo_loss(pred_disp, pseudo_disp, confidence_map, threshold):
     return pseudo_label_loss*true_ratio
 
 
-def compute_uda_loss(model, data_batch, cfg):
+def compute_uda_loss(model, data_batch, cfg, train=True):
     src_left = data_batch['src_left']
     src_right = data_batch['src_right']
     src_disp_gt = data_batch['src_disparity']
@@ -58,7 +58,7 @@ def compute_uda_loss(model, data_batch, cfg):
     log_vars = {
         'loss': total_loss.item(),
         'supervised_loss': supervised_loss.item(),
-        'pseudo_loss': pseudo_loss.item()
+        'unsupervised_loss': pseudo_loss.item()
     }
     return total_loss, log_vars
 

@@ -19,7 +19,6 @@ optimizer = dict(
 
 name_dataset = 'kitti2015_to_kitti2012'
 
-epoch = 100
 
 data = dict(
     train = dict(
@@ -28,7 +27,7 @@ data = dict(
         num_workers = 2,
         shuffle = True,
         pin_memory = True,
-        save_interval = 10
+        val_interval = 10
     )
 )
 

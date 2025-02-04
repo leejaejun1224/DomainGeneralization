@@ -17,8 +17,6 @@ def prepare_cfg(arg):
     
     cfg = dict(
         dataset = dict(
-            src = train_source['type'],
-            tgt = train_target['type'], 
             src_root = train_source['data_root'],
             tgt_root = train_target['data_root'],
             src_filelist = train_source['file_list'],
@@ -27,9 +25,13 @@ def prepare_cfg(arg):
         batch_size = uda_config.data['train']['batch_size'],
         num_workers = uda_config.data['train']['num_workers'],
         model = uda_config.depth_model['name'],
+        maxdisp = uda_config.depth_model['maxdisp'],
+        att_weights_only = uda_config.depth_model['att_weights_only'],
         optimizer = uda_config.optimizer['optimizer'],
+        lr = uda_config.optimizer['lr'],
         uda = uda_config.uda,
-        save_interval = uda_config.data['train']['save_interval']
+        save_interval = uda_config.data['train']['val_interval'],
+        epoch = uda_config.data['train']['epoch']
     )
 
     return cfg

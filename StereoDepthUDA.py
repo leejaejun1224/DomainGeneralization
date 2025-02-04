@@ -3,9 +3,9 @@ import numpy as np
 import torch
 import torch.nn as nn
 from copy import deepcopy
-from model.Fast_ACV import Fast_ACVNet
-from model.loss import get_loss
-
+from models.Fast_ACV import Fast_ACVNet
+from models.loss import get_loss
+from models import __models__
 
 class StereoDepthUDA(nn.Module):
     def __init__(self, cfg):
@@ -13,15 +13,13 @@ class StereoDepthUDA(nn.Module):
 
         self.alpha = cfg['uda']['alpha']
         
-        model = cfg['model']['name']
-
         # student model
-        self.model = model(maxdisp=cfg['model']['maxdisp'], 
-                                          att_weights_only=cfg['model']['att_weights_only'])
+        self.model = __models__[cfg['model']](maxdisp=cfg['maxdisp'], 
+                                att_weights_only=cfg['att_weights_only'])
 
         # ema teacher model
-        self.ema_model = model(maxdisp=cfg['model']['maxdisp'],
-                                        att_weights_only=cfg['model']['att_weights_only'])
+        self.ema_model = __models__[cfg['model']](maxdisp=cfg['maxdisp'],
+                                    att_weights_only=cfg['att_weights_only'])
         
         # flag for initializing EMA weights
         self.ema_initialized = False
