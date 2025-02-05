@@ -91,8 +91,7 @@ def main():
         else:
             left, right = data_batch['tgt_left'], data_batch['tgt_right']
             output, confidence_map = test_sample(model, left, right)
-            
-
+        
 
     if args.source_only:
         avg_error = total_error / num_samples

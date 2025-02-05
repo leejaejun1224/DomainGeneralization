@@ -1,6 +1,11 @@
 import importlib.util
 
 
+def compute_error(pred_disp, gt_disp):
+    mask = (gt_disp > 0) & (gt_disp < 192)
+    return (pred_disp[mask] - gt_disp[mask]).abs().mean()
+
+
 def load_config(name, path):
     spec = importlib.util.spec_from_file_location(name, path)
     config = importlib.util.module_from_spec(spec)
