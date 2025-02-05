@@ -7,6 +7,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.backends.cudnn as cudnn
+import matplotlib.pyplot as plt
 from StereoDepthUDA import StereoDepthUDA
 
 
@@ -24,7 +25,8 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '0, 1'
 def test_step(model, data_batch, cfg, train=False):
     model.eval()
     total_loss, log_var = compute_uda_loss(model, data_batch, cfg, train=False)
-    return log_var
+    pred_disp = log_var['pseudo_disp']
+    return pred_disp
 
 
     
@@ -34,12 +36,16 @@ def main():
     parser.add_argument('--uda_config', default='./config/uda/kit15_kit12.py', help='UDA model preparation')
     parser.add_argument('--seed', default=1, metavar='S', help='random seed(default = 1)')
     parser.add_argument('--log_dir', default='./log', help='log directory')
+    parser.add_argument('--ckpt', default='', help='checkpoint', )
 
     args = parser.parse_args()
+    assert args.ckpt != '', 'checkpoint is required !!'
+
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed(args.seed)
     dir_name = datetime.datetime.now().strftime("%Y-%m-%d_%H:%M")
-    save_dir = args.log_dir + '/' + dir_name
+    save_dir = '/'.join(args.ckpt.split('/')[:-1]) + '/disp'
+    print(save_dir)
     os.makedirs(save_dir, exist_ok=True)
 
     cfg = prepare_cfg(args)
@@ -64,6 +70,8 @@ def main():
     model = StereoDepthUDA(cfg)
     model.to('cuda:0')
     
+    model.student_model.load_state_dict(torch.load(args.ckpt)['student_state_dict'])
+    model.teacher_model.load_state_dict(torch.load(args.ckpt)['teacher_state_dict'])
     # 이거 init하는 조건은 좀 더 생각을 해봐야겠는데
 
     # optimizer 좀 더 고민해보자.
@@ -77,19 +85,10 @@ def main():
             if isinstance(data_batch[key], torch.Tensor):
                 data_batch[key] = data_batch[key].cuda()
                 # print(data_batch[key])
-        log_vars = test_step(model, data_batch, cfg)
+        pred_disp = test_step(model, data_batch, cfg)
 
-    
-    avg_loss = sum(train_losses) / len(train_losses)
-    
-    step_loss = {'train_loss' : avg_loss}
-
-
-
-
-    with open(f'{save_dir}/training_log.json', 'w') as f:
-        json.dump(log_dict, f, indent=4)
-    plot_loss_graph(log_dict, f'{save_dir}/loss_graph.png')
+        pred_disp_np = pred_disp.detach().cpu().numpy()
+        plt.imsave(f'{save_dir}/pred_disp_{batch_idx}.png', pred_disp_np[0], cmap='jet')
 
     return 0
 

@@ -127,13 +127,13 @@ def main():
                 'optimizer_state_dict': optimizer.state_dict()
                 # 'loss': avg_val_loss,
             }
-            torch.save(checkpoint, os.path.join(save_dir, f'checkpoint_epoch{epoch+1}.pth'))
+            torch.save(checkpoint, os.path.join(save_dir, f'log/checkpoint_epoch{epoch+1}.pth'))
 
         log_dict[f'epoch_{epoch+1}'] = step_loss
 
-    with open(f'{save_dir}/training_log.json', 'w') as f:
+    with open(f'{save_dir}/log/training_log.json', 'w') as f:
         json.dump(log_dict, f, indent=4)
-    plot_loss_graph(log_dict, f'{save_dir}/loss_graph.png')
+    plot_loss_graph(log_dict, f'{save_dir}/log/loss_graph.png')
 
     return 0
 

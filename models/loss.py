@@ -80,7 +80,10 @@ def compute_uda_loss(model, data_batch, cfg, train=True):
     log_vars = {
         'loss': total_loss.item(),
         'supervised_loss': supervised_loss.item(),
-        'unsupervised_loss': pseudo_loss.item()
+        'unsupervised_loss': pseudo_loss.item(),
+        'src_pred_disp': src_pred,
+        'tgt_pred_disp': tgt_pred,
+        'pseudo_disp': pseudo_disp,
     }
     return total_loss, log_vars
 
