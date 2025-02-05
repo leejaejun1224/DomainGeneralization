@@ -9,8 +9,9 @@ def plot_loss_graph(loss_dict, output_image_path):
     train_losses = []
     val_losses = []
 
-    # 딕셔너리의 key가 "epoch_숫자" 형태라고 가정하고, 숫자 순으로 정렬
-    sorted_keys = sorted(loss_dict.keys(), key=lambda k: int(k.split('_')[1]))
+    epoch_keys = [k for k in loss_dict.keys() if k.startswith("epoch")]
+    sorted_keys = sorted(epoch_keys, key=lambda k: int(k.split('_')[1]))
+
     
     for key in sorted_keys:
         # "epoch_1" -> 1 추출
