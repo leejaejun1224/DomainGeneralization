@@ -81,6 +81,7 @@ def main():
         if args.source_only:
             left, right, disp_gt = data_batch['src_left'], data_batch['src_right'], data_batch['src_disparity']
             output, confidence_map = test_sample(model, left, right)
+            
             error = compute_error(output, disp_gt.cuda())
             total_error += error.item()
             num_samples += 1
