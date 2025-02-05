@@ -15,6 +15,7 @@ from datasets import __datasets__
 from datasets.dataloader import PrepareDataset
 from experiment import prepare_cfg
 from train import compute_uda_loss
+from tools.plot_loss import plot_loss_graph
 
 cudnn.benchmark = True
 os.environ['CUDA_VISIBLE_DEVICES'] = '0, 1'
@@ -24,8 +25,6 @@ def val_step(model, data_batch, cfg, train=False):
     model.eval()
     total_loss, log_var = compute_uda_loss(model, data_batch, cfg, train=False)
     return log_var
-
-
 
 # train sample one by one
 def train_step(model, iter, data_batch, optimizer, cfg):
@@ -38,9 +37,7 @@ def train_step(model, iter, data_batch, optimizer, cfg):
     return log_var
     
     
-    
 def main():
-
     parser = argparse.ArgumentParser(description="StereoDepth Unsupervised Domain Adaptation")
     parser.add_argument('--dataset_config', default='./config/datasets/kitti2015_to_kitti2012.py', help='source domain and target domain name')
     parser.add_argument('--uda_config', default='./config/uda/kit15_kit12.py', help='UDA model preparation')
@@ -53,9 +50,9 @@ def main():
     dir_name = datetime.datetime.now().strftime("%Y-%m-%d_%H:%M")
     save_dir = args.log_dir + '/' + dir_name
     os.makedirs(save_dir, exist_ok=True)
-    log_dict = {}
 
     cfg = prepare_cfg(args)
+    log_dict = {'parameters': cfg}
 
     train_dataset = PrepareDataset(source_datapath=cfg['dataset']['src_root'],
                                 target_datapath=cfg['dataset']['tgt_root'], 
@@ -96,10 +93,6 @@ def main():
             log_vars = train_step(model, epoch, data_batch, optimizer, cfg)
             if not math.isnan(log_vars['loss']):
                 train_losses.append(log_vars['loss'])
-            
-            # if batch_idx % cfg.train.log_interval == 0:
-            #     print(f'Epoch [{epoch}/{cfg.train.num_epochs}] Batch [{batch_idx}/{len(train_loader)}] '
-            #           f'Loss: {log_vars["loss"]:.4f}')
         
         avg_loss = sum(train_losses) / len(train_losses)
         
@@ -140,6 +133,7 @@ def main():
 
     with open(f'{save_dir}/training_log.json', 'w') as f:
         json.dump(log_dict, f, indent=4)
+    plot_loss_graph(log_dict, f'{save_dir}/loss_graph.png')
 
     return 0
 

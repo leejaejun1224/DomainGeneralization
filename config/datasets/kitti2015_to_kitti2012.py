@@ -38,7 +38,7 @@ dataset = dict(
     val = dict(
         type='UDAdataset',
         source=dict(
-            data_root=f'/home/jaejun/dataset/kitti/{source_dataset}/training',
+            data_root=f'/home/jaejun/dataset/kitti/{source_dataset}/testing',
             left_img_dir='image_2',
             right_img_dir='image_3',
             ann_dir='2015 disparity gt 저장된 곳',
@@ -46,7 +46,7 @@ dataset = dict(
             pipeline=kitti_2015_pipeline
         ),
         target=dict(
-            data_root=f'/home/jaejun/dataset/kitti/{target_dataset}/training',
+            data_root=f'/home/jaejun/dataset/kitti/{target_dataset}/testing',
             left_img_dir='image_2',
             right_img_dir='image_3',
             ann_dir='2012 disparity gt 저장된 곳',
