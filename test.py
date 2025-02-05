@@ -1,4 +1,7 @@
 import os
+import json
+import math
+import datetime
 import argparse
 import numpy as np
 import torch
@@ -11,93 +14,89 @@ from torch.utils.data import DataLoader
 from datasets import __datasets__
 from datasets.dataloader import PrepareDataset
 from experiment import prepare_cfg
-from train import compute_uda_loss
+from models.loss import compute_uda_loss
+from tools.plot_loss import plot_loss_graph
 
 cudnn.benchmark = True
 os.environ['CUDA_VISIBLE_DEVICES'] = '0, 1'
 
 
-def compute_error(pred, gt):
-    mask = (gt > 0) & (gt < 192)
-    error = torch.abs(pred[mask] - gt[mask])
-    error = error.mean()
-    return error
-
-
-def test_sample(model, left, right):
+def test_step(model, data_batch, cfg, train=False):
     model.eval()
-    with torch.no_grad():
-        left = left.cuda()
-        right = right.cuda()
-        output, confidence_map = model(left, right)
-    return output[1], confidence_map
-    
+    total_loss, log_var = compute_uda_loss(model, data_batch, cfg, train=False)
+    return log_var
+
 
     
 def main():
-
     parser = argparse.ArgumentParser(description="StereoDepth Unsupervised Domain Adaptation")
     parser.add_argument('--dataset_config', default='./config/datasets/kitti2015_to_kitti2012.py', help='source domain and target domain name')
-    parser.add_argument('--model_config', default='', help='UDA model preparation')
+    parser.add_argument('--uda_config', default='./config/uda/kit15_kit12.py', help='UDA model preparation')
     parser.add_argument('--seed', default=1, metavar='S', help='random seed(default = 1)')
     parser.add_argument('--log_dir', default='./log', help='log directory')
-    parser.add_argument('--source_only', default=True, type=int, help='batch size')
-    parser.add_argument('--checkpoint', default='', help='path to checkpoint')
 
     args = parser.parse_args()
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed(args.seed)
+    dir_name = datetime.datetime.now().strftime("%Y-%m-%d_%H:%M")
+    save_dir = args.log_dir + '/' + dir_name
+    os.makedirs(save_dir, exist_ok=True)
 
     cfg = prepare_cfg(args)
+    log_dict = {'parameters': cfg}
 
-    train_dataset = PrepareDataset(source_datapath=cfg['data']['src_root'],
-                                target_datapath=cfg['data']['tgt_root'], 
-                                sourcefile_list=cfg['data']['src_filelist'],
-                                targetfile_list=cfg['data']['tgt_filelist'],
+    train_dataset = PrepareDataset(source_datapath=cfg['dataset']['src_root'],
+                                target_datapath=cfg['dataset']['tgt_root'], 
+                                sourcefile_list=cfg['dataset']['src_filelist'],
+                                targetfile_list=cfg['dataset']['tgt_filelist'],
                                 training=True)
-    test_dataset = PrepareDataset(source_datapath=cfg['data']['src_root'],
-                                target_datapath=cfg['data']['tgt_root'],
-                                sourcefile_list=cfg['data']['src_filelist'], 
-                                targetfile_list=cfg['data']['tgt_filelist'],
+    
+    test_dataset = PrepareDataset(source_datapath=cfg['dataset']['src_root'],
+                                target_datapath=cfg['dataset']['tgt_root'],
+                                sourcefile_list=cfg['dataset']['src_filelist'], 
+                                targetfile_list=cfg['dataset']['tgt_filelist'],
                                 training=False)
+    
     train_loader = DataLoader(train_dataset, batch_size=cfg['batch_size'], shuffle=True, num_workers=cfg['num_workers'], drop_last=True)
     test_loader = DataLoader(test_dataset, batch_size=cfg['batch_size'], shuffle=False, num_workers=cfg['num_workers'], drop_last=False)
-
+    # print(cfg)
 
     model = StereoDepthUDA(cfg)
     model.to('cuda:0')
-
-    if args.checkpoint:
-        checkpoint = torch.load(args.checkpoint)
-        model.load_state_dict(checkpoint['model_state_dict'])
-        print(f"Loaded checkpoint from {args.checkpoint}")
     
+    # 이거 init하는 조건은 좀 더 생각을 해봐야겠는데
 
-    model.eval()
-    total_error = 0
-    num_samples = 0
+    # optimizer 좀 더 고민해보자.
+    # 시작하자잉
+    train_losses = []
+    step_loss = {}
+    for batch_idx, data_batch in enumerate(train_loader):
 
-    for batch_idx, data_batch in enumerate(test_loader):
-        if args.source_only:
-            left, right, disp_gt = data_batch['src_left'], data_batch['src_right'], data_batch['src_disparity']
-            output, confidence_map = test_sample(model, left, right)
-            
-            error = compute_error(output, disp_gt.cuda())
-            total_error += error.item()
-            num_samples += 1
-            
-            if batch_idx % 10 == 0:
-                print(f"Batch {batch_idx}: Error = {error.item():.4f}")
+        # print(data_batch)
+        for key in data_batch:
+            if isinstance(data_batch[key], torch.Tensor):
+                data_batch[key] = data_batch[key].cuda()
+                # print(data_batch[key])
+        log_vars = test_step(model, data_batch, cfg)
 
-        else:
-            left, right = data_batch['tgt_left'], data_batch['tgt_right']
-            output, confidence_map = test_sample(model, left, right)
-        
+    
+    avg_loss = sum(train_losses) / len(train_losses)
+    
+    step_loss = {'train_loss' : avg_loss}
 
-    if args.source_only:
-        avg_error = total_error / num_samples
-        print(f"\nAverage Error on Source Domain: {avg_error:.4f}")
+
+
+
+    with open(f'{save_dir}/training_log.json', 'w') as f:
+        json.dump(log_dict, f, indent=4)
+    plot_loss_graph(log_dict, f'{save_dir}/loss_graph.png')
+
+    return 0
+
+
+
 
 
 if __name__=="__main__":
+    # argparser
     main()

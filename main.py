@@ -14,7 +14,7 @@ from torch.utils.data import DataLoader
 from datasets import __datasets__
 from datasets.dataloader import PrepareDataset
 from experiment import prepare_cfg
-from train import compute_uda_loss
+from models.loss import compute_uda_loss
 from tools.plot_loss import plot_loss_graph
 
 cudnn.benchmark = True
@@ -122,8 +122,8 @@ def main():
             # Save checkpoint
             checkpoint = {
                 'epoch': epoch,
-                'model_state_dict': model.state_dict(),
-                'ema_state_dict': model.ema_state_dict(),
+                'student_state_dict': model.student_state_dict(),
+                'teacher_state_dict': model.teacher_state_dict(),
                 'optimizer_state_dict': optimizer.state_dict()
                 # 'loss': avg_val_loss,
             }

@@ -14,31 +14,34 @@ class StereoDepthUDA(nn.Module):
         self.alpha = cfg['uda']['alpha']
         
         # student model
-        self.model = __models__[cfg['model']](maxdisp=cfg['maxdisp'], 
+        self.student_model = __models__[cfg['model']](maxdisp=cfg['maxdisp'], 
                                 att_weights_only=cfg['att_weights_only'])
 
         # ema teacher model
-        self.ema_model = __models__[cfg['model']](maxdisp=cfg['maxdisp'],
+        self.teacher_model = __models__[cfg['model']](maxdisp=cfg['maxdisp'],
                                     att_weights_only=cfg['att_weights_only'])
         
         # flag for initializing EMA weights
         self.ema_initialized = False
 
+
     def forward(self, left, right):
-        output, _ = self.model(left, right)
+        output, _ = self.student_model(left, right)
         return output
     
+
     @torch.no_grad()
     def ema_forward(self, left, right, return_confidence=True):
-        output, confidence_map = self.ema_model(left, right)
+        output, confidence_map = self.teacher_model(left, right)
         if return_confidence:
             return output[1], confidence_map
         else:
             return output[1]
 
+
     def update_ema(self, iter, alpha=0.99):
         alpha_teacher = min(1 - 1 / (iter + 1), self.alpha)
-        for ema_param, param in zip(self.ema_model.parameters(), self.model.parameters()):
+        for ema_param, param in zip(self.teacher_model.parameters(), self.student_model.parameters()):
             if not param.data.shape:  # scalar tensor
                 ema_param.data = \
                     alpha_teacher * ema_param.data + \
@@ -48,11 +51,16 @@ class StereoDepthUDA(nn.Module):
                     alpha_teacher * ema_param[:].data[:] + \
                     (1 - alpha_teacher) * param[:].data[:]
 
+
     def init_ema(self):
-        for ema_param, param in zip(self.ema_model.parameters(), self.model.parameters()):
+        for ema_param, param in zip(self.teacher_model.parameters(), self.student_model.parameters()):
             ema_param.data.copy_(param.data)    
         self.ema_initialized = True
 
 
-    def ema_state_dict(self):
-        return self.ema_model.state_dict()
+    def student_state_dict(self):
+        return self.student_model.state_dict()
+    
+
+    def teacher_state_dict(self):
+        return self.teacher_model.state_dict()
