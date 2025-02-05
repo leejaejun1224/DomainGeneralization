@@ -100,6 +100,7 @@ class PrepareDataset(Dataset):
 
         else:
             w, h = src_left_img.size
+            crop_w, crop_h = 512, 256
 
             # normalize
             processed = get_transform()

@@ -1,4 +1,6 @@
 import os
+import json
+import math
 import datetime
 import argparse
 import numpy as np
@@ -48,9 +50,10 @@ def main():
     args = parser.parse_args()
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed(args.seed)
-    dir_name = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M")
+    dir_name = datetime.datetime.now().strftime("%Y-%m-%d_%H:%M")
     save_dir = args.log_dir + '/' + dir_name
     os.makedirs(save_dir, exist_ok=True)
+    log_dict = {}
 
     cfg = prepare_cfg(args)
 
@@ -82,7 +85,7 @@ def main():
     for epoch in range(cfg['epoch']): 
         model.train()
         train_losses = []
-        
+        step_loss = {}
         for batch_idx, data_batch in enumerate(train_loader):
 
             # print(data_batch)
@@ -91,15 +94,17 @@ def main():
                     data_batch[key] = data_batch[key].cuda()
                     # print(data_batch[key])
             log_vars = train_step(model, epoch, data_batch, optimizer, cfg)
-            train_losses.append(log_vars['loss'])
+            if not math.isnan(log_vars['loss']):
+                train_losses.append(log_vars['loss'])
             
             # if batch_idx % cfg.train.log_interval == 0:
             #     print(f'Epoch [{epoch}/{cfg.train.num_epochs}] Batch [{batch_idx}/{len(train_loader)}] '
             #           f'Loss: {log_vars["loss"]:.4f}')
         
         avg_loss = sum(train_losses) / len(train_losses)
-        print(f'Epoch [{epoch}/{cfg["epoch"]}] Average Loss: {avg_loss:.4f}')
         
+        print(f'Epoch [{epoch + 1}/{cfg["epoch"]}] Average Loss: {avg_loss:.4f}')
+        step_loss = {'train_loss' : avg_loss}
 
 
         if (epoch + 1) % cfg['val_interval'] == 0:
@@ -113,12 +118,14 @@ def main():
                             data_batch[key] = data_batch[key].cuda()
                             
                     # EMA model로 검증
-                    log_vars = val_step(model, data_batch)
-                    val_losses.append(log_vars['loss'])
+                    log_vars = val_step(model, data_batch, cfg, train=False)
+                    if not math.isnan(log_vars['loss']):
+                        val_losses.append(log_vars['loss'])
             
-            # avg_val_loss = sum(val_losses) / len(val_losses)
-            # print(f'Validation Loss: {avg_val_loss:.4f}')
-            
+            avg_val_loss = sum(val_losses) / len(val_losses)
+            print(f'Validation Loss: {avg_val_loss:.4f}')
+            step_loss['val_loss'] = avg_val_loss 
+
             # Save checkpoint
             checkpoint = {
                 'epoch': epoch,
@@ -128,7 +135,12 @@ def main():
                 # 'loss': avg_val_loss,
             }
             torch.save(checkpoint, os.path.join(save_dir, f'checkpoint_epoch{epoch+1}.pth'))
-    
+
+        log_dict[f'epoch_{epoch+1}'] = step_loss
+
+    with open(f'{save_dir}/training_log.json', 'w') as f:
+        json.dump(log_dict, f, indent=4)
+
     return 0
 
 

@@ -22,12 +22,12 @@ name_dataset = 'kitti2015_to_kitti2012'
 
 data = dict(
     train = dict(
-        epoch = 100,
+        epoch = 2,
         batch_size = 1,
         num_workers = 2,
         shuffle = True,
         pin_memory = True,
-        val_interval = 10
+        val_interval = 1
     )
 )
 
