@@ -1,7 +1,8 @@
 import torch
 from torch import Tensor
 from torch.autograd import Variable
-import torch.functional as F
+import torch.nn as nn
+import torch.nn.functional as F
 
 
 def make_nograd_func(func):
@@ -46,7 +47,7 @@ def compute_metric_for_each_image(metric_func):
 @compute_metric_for_each_image
 def EPE_metric(pred_disp, gt_disp, mask):
     pred_disp, gt_disp = pred_disp[mask], gt_disp[mask]
-    return 
+    return F.l1_loss(pred_disp, gt_disp, size_average=True)
 
 
 @make_nograd_func

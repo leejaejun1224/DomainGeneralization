@@ -12,8 +12,8 @@ cityscapes_pipeline = [
     dict(type='Resize', img_scale=(1248, 384))
 ]
 
-source_dataset = 'kitti2015'
-target_dataset = 'kitti2015'
+source_dataset = 'kitti_2015'
+target_dataset = 'kitti_2015'
 
 dataset = dict(
     train = dict(

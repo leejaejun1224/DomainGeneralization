@@ -16,6 +16,7 @@ from datasets.dataloader import PrepareDataset
 from experiment import prepare_cfg
 from models.loss import compute_uda_loss
 from tools.plot_loss import plot_loss_graph
+from tools.metrics import EPE_metric, D1_metric, Thres_metric
 
 cudnn.benchmark = True
 os.environ['CUDA_VISIBLE_DEVICES'] = '0, 1'
@@ -30,6 +31,11 @@ def val_step(model, data_batch, cfg, train=False):
 def train_step(model, iter, data_batch, optimizer, cfg):
     model.train()
     optimizer.zero_grad()
+
+    # inference the model here and add results in data_batch
+    # after that compute uda loss
+    # that can make me change loss function next time.
+    # 왜 가능하냐고? 참조로 전달되니까
     total_loss, log_var = compute_uda_loss(model, data_batch, cfg, train=True)
     total_loss.backward()
     optimizer.step()
@@ -43,6 +49,7 @@ def main():
     parser.add_argument('--uda_config', default='./config/uda/kit15_kit12.py', help='UDA model preparation')
     parser.add_argument('--seed', default=1, metavar='S', help='random seed(default = 1)')
     parser.add_argument('--log_dir', default='./log', help='log directory')
+    parser.add_argument('--compute_metrics', default=False, help='compute metrics')
 
     args = parser.parse_args()
     torch.manual_seed(args.seed)
@@ -93,7 +100,19 @@ def main():
             log_vars = train_step(model, epoch, data_batch, optimizer, cfg)
             if not math.isnan(log_vars['loss']):
                 train_losses.append(log_vars['loss'])
-        
+
+
+            # metric을 뭘 계산할건데?
+            # target이 teacher이 얼마나 잘 계산이 되었는지는 test.py에서 계산을 하도록 하고
+            # source가 student이 얼마나 잘 계산이 되었는지는 여기서 계산을 하도록 하자.
+            if args.compute_metrics:
+                scalar_outputs = {}
+                scalar_outputs["EPE"] = [EPE_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'])]
+                scalar_outputs["D1"] = [D1_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'])]
+                scalar_outputs["Thres1"] = [Thres_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'], 1.0)]
+                scalar_outputs["Thres2"] = [Thres_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'], 2.0)]
+                scalar_outputs["Thres3"] = [Thres_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'], 3.0)]
+                print(scalar_outputs)
         avg_loss = sum(train_losses) / len(train_losses)
         
         print(f'Epoch [{epoch + 1}/{cfg["epoch"]}] Average Loss: {avg_loss:.4f}')

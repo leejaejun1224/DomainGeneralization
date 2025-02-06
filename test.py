@@ -18,6 +18,7 @@ from experiment import prepare_cfg
 from models.loss import compute_uda_loss
 from tools.plot_loss import plot_loss_graph
 
+
 cudnn.benchmark = True
 os.environ['CUDA_VISIBLE_DEVICES'] = '0, 1'
 
@@ -45,25 +46,17 @@ def main():
     torch.cuda.manual_seed(args.seed)
     dir_name = datetime.datetime.now().strftime("%Y-%m-%d_%H:%M")
     save_dir = '/'.join(args.ckpt.split('/')[:-1]) + '/disp'
-    print(save_dir)
     os.makedirs(save_dir, exist_ok=True)
 
     cfg = prepare_cfg(args)
     log_dict = {'parameters': cfg}
 
-    train_dataset = PrepareDataset(source_datapath=cfg['dataset']['src_root'],
-                                target_datapath=cfg['dataset']['tgt_root'], 
-                                sourcefile_list=cfg['dataset']['src_filelist'],
-                                targetfile_list=cfg['dataset']['tgt_filelist'],
-                                training=True)
-    
     test_dataset = PrepareDataset(source_datapath=cfg['dataset']['src_root'],
                                 target_datapath=cfg['dataset']['tgt_root'],
                                 sourcefile_list=cfg['dataset']['src_filelist'], 
                                 targetfile_list=cfg['dataset']['tgt_filelist'],
                                 training=False)
     
-    train_loader = DataLoader(train_dataset, batch_size=cfg['batch_size'], shuffle=True, num_workers=cfg['num_workers'], drop_last=True)
     test_loader = DataLoader(test_dataset, batch_size=cfg['batch_size'], shuffle=False, num_workers=cfg['num_workers'], drop_last=False)
     # print(cfg)
 
@@ -78,7 +71,7 @@ def main():
     # 시작하자잉
     train_losses = []
     step_loss = {}
-    for batch_idx, data_batch in enumerate(train_loader):
+    for batch_idx, data_batch in enumerate(test_loader):
 
         # print(data_batch)
         for key in data_batch:
