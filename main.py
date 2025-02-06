@@ -7,7 +7,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.backends.cudnn as cudnn
-from StereoDepthUDA import StereoDepthUDA
+from models.uda import __models__
 
 
 from torch.utils.data import DataLoader
@@ -76,7 +76,7 @@ def main():
     test_loader = DataLoader(test_dataset, batch_size=cfg['batch_size'], shuffle=False, num_workers=cfg['num_workers'], drop_last=False)
     # print(cfg)
 
-    model = StereoDepthUDA(cfg)
+    model = __models__['StereoDepthUDA'](cfg)
     model.to('cuda:0')
     
     # 이거 init하는 조건은 좀 더 생각을 해봐야겠는데

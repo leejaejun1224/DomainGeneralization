@@ -1,5 +1,5 @@
-from models.uda.dg import DG
+from models.uda.StereoDepthUDA import StereoDepthUDA
 
 __models__ = {
-    'DG': DG
+    'StereoDepthUDA': StereoDepthUDA
 }
