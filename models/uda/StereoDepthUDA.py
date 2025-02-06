@@ -3,9 +3,9 @@ import numpy as np
 import torch
 import torch.nn as nn
 from copy import deepcopy
-from models.Fast_ACV import Fast_ACVNet
-from models.loss import get_loss
-from models import __models__
+from models.estimator.Fast_ACV import Fast_ACVNet
+from models.losses.loss import get_loss
+from models.estimator import __models__
 
 class StereoDepthUDA(nn.Module):
     def __init__(self, cfg):

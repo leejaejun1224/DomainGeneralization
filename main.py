@@ -14,7 +14,7 @@ from torch.utils.data import DataLoader
 from datasets import __datasets__
 from datasets.dataloader import PrepareDataset
 from experiment import prepare_cfg
-from models.loss import compute_uda_loss
+from models.losses.loss import compute_uda_loss
 from tools.plot_loss import plot_loss_graph
 from tools.metrics import EPE_metric, D1_metric, Thres_metric
 

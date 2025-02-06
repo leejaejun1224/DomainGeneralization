@@ -4,8 +4,8 @@ import torch.nn as nn
 import torch.utils.data
 from torch.autograd import Variable
 import torch.nn.functional as F
-from models.submodules import *
-from models.loss import get_loss
+from models.estimator.submodules import *
+from models.losses.loss import get_loss
 import math
 import gc
 import time

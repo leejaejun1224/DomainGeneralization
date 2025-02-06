@@ -1,7 +1,7 @@
 import torch 
 import torch.nn as nn
 import torch.nn.functional as F
-from models.loss import get_loss, calc_supervised_train_loss, calc_supervised_test_loss, calc_pseudo_loss
+from models.losses.loss import get_loss, calc_supervised_train_loss, calc_supervised_test_loss, calc_pseudo_loss
 
 
 def compute_uda_loss(model, data_batch, cfg, train=True):
