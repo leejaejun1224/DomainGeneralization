@@ -101,17 +101,16 @@ def main():
                 train_losses.append(log_vars['loss'])
 
 
-            # metric을 뭘 계산할건데?
-            # target이 teacher이 얼마나 잘 계산이 되었는지는 test.py에서 계산을 하도록 하고
-            # source가 student이 얼마나 잘 계산이 되었는지는 여기서 계산을 하도록 하자.
-            if args.compute_metrics:
-                scalar_outputs = {}
-                scalar_outputs["EPE"] = [EPE_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'])]
-                scalar_outputs["D1"] = [D1_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'])]
-                scalar_outputs["Thres1"] = [Thres_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'], 1.0)]
-                scalar_outputs["Thres2"] = [Thres_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'], 2.0)]
-                scalar_outputs["Thres3"] = [Thres_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'], 3.0)]
-                print(scalar_outputs)
+                # metric을 뭘 계산할건데?
+                # target이 teacher이 얼마나 잘 계산이 되었는지는 test.py에서 계산을 하도록 하고
+                # source가 student이 얼마나 잘 계산이 되었는지는 여기서 계산을 하도록 하자.
+                if args.compute_metrics:
+                    scalar_outputs = {}
+                    scalar_outputs["EPE"] = [EPE_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'])]
+                    scalar_outputs["D1"] = [D1_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'])]
+                    scalar_outputs["Thres1"] = [Thres_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'], 1.0)]
+                    scalar_outputs["Thres2"] = [Thres_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'], 2.0)]
+                    scalar_outputs["Thres3"] = [Thres_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'], 3.0)]
         avg_loss = sum(train_losses) / len(train_losses)
         
         print(f'Epoch [{epoch + 1}/{cfg["epoch"]}] Average Loss: {avg_loss:.4f}')
@@ -132,6 +131,14 @@ def main():
                     log_vars = val_step(model, data_batch, cfg, train=False)
                     if not math.isnan(log_vars['loss']):
                         val_losses.append(log_vars['loss'])
+                    
+                        if args.compute_metrics:
+                            scalar_outputs = {}
+                            scalar_outputs["EPE"] = [EPE_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'])]
+                            scalar_outputs["D1"] = [D1_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'])]
+                            scalar_outputs["Thres1"] = [Thres_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'], 1.0)]
+                            scalar_outputs["Thres2"] = [Thres_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'], 2.0)]
+                            scalar_outputs["Thres3"] = [Thres_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'], 3.0)]
             
             avg_val_loss = sum(val_losses) / len(val_losses)
             print(f'Validation Loss: {avg_val_loss:.4f}')
