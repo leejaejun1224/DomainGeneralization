@@ -56,7 +56,6 @@ def main():
     torch.cuda.manual_seed(args.seed)
     dir_name = datetime.datetime.now().strftime("%Y-%m-%d_%H:%M")
     save_dir = args.log_dir + '/' + dir_name
-    os.makedirs(save_dir, exist_ok=True)
 
     cfg = prepare_cfg(args)
     log_dict = {'parameters': cfg}
@@ -150,6 +149,7 @@ def main():
 
         log_dict[f'epoch_{epoch+1}'] = step_loss
 
+    os.makedirs(save_dir, exist_ok=True)
     with open(f'{save_dir}/log/training_log.json', 'w') as f:
         json.dump(log_dict, f, indent=4)
     plot_loss_graph(log_dict, f'{save_dir}/log/loss_graph.png')
