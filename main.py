@@ -54,8 +54,9 @@ def main():
     args = parser.parse_args()
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed(args.seed)
-    dir_name = datetime.datetime.now().strftime("%Y-%m-%d_%H:%M")
+    dir_name = datetime.datetime.now().strftime("%Y-%m-%d_%H_%M")
     save_dir = args.log_dir + '/' + dir_name
+    os.makedirs(save_dir, exist_ok=True)
 
     cfg = prepare_cfg(args)
     log_dict = {'parameters': cfg}
@@ -96,7 +97,7 @@ def main():
                 if isinstance(data_batch[key], torch.Tensor):
                     data_batch[key] = data_batch[key].cuda()
                     # print(data_batch[key])
-            log_vars = model.train_step(data_batch, optimizer)
+            log_vars = model.train_step(data_batch, optimizer, batch_idx)
             if not math.isnan(log_vars['loss']):
                 train_losses.append(log_vars['loss'])
                
@@ -156,14 +157,13 @@ def main():
                 'optimizer_state_dict': optimizer.state_dict()
                 # 'loss': avg_val_loss,
             }
-            torch.save(checkpoint, os.path.join(save_dir, f'log/checkpoint_epoch{epoch+1}.pth'))
+            torch.save(checkpoint, os.path.join(save_dir, f'checkpoint_epoch{epoch+1}.pth'))
 
         log_dict[f'epoch_{epoch+1}'] = step_loss
 
-    os.makedirs(save_dir, exist_ok=True)
-    with open(f'{save_dir}/log/training_log.json', 'w') as f:
+    with open(f'{save_dir}/training_log.json', 'w') as f:
         json.dump(log_dict, f, indent=4)
-    plot_loss_graph(log_dict, f'{save_dir}/log/loss_graph.png')
+    plot_loss_graph(log_dict, f'{save_dir}/loss_graph.png')
 
     return 0
 

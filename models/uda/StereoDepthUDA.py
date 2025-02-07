@@ -17,7 +17,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
         self.cfg = cfg
 
     def update_ema(self, iter, alpha=0.99):
-        alpha_teacher = min(1 - 1 / (iter + 1), self.alpha)
+        alpha_teacher = min(1 - 1 / (iter + 1), alpha)
         for ema_param, param in zip(self.teacher_model.parameters(), self.student_model.parameters()):
             if not param.data.shape:  # scalar tensor
                 ema_param.data = \
@@ -46,17 +46,17 @@ class StereoDepthUDA(StereoDepthUDAInference):
     def val_step(self):
         pass
     
-    
-    def train_step(self, data_batch, optimizer):
+    "args : optimizer, self.model(x), "
+    def train_step(self, data_batch, optimizer, iter):
         
         optimizer.zero_grad()
         log_vars = self.forward_train(data_batch)
         optimizer.step()
+        self.update_ema(iter, alpha=0.99)
         
         return log_vars
     
-    "back propagation"
-    "args : optimizer, self.model(x), "
+
     @torch.no_grad()
     def forward_test(self, data_batch):
         
@@ -66,6 +66,8 @@ class StereoDepthUDA(StereoDepthUDAInference):
     
     
     "forward propagation"
+    "back propagation"
+    
     def forward_train(self, data_batch):
         
         src_pred = self.forward(data_batch['src_left'], data_batch['src_right'])
@@ -76,9 +78,11 @@ class StereoDepthUDA(StereoDepthUDAInference):
         
         
         with torch.no_grad():
-            data_batch['pseudo_disp'], data_batch['confidence_map'] = self.ema_forward(
+            pseudo_disp, confidence_map = self.ema_forward(
                 data_batch['tgt_left'], data_batch['tgt_right'])
-                    
+            data_batch['pseudo_disp'] = pseudo_disp
+            data_batch['confidence_map'] = confidence_map
+
         supervised_loss = calc_supervised_train_loss(data_batch)
         pseudo_loss = calc_pseudo_loss(data_batch, self.cfg)
         total_loss = supervised_loss + pseudo_loss
@@ -88,6 +92,6 @@ class StereoDepthUDA(StereoDepthUDAInference):
             'supervised_loss': supervised_loss.item(),
             'unsupervised_loss': pseudo_loss.item()
         }
-        print(log_vars)
+        total_loss.backward()
     
         return log_vars
