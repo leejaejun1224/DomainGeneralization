@@ -330,6 +330,7 @@ class Fast_ACVNet(nn.Module):
                 return [pred_up*4, pred.squeeze(1)*4, pred_att_up*4, pred_att*4], max_values.squeeze(1)
 
         else:
+            print("=============================")
             if self.att_weights_only:
                 att_prob = torch.gather(att_weights, 2, ind_k).squeeze(1)
                 att_prob = F.softmax(att_prob, dim=1)

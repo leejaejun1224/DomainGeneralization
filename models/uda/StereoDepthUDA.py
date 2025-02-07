@@ -60,8 +60,8 @@ class StereoDepthUDA(StereoDepthUDAInference):
     @torch.no_grad()
     def forward_test(self, data_batch):
         
-        data_batch['src_pred_disp'] = self.ema_forward(data_batch['src_left'], data_batch['src_right'])
-        data_batch['tgt_pred_disp'] = self.ema_forward(data_batch['tgt_left'], data_batch['tgt_right'])
+        data_batch['src_pred_disp'] = self.forward(data_batch['src_left'], data_batch['src_right'])
+        data_batch['tgt_pred_disp'] = self.forward(data_batch['tgt_left'], data_batch['tgt_right'])
         
         with torch.no_grad():
             pseudo_disp, confidence_map = self.ema_forward(
@@ -78,9 +78,11 @@ class StereoDepthUDA(StereoDepthUDAInference):
             'supervised_loss': supervised_loss.item(),
             'unsupervised_loss': pseudo_loss.item()
         }
-        total_loss.backward()
     
         return log_vars
+    
+    
+    
     "forward propagation"
     "back propagation"
     
