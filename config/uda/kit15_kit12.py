@@ -9,7 +9,8 @@ depth_model = dict(
 
 uda = dict(
     threshold = 0.2,
-    alpha = 0.99
+    alpha = 0.99,
+    train_source_only = True
 )
 
 optimizer = dict(

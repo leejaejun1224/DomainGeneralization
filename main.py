@@ -14,7 +14,7 @@ from torch.utils.data import DataLoader
 from datasets import __datasets__
 from datasets.dataloader import PrepareDataset
 from experiment import prepare_cfg
-from models.losses.loss import compute_uda_loss
+# from models.losses.loss import compute_uda_loss
 from tools.plot_loss import plot_loss_graph
 from tools.metrics import EPE_metric, D1_metric, Thres_metric
 
@@ -22,25 +22,25 @@ cudnn.benchmark = True
 os.environ['CUDA_VISIBLE_DEVICES'] = '0, 1'
 
 
-def val_step(model, data_batch, cfg, train=False):
-    model.eval()
-    total_loss, log_var = compute_uda_loss(model, data_batch, cfg, train=False)
-    return log_var
+# def val_step(model, data_batch, cfg, train=False):
+#     model.eval()
+#     total_loss, log_var = compute_uda_loss(model, data_batch, cfg, train=False)
+#     return log_var
 
-# train sample one by one
-def train_step(model, iter, data_batch, optimizer, cfg):
-    model.train()
-    optimizer.zero_grad()
+# # train sample one by one
+# def train_step(model, iter, data_batch, optimizer, cfg):
+#     model.train()
+#     optimizer.zero_grad()
 
-    # inference the model here and add results in data_batch
-    # after that compute uda loss
-    # that can make me change loss function next time.
-    # 왜 가능하냐고? 참조로 전달되니까
-    total_loss, log_var = compute_uda_loss(model, data_batch, cfg, train=True)
-    total_loss.backward()
-    optimizer.step()
-    model.update_ema(iter, alpha=0.99)
-    return log_var
+#     # inference the model here and add results in data_batch
+#     # after that compute uda loss
+#     # that can make me change loss function next time.
+#     # 왜 가능하냐고? 참조로 전달되니까
+#     total_loss, log_var = compute_uda_loss(model, data_batch, cfg, train=True)
+#     total_loss.backward()
+#     optimizer.step()
+#     model.update_ema(iter, alpha=0.99)
+#     return log_var
     
     
 def main():
@@ -96,9 +96,13 @@ def main():
                 if isinstance(data_batch[key], torch.Tensor):
                     data_batch[key] = data_batch[key].cuda()
                     # print(data_batch[key])
-            log_vars = train_step(model, epoch, data_batch, optimizer, cfg)
+            log_vars = model.train_step(data_batch, optimizer)
             if not math.isnan(log_vars['loss']):
                 train_losses.append(log_vars['loss'])
+               
+                    
+                    
+            # log_vars = train_step(model, epoch, data_batch, optimizer, cfg)
 
 
                 # metric을 뭘 계산할건데?
@@ -118,31 +122,31 @@ def main():
 
 
         if (epoch + 1) % cfg['val_interval'] == 0:
-            val_losses = []
+        #     val_losses = []
             
-            with torch.no_grad():
-                for data_batch in test_loader:
-                    # gpu로 옮기기
-                    for key in data_batch:
-                        if isinstance(data_batch[key], torch.Tensor):
-                            data_batch[key] = data_batch[key].cuda()
+        #     with torch.no_grad():
+        #         for data_batch in test_loader:
+        #             # gpu로 옮기기
+        #             for key in data_batch:
+        #                 if isinstance(data_batch[key], torch.Tensor):
+        #                     data_batch[key] = data_batch[key].cuda()
                             
-                    # EMA model로 검증
-                    log_vars = val_step(model, data_batch, cfg, train=False)
-                    if not math.isnan(log_vars['loss']):
-                        val_losses.append(log_vars['loss'])
+        #             # EMA model로 검증
+        #             log_vars = val_step(model, data_batch, cfg, train=False)
+        #             if not math.isnan(log_vars['loss']):
+        #                 val_losses.append(log_vars['loss'])
                     
-                        if args.compute_metrics:
-                            scalar_outputs = {}
-                            scalar_outputs["EPE"] = [EPE_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'])]
-                            scalar_outputs["D1"] = [D1_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'])]
-                            scalar_outputs["Thres1"] = [Thres_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'], 1.0)]
-                            scalar_outputs["Thres2"] = [Thres_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'], 2.0)]
-                            scalar_outputs["Thres3"] = [Thres_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'], 3.0)]
+        #                 if args.compute_metrics:
+        #                     scalar_outputs = {}
+        #                     scalar_outputs["EPE"] = [EPE_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'])]
+        #                     scalar_outputs["D1"] = [D1_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'])]
+        #                     scalar_outputs["Thres1"] = [Thres_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'], 1.0)]
+        #                     scalar_outputs["Thres2"] = [Thres_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'], 2.0)]
+        #                     scalar_outputs["Thres3"] = [Thres_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'], 3.0)]
             
-            avg_val_loss = sum(val_losses) / len(val_losses)
-            print(f'Validation Loss: {avg_val_loss:.4f}')
-            step_loss['val_loss'] = avg_val_loss 
+            # avg_val_loss = sum(val_losses) / len(val_losses)
+            # print(f'Validation Loss: {avg_val_loss:.4f}')
+            # step_loss['val_loss'] = avg_val_loss 
 
             # Save checkpoint
             checkpoint = {
