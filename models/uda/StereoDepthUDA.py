@@ -8,7 +8,7 @@ from models.losses.loss import get_loss
 from models.estimator import __models__
 from models.uda.decorator import StereoDepthUDAInference
 
-from models.losses.loss import calc_supervised_train_loss, calc_pseudo_loss
+from models.losses.loss import calc_supervised_train_loss, calc_supervised_val_loss, calc_pseudo_loss
 
 
 class StereoDepthUDA(StereoDepthUDAInference):
@@ -63,8 +63,24 @@ class StereoDepthUDA(StereoDepthUDAInference):
         data_batch['src_pred_disp'] = self.ema_forward(data_batch['src_left'], data_batch['src_right'])
         data_batch['tgt_pred_disp'] = self.ema_forward(data_batch['tgt_left'], data_batch['tgt_right'])
         
+        with torch.no_grad():
+            pseudo_disp, confidence_map = self.ema_forward(
+                data_batch['tgt_left'], data_batch['tgt_right'])
+            data_batch['pseudo_disp'] = pseudo_disp
+            data_batch['confidence_map'] = confidence_map
     
+        supervised_loss = calc_supervised_val_loss(data_batch)
+        pseudo_loss = calc_pseudo_loss(data_batch, self.cfg)
+        total_loss = supervised_loss + pseudo_loss
+
+        log_vars = {
+            'loss': total_loss.item(),
+            'supervised_loss': supervised_loss.item(),
+            'unsupervised_loss': pseudo_loss.item()
+        }
+        total_loss.backward()
     
+        return log_vars
     "forward propagation"
     "back propagation"
     

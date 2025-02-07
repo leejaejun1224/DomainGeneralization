@@ -49,7 +49,7 @@ def main():
     parser.add_argument('--uda_config', default='./config/uda/kit15_kit12.py', help='UDA model preparation')
     parser.add_argument('--seed', default=1, metavar='S', help='random seed(default = 1)')
     parser.add_argument('--log_dir', default='./log', help='log directory')
-    parser.add_argument('--compute_metrics', default=False, help='compute metrics')
+    parser.add_argument('--compute_metrics', default=True, help='compute metrics')
 
     args = parser.parse_args()
     torch.manual_seed(args.seed)
@@ -100,11 +100,6 @@ def main():
             log_vars = model.train_step(data_batch, optimizer, batch_idx)
             if not math.isnan(log_vars['loss']):
                 train_losses.append(log_vars['loss'])
-               
-                    
-                    
-            # log_vars = train_step(model, epoch, data_batch, optimizer, cfg)
-
 
                 # metric을 뭘 계산할건데?
                 # target이 teacher이 얼마나 잘 계산이 되었는지는 test.py에서 계산을 하도록 하고
@@ -123,31 +118,32 @@ def main():
 
 
         if (epoch + 1) % cfg['val_interval'] == 0:
-        #     val_losses = []
-            
-        #     with torch.no_grad():
-        #         for data_batch in test_loader:
-        #             # gpu로 옮기기
-        #             for key in data_batch:
-        #                 if isinstance(data_batch[key], torch.Tensor):
-        #                     data_batch[key] = data_batch[key].cuda()
+            val_losses = []
+            model.eval()
+            with torch.no_grad():
+                for data_batch in test_loader:
+                    # gpu로 옮기기
+                    for key in data_batch:
+                        if isinstance(data_batch[key], torch.Tensor):
+                            data_batch[key] = data_batch[key].cuda()
+                    log_vars = model.forward_test(data_batch)
                             
-        #             # EMA model로 검증
-        #             log_vars = val_step(model, data_batch, cfg, train=False)
-        #             if not math.isnan(log_vars['loss']):
-        #                 val_losses.append(log_vars['loss'])
+                    # EMA model로 검증
+                    #log_vars = val_step(model, data_batch, cfg, train=False)
+                    if not math.isnan(log_vars['loss']):
+                        val_losses.append(log_vars['loss'])
                     
-        #                 if args.compute_metrics:
-        #                     scalar_outputs = {}
-        #                     scalar_outputs["EPE"] = [EPE_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'])]
-        #                     scalar_outputs["D1"] = [D1_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'])]
-        #                     scalar_outputs["Thres1"] = [Thres_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'], 1.0)]
-        #                     scalar_outputs["Thres2"] = [Thres_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'], 2.0)]
-        #                     scalar_outputs["Thres3"] = [Thres_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'], 3.0)]
+                        # if args.compute_metrics:
+                        #     scalar_outputs = {}
+                        #     scalar_outputs["EPE"] = [EPE_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'])]
+                        #     scalar_outputs["D1"] = [D1_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'])]
+                        #     scalar_outputs["Thres1"] = [Thres_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'], 1.0)]
+                        #     scalar_outputs["Thres2"] = [Thres_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'], 2.0)]
+                        #     scalar_outputs["Thres3"] = [Thres_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'], 3.0)]
             
-            # avg_val_loss = sum(val_losses) / len(val_losses)
-            # print(f'Validation Loss: {avg_val_loss:.4f}')
-            # step_loss['val_loss'] = avg_val_loss 
+            avg_val_loss = sum(val_losses) / len(val_losses)
+            print(f'Validation Loss: {avg_val_loss:.4f}')
+            step_loss['val_loss'] = avg_val_loss 
 
             # Save checkpoint
             checkpoint = {
@@ -155,7 +151,6 @@ def main():
                 'student_state_dict': model.student_state_dict(),
                 'teacher_state_dict': model.teacher_state_dict(),
                 'optimizer_state_dict': optimizer.state_dict()
-                # 'loss': avg_val_loss,
             }
             torch.save(checkpoint, os.path.join(save_dir, f'checkpoint_epoch{epoch+1}.pth'))
 
