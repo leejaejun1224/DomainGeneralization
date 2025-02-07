@@ -51,7 +51,7 @@ class PrepareDataset(Dataset):
         tgt_left_img = self.load_image(os.path.join(self.target_datapath, self.target_left_filenames[index]))
         tgt_right_img = self.load_image(os.path.join(self.target_datapath, self.target_right_filenames[index]))
 
-        if self.target_disp_filenames:  # 만약에 target 이미지에 대해서 disparity 참값을 가지고 있다면
+        if self.target_disp_filenames:   # 만약에 target 이미지에 대해서 disparity 참값을 가지고 있다면
             tgt_disparity = self.load_disp(os.path.join(self.target_datapath, self.target_disp_filenames[index]))
         else:
             tgt_disparity = None
