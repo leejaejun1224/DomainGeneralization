@@ -13,7 +13,8 @@ cityscapes_pipeline = [
 ]
 
 source_dataset = 'kitti_2015'
-target_dataset = 'kitti_2015'
+# target_dataset = 'kitti_2015'
+target_dataset = 'cityscapes'
 
 dataset = dict(
     train = dict(
@@ -27,12 +28,12 @@ dataset = dict(
             pipeline=kitti_2015_pipeline
         ),
         target=dict(
-            data_root=f'/home/jaejun/dataset/kitti/{target_dataset}/training',
+            data_root=f'/home/jaejun/dataset/{target_dataset}/training',
             left_img_dir='image_2',
             right_img_dir='image_3',
             ann_dir='2012 disparity gt 저장된 곳',
             file_list=f'./filenames/target/{target_dataset}_train.txt',
-            pipeline=kitti_2012_pipeline
+            pipeline=cityscapes_pipeline
         )
     ),
     val = dict(
@@ -46,12 +47,12 @@ dataset = dict(
             pipeline=kitti_2015_pipeline
         ),
         target=dict(
-            data_root=f'/home/jaejun/dataset/kitti/{target_dataset}/testing',
+            data_root=f'/home/jaejun/dataset/{target_dataset}/testing',
             left_img_dir='image_2',
             right_img_dir='image_3',
             ann_dir='2012 disparity gt 저장된 곳',
             file_list=f'./filenames/target/{target_dataset}_val.txt',
-            pipeline=kitti_2012_pipeline
+            pipeline=cityscapes_pipeline
         )
     ),
     test = dict(
@@ -65,12 +66,12 @@ dataset = dict(
             pipeline=kitti_2015_pipeline
         ),
         target=dict(
-            data_root=f'/home/jaejun/dataset/kitti/{target_dataset}/testing',
+            data_root=f'/home/jaejun/dataset/{target_dataset}/testing',
             left_img_dir='image_2',
             right_img_dir='image_3',
             ann_dir='2012 disparity gt 저장된 곳',
             file_list=f'./filenames/target/{target_dataset}_test.txt',
-            pipeline=kitti_2012_pipeline
+            pipeline=cityscapes_pipeline
         )
     )
 )

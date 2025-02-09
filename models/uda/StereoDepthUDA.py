@@ -12,8 +12,6 @@ from models.losses.loss import calc_supervised_train_loss, calc_supervised_val_l
 
 
 
-
-
 class StereoDepthUDA(StereoDepthUDAInference):
     def __init__(self, cfg):
         super().__init__(cfg)
