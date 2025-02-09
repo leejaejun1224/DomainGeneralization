@@ -83,9 +83,9 @@ class StereoDepthUDA(StereoDepthUDAInference):
         return log_vars
     
     
-    
-    "forward propagation"
     "back propagation"
+    "forward propagation"
+    
     
     def forward_train(self, data_batch):
         
