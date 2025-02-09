@@ -15,6 +15,7 @@ class CityscapesDataset(Dataset):
     def __init__(self, cityscapes_datapath, list_filename, training):
         
         # datapath
+        
         self.cityscapes_datapath = cityscapes_datapath
         self.left_filenames, self.right_filenames, self.disp_filenames = self.load_path(list_filename)
         self.training = training
