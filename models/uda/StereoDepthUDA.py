@@ -46,7 +46,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
     def val_step(self):
         pass
     
-    "args : optimizer, self.model(x), "
+    "args : optimizer, data_batchhhhh"
     def train_step(self, data_batch, optimizer, iter):
         
         optimizer.zero_grad()
@@ -57,6 +57,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
         return log_vars
     
 
+    # automatically make model's training variable False
     @torch.no_grad()
     def forward_test(self, data_batch):
         
