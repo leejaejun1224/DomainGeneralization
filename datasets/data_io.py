@@ -20,6 +20,30 @@ def get_transform_aug():
         transforms.ToTensor(),
     ])
 
+def reshape_image(image):
+    w, h = image.size
+    processed = get_transform()
+    if w <= 1248 and h <= 384:
+        top_pad, right_pad = 384 - h, 1248 - w
+        assert top_pad > 0 and right_pad > 0
+        image = processed(image).numpy()
+        image = np.lib.pad(image, ((0, 0), (top_pad, 0), (0, right_pad)), mode='constant', constant_values=0)
+    else:
+        x, y = (w - 1248) // 2, (h - 384) // 2
+        image = image.crop((x, y, x + 1248, y + 384))
+        image = processed(image).numpy()
+    return image
+
+def reshape_disparity(disparity):
+    w, h = disparity.shape[1], disparity.shape[0]
+    if w <= 1248 and h <= 384:
+        top_pad, right_pad = 384 - h, 1248 - w
+        assert top_pad > 0 and right_pad > 0
+        disparity = np.lib.pad(disparity, ((top_pad, 0), (0, right_pad)), mode='constant', constant_values=0)
+    else:
+        x, y = (w - 1248) // 2, (h - 384) // 2
+        disparity = disparity[y:y + 384, x:x + 1248]
+    return disparity
 
 # read all lines in a file
 def read_all_lines(filename):

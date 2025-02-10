@@ -20,7 +20,7 @@ dataset = dict(
     train = dict(
         type='UDAdataset',
         source=dict(
-            data_root=f'/home/jaejun/dataset/kitti/{source_dataset}/training',
+            data_root=f'/home/jaejun/dataset/kitti',
             file_list=f'./filenames/source/{source_dataset}_train.txt',
             pipeline=kitti_2015_pipeline
         ),
@@ -33,7 +33,7 @@ dataset = dict(
     val = dict(
         type='UDAdataset',
         source=dict(
-            data_root=f'/home/jaejun/dataset/kitti/{source_dataset}/testing',
+            data_root=f'/home/jaejun/dataset/kitti',
             file_list=f'./filenames/source/{source_dataset}_val.txt',
             pipeline=kitti_2015_pipeline
         ),
@@ -46,7 +46,7 @@ dataset = dict(
     test = dict(
         type='UDAdataset',
         source=dict(
-            data_root=f'/home/jaejun/dataset/kitti/{source_dataset}/testing',
+            data_root=f'/home/jaejun/dataset/kitti',
             left_img_dir='image_2',
             right_img_dir='image_3',
             ann_dir='2015 disparity gt 저장된 곳',

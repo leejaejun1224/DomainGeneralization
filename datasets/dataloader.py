@@ -1,10 +1,12 @@
 import os
 import random
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
 from PIL import Image
 import numpy as np
 import cv2
-from datasets.data_io import get_transform, read_all_lines, pfm_imread
+from datasets.data_io import get_transform, read_all_lines, pfm_imread, reshape_image, reshape_disparity
+
+
 import torchvision.transforms as transforms
 import torch
 import matplotlib.pyplot as plt
@@ -38,12 +40,13 @@ class PrepareDataset(Dataset):
         data = Image.open(filename)
         data = np.array(data, dtype=np.float32) / 256.
         return data
+    
 
     def __len__(self):
         return len(self.source_left_filenames)
 
     def __getitem__(self, index):
-        
+
         src_left_img = self.load_image(os.path.join(self.source_datapath, self.source_left_filenames[index]))
         src_right_img = self.load_image(os.path.join(self.source_datapath, self.source_right_filenames[index]))
         src_disparity = self.load_disp(os.path.join(self.source_datapath, self.source_disp_filenames[index]))
@@ -100,34 +103,15 @@ class PrepareDataset(Dataset):
 
         else:
             w, h = src_left_img.size
+            src_left_img = reshape_image(src_left_img)
+            src_right_img = reshape_image(src_right_img)
+            src_disparity = reshape_disparity(src_disparity)
+            tgt_left_img = reshape_image(tgt_left_img)
+            tgt_right_img = reshape_image(tgt_right_img)
 
-            # normalize
-            processed = get_transform()
-            src_left_img = processed(src_left_img).numpy()
-            src_right_img = processed(src_right_img).numpy()
-            tgt_left_img = processed(tgt_left_img).numpy()
-            tgt_right_img = processed(tgt_right_img).numpy()
-            
-            
-            # pad to size 1248x384
-            top_pad = 384 - h
-            right_pad = 1248 - w
-            assert top_pad > 0 and right_pad > 0
-            # pad images
-            src_left_img = np.lib.pad(src_left_img, ((0, 0), (top_pad, 0), (0, right_pad)), mode='constant', constant_values=0)
-            src_right_img = np.lib.pad(src_right_img, ((0, 0), (top_pad, 0), (0, right_pad)), mode='constant',
-                                   constant_values=0)
-            src_disparity = np.lib.pad(src_disparity, ((top_pad, 0), (0, right_pad)), mode='constant', constant_values=0)
-
-            
-            tgt_left_img = np.lib.pad(tgt_left_img, ((0, 0), (top_pad, 0), (0, right_pad)), mode='constant', constant_values=0)
-            tgt_right_img = np.lib.pad(tgt_right_img, ((0, 0), (top_pad, 0), (0, right_pad)), mode='constant',
-                                   constant_values=0)
-            
             if tgt_disparity is not None:
-                assert len(tgt_disparity.shape) == 2
-                tgt_disparity = np.lib.pad(tgt_disparity, ((top_pad, 0), (0, right_pad)), mode='constant', constant_values=0)
-
+                tgt_disparity = reshape_disparity(tgt_disparity)
+            
 
             if tgt_disparity is not None:
                 return {"src_left": src_left_img,
@@ -135,17 +119,25 @@ class PrepareDataset(Dataset):
                         "src_disparity": src_disparity,
                         "tgt_left": tgt_left_img,
                         "tgt_right": tgt_right_img,
-                        "tgt_disparity": tgt_disparity,
-                        "top_pad": top_pad,
-                        "right_pad": right_pad}
+                        "tgt_disparity": tgt_disparity}
             else:
                 return {"src_left": src_left_img,
                         "src_right": src_right_img,
                         "tgt_left": tgt_left_img,
                         "tgt_right": tgt_right_img,
-                        "top_pad": top_pad,
-                        "right_pad": right_pad,
                         "source_left_filename": self.source_left_filenames[index],
                         "source_right_filename": self.source_right_filenames[index],
                         "target_left_filename": self.target_left_filenames[index],
                         "target_right_filename": self.target_right_filenames[index]}
+        
+
+# if __name__ == "__main__":
+#     source_datapath = '/home/jaejun/dataset/kitti'
+#     target_datapath = '/home/jaejun/dataset/cityscapes'
+#     sourcefile_list = './filenames/source/kitti_2015_train.txt'
+#     targetfile_list = './filenames/target/cityscapes_train.txt'
+#     dataset = PrepareDataset(source_datapath, target_datapath, sourcefile_list, targetfile_list, training=True)
+#     dataloader = DataLoader(dataset, batch_size=1, shuffle=True, num_workers=1)
+#     for i, data in enumerate(dataloader):
+#         print(i, " :", data['src_left'].shape)
+#         print(i, " :", data['tgt_left'].shape)
