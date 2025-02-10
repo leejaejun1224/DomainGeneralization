@@ -90,35 +90,26 @@ class CityscapesDataset(Dataset):
         else:
             w, h = left_img.size
 
-            # normalize
+            crop_w, crop_h = 1248, 384
+
+            x1 = (w - crop_w) // 2
+            y1 = (h - crop_h) // 2
+
+            # random crop
+            left_img = left_img.crop((x1, y1, x1 + crop_w, y1 + crop_h))
+            right_img = right_img.crop((x1, y1, x1 + crop_w, y1 + crop_h))
+            disparity = disparity[y1:y1 + crop_h, x1:x1 + crop_w]
+            disparity_low = cv2.resize(disparity, (crop_w//4, crop_h//4), interpolation=cv2.INTER_NEAREST)
+
+            # to tensor, normalize
             processed = get_transform()
-            left_img = processed(left_img).numpy()
-            right_img = processed(right_img).numpy()
+            left_img = processed(left_img)
+            right_img = processed(right_img)
 
-            # pad to size 1248x384
-            top_pad = 384 - h
-            right_pad = 1248 - w
-            assert top_pad > 0 and right_pad > 0
-            # pad images
-            left_img = np.lib.pad(left_img, ((0, 0), (top_pad, 0), (0, right_pad)), mode='constant', constant_values=0)
-            right_img = np.lib.pad(right_img, ((0, 0), (top_pad, 0), (0, right_pad)), mode='constant',
-                                   constant_values=0)
-            # pad disparity gt
-            if disparity is not None:
-                assert len(disparity.shape) == 2
-                disparity = np.lib.pad(disparity, ((top_pad, 0), (0, right_pad)), mode='constant', constant_values=0)
+            return {"left": left_img,
+                    "right": right_img,
+                    "disparity": disparity,
+                    "disparity_low": disparity_low,
+                    "left_filename": self.left_filenames[index],
+                    "right_filename": self.right_filenames[index]}
 
-
-            if disparity is not None:
-                return {"left": left_img,
-                        "right": right_img,
-                        "disparity": disparity,
-                        "top_pad": top_pad,
-                        "right_pad": right_pad}
-            else:
-                return {"left": left_img,
-                        "right": right_img,
-                        "top_pad": top_pad,
-                        "right_pad": right_pad,
-                        "left_filename": self.left_filenames[index],
-                        "right_filename": self.right_filenames[index]}
