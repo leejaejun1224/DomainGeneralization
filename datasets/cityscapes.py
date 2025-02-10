@@ -1,10 +1,10 @@
 import os
 import random
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
 from PIL import Image
 import numpy as np
 import cv2
-from datasets.data_io import get_transform, read_all_lines, pfm_imread
+from data_io import get_transform, read_all_lines, pfm_imread
 import torchvision.transforms as transforms
 import torch
 import matplotlib.pyplot as plt
@@ -15,8 +15,7 @@ class CityscapesDataset(Dataset):
     def __init__(self, cityscapes_datapath, list_filename, training):
         
         # datapath
-        
-        self.cityscapes_datapath = cityscapes_datapath
+        self.datapath = cityscapes_datapath
         self.left_filenames, self.right_filenames, self.disp_filenames = self.load_path(list_filename)
         self.training = training
         if self.training:
@@ -47,10 +46,6 @@ class CityscapesDataset(Dataset):
     def __getitem__(self, index):
         
         left_name = self.left_filenames[index].split('/')[1]
-        if left_name.startswith('image'):
-            self.datapath = self.datapath_15
-        else:
-            self.datapath = self.datapath_12
 
         left_img = self.load_image(os.path.join(self.datapath, self.left_filenames[index]))
         right_img = self.load_image(os.path.join(self.datapath, self.right_filenames[index]))
@@ -113,3 +108,11 @@ class CityscapesDataset(Dataset):
                     "left_filename": self.left_filenames[index],
                     "right_filename": self.right_filenames[index]}
 
+
+# if __name__ == "__main__":
+#     cityscapes_datapath = '/home/jaejun/dataset/cityscapes'
+#     list_filename = './filenames/target/cityscapes_train.txt'
+#     dataset = CityscapesDataset(cityscapes_datapath, list_filename, training=False)
+#     dataloader = DataLoader(dataset, batch_size=1, shuffle=True, num_workers=1)
+#     for i, data in enumerate(dataloader):
+#         print(i, " :", data['left'].shape)
