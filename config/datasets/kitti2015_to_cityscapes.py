@@ -21,17 +21,11 @@ dataset = dict(
         type='UDAdataset',
         source=dict(
             data_root=f'/home/jaejun/dataset/kitti/{source_dataset}/training',
-            left_img_dir='image_2',
-            right_img_dir='image_3',
-            ann_dir='2015 disparity gt 저장된 곳',
             file_list=f'./filenames/source/{source_dataset}_train.txt',
             pipeline=kitti_2015_pipeline
         ),
         target=dict(
-            data_root=f'/home/jaejun/dataset/{target_dataset}/training',
-            left_img_dir='image_2',
-            right_img_dir='image_3',
-            ann_dir='2012 disparity gt 저장된 곳',
+            data_root=f'/home/jaejun/dataset/cityscapes',
             file_list=f'./filenames/target/{target_dataset}_train.txt',
             pipeline=cityscapes_pipeline
         )
@@ -40,17 +34,11 @@ dataset = dict(
         type='UDAdataset',
         source=dict(
             data_root=f'/home/jaejun/dataset/kitti/{source_dataset}/testing',
-            left_img_dir='image_2',
-            right_img_dir='image_3',
-            ann_dir='2015 disparity gt 저장된 곳',
             file_list=f'./filenames/source/{source_dataset}_val.txt',
             pipeline=kitti_2015_pipeline
         ),
         target=dict(
-            data_root=f'/home/jaejun/dataset/{target_dataset}/testing',
-            left_img_dir='image_2',
-            right_img_dir='image_3',
-            ann_dir='2012 disparity gt 저장된 곳',
+            data_root=f'/home/jaejun/dataset/cityscapes',
             file_list=f'./filenames/target/{target_dataset}_val.txt',
             pipeline=cityscapes_pipeline
         )
@@ -66,7 +54,7 @@ dataset = dict(
             pipeline=kitti_2015_pipeline
         ),
         target=dict(
-            data_root=f'/home/jaejun/dataset/{target_dataset}/testing',
+            data_root=f'/home/jaejun/dataset/cityscapes',
             left_img_dir='image_2',
             right_img_dir='image_3',
             ann_dir='2012 disparity gt 저장된 곳',
