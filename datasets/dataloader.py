@@ -41,16 +41,15 @@ class PrepareDataset(Dataset):
         data = np.array(data, dtype=np.float32) / 256.
         return data
     
-
     def __len__(self):
-        return len(self.source_left_filenames)
+        return min(len(self.source_left_filenames), len(self.target_left_filenames))
 
     def __getitem__(self, index):
 
         src_left_img = self.load_image(os.path.join(self.source_datapath, self.source_left_filenames[index]))
         src_right_img = self.load_image(os.path.join(self.source_datapath, self.source_right_filenames[index]))
         src_disparity = self.load_disp(os.path.join(self.source_datapath, self.source_disp_filenames[index]))
-        
+
         tgt_left_img = self.load_image(os.path.join(self.target_datapath, self.target_left_filenames[index]))
         tgt_right_img = self.load_image(os.path.join(self.target_datapath, self.target_right_filenames[index]))
 
@@ -70,16 +69,23 @@ class PrepareDataset(Dataset):
             else:
                 y1 = random.randint(int(0.3 * h), h - crop_h)
 
+            target_w, target_h = tgt_left_img.size
+            target_x1 = random.randint(0, target_w - crop_w)
+            # y1 = random.randint(0, h - crop_h)
+            if  random.randint(0, 10) >= int(8):
+                target_y1 = random.randint(0, target_h - crop_h)
+            else:
+                target_y1 = random.randint(int(0.3 * target_h), target_h - crop_h)
             # random crop source / target
             src_left_img = src_left_img.crop((x1, y1, x1 + crop_w, y1 + crop_h))
             src_right_img = src_right_img.crop((x1, y1, x1 + crop_w, y1 + crop_h))
             src_disparity = src_disparity[y1:y1 + crop_h, x1:x1 + crop_w]
             src_disparity_low = cv2.resize(src_disparity, (crop_w//4, crop_h//4), interpolation=cv2.INTER_NEAREST)
 
-            tgt_left_img = tgt_left_img.crop((x1, y1, x1 + crop_w, y1 + crop_h))
-            tgt_right_img = tgt_right_img.crop((x1, y1, x1 + crop_w, y1 + crop_h))
+            tgt_left_img = tgt_left_img.crop((target_x1, target_y1, target_x1 + crop_w, target_y1 + crop_h))
+            tgt_right_img = tgt_right_img.crop((target_x1, target_y1, target_x1 + crop_w, target_y1 + crop_h))
             if tgt_disparity is not None:
-                tgt_disparity = tgt_disparity[y1:y1 + crop_h, x1:x1 + crop_w]
+                tgt_disparity = tgt_disparity[target_y1:target_y1 + crop_h, target_x1:target_x1 + crop_w]
                 tgt_disparity_low = cv2.resize(tgt_disparity, (crop_w//4, crop_h//4), interpolation=cv2.INTER_NEAREST)
 
 
