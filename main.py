@@ -46,8 +46,8 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '0, 1'
     
 def main():
     parser = argparse.ArgumentParser(description="StereoDepth Unsupervised Domain Adaptation")
-    parser.add_argument('--dataset_config', default='./config/datasets/kitti2015_to_cityscapes.py', help='source domain and target domain name')
-    parser.add_argument('--uda_config', default='./config/uda/kit15_kit12.py', help='UDA model preparation')
+    parser.add_argument('--dataset_config', default='./config/datasets/cityscapes_to_kitti2015.py', help='source domain and target domain name')
+    parser.add_argument('--uda_config', default='./config/uda/kit15_cityscapes.py', help='UDA model preparation')
     parser.add_argument('--seed', default=1, metavar='S', help='random seed(default = 1)')
     parser.add_argument('--log_dir', default='./log', help='log directory')
     parser.add_argument('--compute_metrics', default=True, help='compute metrics')

@@ -19,7 +19,7 @@ optimizer = dict(
 )
 
 # name_dataset = 'kitti2015_to_kitti2012'
-name_dataset = 'kitti2015_to_cityscapes'
+name_dataset = 'cityscapes_to_kitti2015'
 
 
 data = dict(
