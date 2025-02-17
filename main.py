@@ -141,10 +141,13 @@ def main():
                         #     scalar_outputs["Thres1"] = [Thres_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'], 1.0)]
                         #     scalar_outputs["Thres2"] = [Thres_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'], 2.0)]
                         #     scalar_outputs["Thres3"] = [Thres_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'], 3.0)]
-            
-            avg_val_loss = sum(val_losses) / len(val_losses)
-            print(f'Validation Loss: {avg_val_loss:.4f}')
-            step_loss['val_loss'] = avg_val_loss 
+            if len(val_losses) > 0:
+                avg_val_loss = sum(val_losses) / len(val_losses)
+                print(f'Validation Loss: {avg_val_loss:.4f}')
+                step_loss['val_loss'] = avg_val_loss 
+            else:
+                print(f'Validation Loss: {0:.4f}')
+                step_loss['val_loss'] = 0
 
             # Save checkpoint
             checkpoint = {
