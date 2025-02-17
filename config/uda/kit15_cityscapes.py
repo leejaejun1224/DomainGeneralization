@@ -8,7 +8,7 @@ depth_model = dict(
 )
 
 uda = dict(
-    threshold = 0.3,
+    threshold = 0.5,
     alpha = 0.99,
     train_source_only = True
 )
@@ -19,7 +19,8 @@ optimizer = dict(
 )
 
 # name_dataset = 'kitti2015_to_kitti2012'
-name_dataset = 'cityscapes_to_kitti2015'
+# name_dataset = 'cityscapes_to_kitti2015'
+name_dataset = 'kitti2015_to_cityscapes'
 
 
 data = dict(

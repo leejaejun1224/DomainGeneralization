@@ -114,8 +114,8 @@ def main():
                     scalar_outputs["Thres3"] = [Thres_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'], 3.0)]
         
         if len(train_losses) > 0:
-            print(f'Epoch [{epoch + 1}/{cfg["epoch"]}] Average Loss: {avg_loss:.4f}')
             avg_loss = sum(train_losses) / len(train_losses)
+            print(f'Epoch [{epoch + 1}/{cfg["epoch"]}] Average Loss: {avg_loss:.4f}')
             step_loss = {'train_loss' : avg_loss}
         else:
             print(f'Epoch [{epoch + 1}/{cfg["epoch"]}] Average Loss: {0:.4f}')
@@ -161,8 +161,16 @@ def main():
                 'optimizer_state_dict': optimizer.state_dict()
             }
             torch.save(checkpoint, os.path.join(save_dir, f'checkpoint_epoch{epoch+1}.pth'))
-
-        log_dict[f'epoch_{epoch+1}'] = step_loss
+            
+            if 'confidence_map' in data_batch:
+                confidence_map_dir = os.path.join(save_dir, 'confidence_maps')
+                os.makedirs(confidence_map_dir, exist_ok=True)
+                confidence_map = data_batch['confidence_map'].cpu().numpy()
+                for idx, conf_map in enumerate(confidence_map):
+                    np.save(os.path.join(confidence_map_dir, f'conf_map_epoch{epoch+1}_batch{idx}.npy'), conf_map)
+                    
+            # 이거 좀 더 고민해보자.
+            log_dict[f'epoch_{epoch+1}'] = step_loss
 
     with open(f'{save_dir}/training_log.json', 'w') as f:
         json.dump(log_dict, f, indent=4)
