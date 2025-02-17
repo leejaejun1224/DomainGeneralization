@@ -112,10 +112,14 @@ def main():
                     scalar_outputs["Thres1"] = [Thres_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'], 1.0)]
                     scalar_outputs["Thres2"] = [Thres_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'], 2.0)]
                     scalar_outputs["Thres3"] = [Thres_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'], 3.0)]
-        avg_loss = sum(train_losses) / len(train_losses)
         
-        print(f'Epoch [{epoch + 1}/{cfg["epoch"]}] Average Loss: {avg_loss:.4f}')
-        step_loss = {'train_loss' : avg_loss}
+        if len(train_losses) > 0:
+            print(f'Epoch [{epoch + 1}/{cfg["epoch"]}] Average Loss: {avg_loss:.4f}')
+            avg_loss = sum(train_losses) / len(train_losses)
+            step_loss = {'train_loss' : avg_loss}
+        else:
+            print(f'Epoch [{epoch + 1}/{cfg["epoch"]}] Average Loss: {0:.4f}')
+            step_loss = {'train_loss' : 0}
 
 
         if (epoch + 1) % cfg['val_interval'] == 0:
