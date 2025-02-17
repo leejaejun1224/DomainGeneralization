@@ -42,6 +42,7 @@ class PrepareDataset(Dataset):
         return data
     
     def __len__(self):
+        # 이러면 작은 놈을 따라갈 수 밖에 없음,
         return min(len(self.source_left_filenames), len(self.target_left_filenames))
 
     def __getitem__(self, index):
@@ -76,6 +77,7 @@ class PrepareDataset(Dataset):
                 target_y1 = random.randint(0, target_h - crop_h)
             else:
                 target_y1 = random.randint(int(0.3 * target_h), target_h - crop_h)
+            
             # random crop source / target
             src_left_img = src_left_img.crop((x1, y1, x1 + crop_w, y1 + crop_h))
             src_right_img = src_right_img.crop((x1, y1, x1 + crop_w, y1 + crop_h))
