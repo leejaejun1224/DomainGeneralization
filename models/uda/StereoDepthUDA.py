@@ -105,6 +105,8 @@ class StereoDepthUDA(StereoDepthUDAInference):
 
         supervised_loss = calc_supervised_train_loss(data_batch)
         pseudo_loss = calc_pseudo_loss(data_batch, self.cfg)
+
+        # 만약에 pseudo loss가 nan이 나오면 그냥 total loss로만 backward를 하면 되나
         total_loss = supervised_loss + pseudo_loss
 
         log_vars = {

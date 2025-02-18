@@ -167,13 +167,13 @@ def main():
                 confidence_map_dir = os.path.join(save_dir, 'confidence_maps')
                 os.makedirs(confidence_map_dir, exist_ok=True)
                 confidence_map = data_batch['confidence_map'].cpu().numpy()
-                
+                target_left_filename = data_batch['target_left_filename']
                 for idx, conf_map in enumerate(confidence_map):
                     plt.figure(figsize=(10, 8))
                     plt.imshow(conf_map, cmap='viridis')  # viridis is good for confidence visualization
                     plt.colorbar(label='Confidence')
                     plt.title(f'Confidence Map - Epoch {epoch+1} Batch {idx}')
-                    plt.savefig(os.path.join(confidence_map_dir, f'conf_map_epoch{epoch+1}_batch{idx}.png'))
+                    plt.savefig(os.path.join(confidence_map_dir, target_left_filename[idx].split('/')[-1]))
                     plt.close() 
 
             # 이거 좀 더 고민해보자.

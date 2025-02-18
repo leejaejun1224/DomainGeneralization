@@ -42,20 +42,29 @@ class PrepareDataset(Dataset):
         return data
     
     def __len__(self):
+        # 이 함수가 필요한 이유 : dataloader 클래스에서 이 길이의 안쪽에 있는 dataset의 인덱스를 가져옴
+        # 고로 하나가 더 커버리면 반대쪽에서 가져올 인덱스가 없어서 에러가 남. 
         # 이러면 작은 놈을 따라갈 수 밖에 없음,
         return min(len(self.source_left_filenames), len(self.target_left_filenames))
 
     def __getitem__(self, index):
+        
+        # if index >= min(len(self.source_left_filenames), len(self.target_left_filenames)):
+        #     src_index = random.randint(0, len(self.source_left_filenames) - 1)
+        #     tgt_index = random.randint(0, len(self.target_left_filenames) - 1)
+        # else:
+        src_index = index
+        tgt_index = index
 
-        src_left_img = self.load_image(os.path.join(self.source_datapath, self.source_left_filenames[index]))
-        src_right_img = self.load_image(os.path.join(self.source_datapath, self.source_right_filenames[index]))
-        src_disparity = self.load_disp(os.path.join(self.source_datapath, self.source_disp_filenames[index]))
+        src_left_img = self.load_image(os.path.join(self.source_datapath, self.source_left_filenames[src_index]))
+        src_right_img = self.load_image(os.path.join(self.source_datapath, self.source_right_filenames[src_index]))
+        src_disparity = self.load_disp(os.path.join(self.source_datapath, self.source_disp_filenames[src_index]))
 
-        tgt_left_img = self.load_image(os.path.join(self.target_datapath, self.target_left_filenames[index]))
-        tgt_right_img = self.load_image(os.path.join(self.target_datapath, self.target_right_filenames[index]))
+        tgt_left_img = self.load_image(os.path.join(self.target_datapath, self.target_left_filenames[tgt_index]))
+        tgt_right_img = self.load_image(os.path.join(self.target_datapath, self.target_right_filenames[tgt_index]))
 
         if self.target_disp_filenames:   # 만약에 target 이미지에 대해서 disparity 참값을 가지고 있다면
-            tgt_disparity = self.load_disp(os.path.join(self.target_datapath, self.target_disp_filenames[index]))
+            tgt_disparity = self.load_disp(os.path.join(self.target_datapath, self.target_disp_filenames[tgt_index]))
         else:
             tgt_disparity = None
 
@@ -127,16 +136,21 @@ class PrepareDataset(Dataset):
                         "src_disparity": src_disparity,
                         "tgt_left": tgt_left_img,
                         "tgt_right": tgt_right_img,
-                        "tgt_disparity": tgt_disparity}
+                        "tgt_disparity": tgt_disparity,
+                        "source_left_filename": self.source_left_filenames[src_index],
+                        "source_right_filename": self.source_right_filenames[src_index],
+                        "target_left_filename": self.target_left_filenames[tgt_index],
+                        "target_right_filename": self.target_right_filenames[tgt_index]}
+            
             else:
                 return {"src_left": src_left_img,
                         "src_right": src_right_img,
                         "tgt_left": tgt_left_img,
                         "tgt_right": tgt_right_img,
-                        "source_left_filename": self.source_left_filenames[index],
-                        "source_right_filename": self.source_right_filenames[index],
-                        "target_left_filename": self.target_left_filenames[index],
-                        "target_right_filename": self.target_right_filenames[index]}
+                        "source_left_filename": self.source_left_filenames[src_index],
+                        "source_right_filename": self.source_right_filenames[src_index],
+                        "target_left_filename": self.target_left_filenames[tgt_index],
+                        "target_right_filename": self.target_right_filenames[tgt_index]}
         
 
 # if __name__ == "__main__":
