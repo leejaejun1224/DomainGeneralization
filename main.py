@@ -155,13 +155,14 @@ def main():
                 step_loss['val_loss'] = 0
 
             # Save checkpoint
-            checkpoint = {
-                'epoch': epoch,
-                'student_state_dict': model.student_state_dict(),
-                'teacher_state_dict': model.teacher_state_dict(),
-                'optimizer_state_dict': optimizer.state_dict()
-            }
-            torch.save(checkpoint, os.path.join(save_dir, f'checkpoint_epoch{epoch+1}.pth'))
+            if (epoch + 1) % cfg['save_interval'] == 0:
+                checkpoint = {
+                    'epoch': epoch,
+                    'student_state_dict': model.student_state_dict(),
+                    'teacher_state_dict': model.teacher_state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict()
+                }
+                torch.save(checkpoint, os.path.join(save_dir, f'checkpoint_epoch{epoch+1}.pth'))
             
             if 'confidence_map' in data_batch:
                 confidence_map_dir = os.path.join(save_dir, 'confidence_maps')

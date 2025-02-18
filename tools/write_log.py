@@ -20,7 +20,6 @@ def save_disparity(data_batch, dir_name):
 
 
 
-
 def save_metrics(metrics, dir_name):
     os.makedirs(dir_name + '/metrics', exist_ok=True)
     with open(os.path.join(dir_name, 'metrics.json'), 'w') as f:

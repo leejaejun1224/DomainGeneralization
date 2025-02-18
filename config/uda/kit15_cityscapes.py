@@ -30,7 +30,7 @@ data = dict(
         num_workers = 2,
         shuffle = True,
         pin_memory = True,
-        val_interval = 1
+        val_interval = 1,
+        save_interval = 100
     )
 )
-
