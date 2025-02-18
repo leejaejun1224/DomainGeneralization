@@ -36,6 +36,7 @@ def prepare_cfg(arg):
         lr = uda_config.optimizer['lr'],
         uda = uda_config.uda,
         val_interval = uda_config.data['train']['val_interval'],
+        save_interval = uda_config.data['train']['save_interval'],
         epoch = uda_config.data['train']['epoch']
     )
 

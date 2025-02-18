@@ -22,7 +22,6 @@ optimizer = dict(
 name_dataset = 'cityscapes_to_kitti2015'
 # name_dataset = 'kitti2015_to_cityscapes'
 
-
 data = dict(
     train = dict(
         epoch = 100,
@@ -31,6 +30,6 @@ data = dict(
         shuffle = True,
         pin_memory = True,
         val_interval = 1,
-        save_interval = 100
+        save_interval = 1
     )
 )

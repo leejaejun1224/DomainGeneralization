@@ -15,7 +15,7 @@ from torch.utils.data import DataLoader
 from datasets import __datasets__
 from datasets.dataloader import PrepareDataset
 from experiment import prepare_cfg
-from tools.metrics import EPE_metric, D1_metric, Thres_metric
+from tools.metrics import EPE_metric, D1_metric, Thres_metric, tensor2float
 from tools.write_log import save_disparity, save_metrics
 
 cudnn.benchmark = True
@@ -69,14 +69,20 @@ def main():
     # 시작하자잉
     train_losses = []
     step_loss = {}
+    metrics_dict = {}
     for batch_idx, data_batch in enumerate(test_loader):
 
         # print(data_batch)
+        source_filename = data_batch['source_left_filename'][0].split('/')[-1]
+
         for key in data_batch:
             if isinstance(data_batch[key], torch.Tensor):
                 data_batch[key] = data_batch[key].cuda()
                 # print(data_batch[key])
         log_vars = model.forward_test(data_batch)
+
+        if args.save_disp:
+            save_disparity(data_batch, log_dir)
 
         if args.compute_metrics:
             scalar_outputs = {}
@@ -85,10 +91,10 @@ def main():
             scalar_outputs["Thres1"] = [Thres_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'], 1.0)]
             scalar_outputs["Thres2"] = [Thres_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'], 2.0)]
             scalar_outputs["Thres3"] = [Thres_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'], 3.0)]
-            save_metrics(scalar_outputs, dir_name)
+            metrics_dict[source_filename] = tensor2float(scalar_outputs)
+
+            save_metrics(metrics_dict, log_dir)
             
-        if args.save_disp:
-            save_disparity(data_batch, dir_name)
 
     return 0
 

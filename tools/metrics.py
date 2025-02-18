@@ -66,3 +66,25 @@ def Thres_metric(D_est, D_gt, mask, thres):
     E = torch.abs(D_gt - D_est)
     err_mask = E > thres
     return torch.mean(err_mask.float())
+
+def make_iterative_func(func):
+    def wrapper(vars):
+        if isinstance(vars, list):
+            return [wrapper(x) for x in vars]
+        elif isinstance(vars, tuple):
+            return tuple([wrapper(x) for x in vars])
+        elif isinstance(vars, dict):
+            return {k: wrapper(v) for k, v in vars.items()}
+        else:
+            return func(vars)
+
+    return wrapper
+
+@make_iterative_func
+def tensor2float(vars):
+    if isinstance(vars, float):
+        return vars
+    elif isinstance(vars, torch.Tensor):
+        return vars.data.item()
+    else:
+        raise NotImplementedError("invalid input type for tensor2float")
