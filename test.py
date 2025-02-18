@@ -15,18 +15,13 @@ from torch.utils.data import DataLoader
 from datasets import __datasets__
 from datasets.dataloader import PrepareDataset
 from experiment import prepare_cfg
-from tools.plot_loss import plot_loss_graph
-
+from tools.metrics import EPE_metric, D1_metric, Thres_metric
+from tools.write_log import save_disparity, save_metrics
 
 cudnn.benchmark = True
 os.environ['CUDA_VISIBLE_DEVICES'] = '0, 1'
 
 
-# def test_step(model, data_batch, cfg, train=False):
-#     model.eval()
-#     total_loss, log_var = compute_uda_loss(model, data_batch, cfg, train=False)
-#     pred_disp = log_var['pseudo_disp']
-#     return pred_disp
 
 
     
@@ -37,6 +32,8 @@ def main():
     parser.add_argument('--seed', default=1, metavar='S', help='random seed(default = 1)')
     parser.add_argument('--log_dir', default='./log', help='log directory')
     parser.add_argument('--ckpt', default='', help='checkpoint', )
+    parser.add_argument('--compute_metrics', default=True, help='compute error')
+    parser.add_argument('--save_disp', default=True, help='save disparity')
 
     args = parser.parse_args()
     assert args.ckpt != '', 'checkpoint is required !!'
@@ -44,7 +41,9 @@ def main():
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed(args.seed)
     dir_name = datetime.datetime.now().strftime("%Y-%m-%d_%H:%M")
-    save_dir = '/'.join(args.ckpt.split('/')[:-1]) + '/disp'
+    log_dir  = '/'.join(args.ckpt.split('/')[:-1])
+    save_dir = log_dir + '/disp'
+    
     os.makedirs(save_dir, exist_ok=True)
 
     cfg = prepare_cfg(args)
@@ -79,16 +78,17 @@ def main():
                 # print(data_batch[key])
         log_vars = model.forward_test(data_batch)
 
-        pred_src_dir = os.path.join(save_dir, 'src')
-        os.makedirs(pred_src_dir, exist_ok=True)
-        pred_src = data_batch['src_pred_disp'][0].cpu().numpy()
-        plt.imsave(f'{pred_src_dir}/pred_disp_{batch_idx}.png', pred_src[0], cmap='jet')
-
-
-        pred_tgt_dir = os.path.join(save_dir, 'tgt')
-        os.makedirs(pred_tgt_dir, exist_ok=True)
-        pred_tgt = data_batch['tgt_pred_disp'][0].cpu().numpy()
-        plt.imsave(f'{pred_tgt_dir}/pred_disp_{batch_idx}.png', pred_tgt[0], cmap='jet')
+        if args.compute_metrics:
+            scalar_outputs = {}
+            scalar_outputs["EPE"] = [EPE_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'])]
+            scalar_outputs["D1"] = [D1_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'])]
+            scalar_outputs["Thres1"] = [Thres_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'], 1.0)]
+            scalar_outputs["Thres2"] = [Thres_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'], 2.0)]
+            scalar_outputs["Thres3"] = [Thres_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'], 3.0)]
+            save_metrics(scalar_outputs, dir_name)
+            
+        if args.save_disp:
+            save_disparity(data_batch, dir_name)
 
     return 0
 
