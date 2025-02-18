@@ -7,6 +7,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.backends.cudnn as cudnn
+import matplotlib.pyplot as plt
 from models.uda import __models__
 
 
@@ -134,7 +135,7 @@ def main():
                     log_vars = model.forward_test(data_batch)
                             
                     # EMA model로 검증
-                    #log_vars = val_step(model, data_batch, cfg, train=False)
+                    # log_vars = val_step(model, data_batch, cfg, train=False)
                     if not math.isnan(log_vars['loss']):
                         val_losses.append(log_vars['loss'])
                     
@@ -166,9 +167,15 @@ def main():
                 confidence_map_dir = os.path.join(save_dir, 'confidence_maps')
                 os.makedirs(confidence_map_dir, exist_ok=True)
                 confidence_map = data_batch['confidence_map'].cpu().numpy()
+                
                 for idx, conf_map in enumerate(confidence_map):
-                    np.save(os.path.join(confidence_map_dir, f'conf_map_epoch{epoch+1}_batch{idx}.npy'), conf_map)
-                    
+                    plt.figure(figsize=(10, 8))
+                    plt.imshow(conf_map, cmap='viridis')  # viridis is good for confidence visualization
+                    plt.colorbar(label='Confidence')
+                    plt.title(f'Confidence Map - Epoch {epoch+1} Batch {idx}')
+                    plt.savefig(os.path.join(confidence_map_dir, f'conf_map_epoch{epoch+1}_batch{idx}.png'))
+                    plt.close() 
+
             # 이거 좀 더 고민해보자.
             log_dict[f'epoch_{epoch+1}'] = step_loss
 
@@ -179,9 +186,5 @@ def main():
     return 0
 
 
-
-
-
 if __name__=="__main__":
-    # argparser
     main()

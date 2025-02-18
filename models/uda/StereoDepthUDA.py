@@ -58,7 +58,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
         return log_vars
     
 
-    # automatically make model's training variable False
+    # automatically make model's training member variable False
     @torch.no_grad()
     def forward_test(self, data_batch):
         
