@@ -23,8 +23,6 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '0, 1'
 
 
 
-
-    
 def main():
     parser = argparse.ArgumentParser(description="StereoDepth Unsupervised Domain Adaptation")
     parser.add_argument('--dataset_config', default='./config/datasets/cityscapes_to_kitti2015.py', help='source domain and target domain name')
@@ -71,7 +69,6 @@ def main():
     step_loss = {}
     metrics_dict = {}
     for batch_idx, data_batch in enumerate(test_loader):
-
         # print(data_batch)
         source_filename = data_batch['source_left_filename'][0].split('/')[-1]
 
