@@ -11,7 +11,7 @@ input : x (batch, width, height, channel)
 """
 class EfficientSelfAttention(nn.Module):
     def __init__(self, dim, num_heads, qkv_bias, qk_scale, attn_drop, proj_drop, sr_ratio):
-        super.__init__()
+        super().__init__()
         assert dim % num_heads == 0, f"dim {dim} have to be divided by num_heads{num_heads}."
         self.dim = dim
         self.num_heads = num_heads
@@ -22,8 +22,8 @@ class EfficientSelfAttention(nn.Module):
 
         self.scale = qk_scale or head_dim ** -0.5
         self.sr_ratio = sr_ratio
-        self.attn_drop = attn_drop
-        self.proj_drop = proj_drop
+        self.attn_drop = nn.Dropout(attn_drop)
+        self.proj_drop = nn.Dropout(proj_drop)
         
         # who are you?
         self.proj = nn.Linear(dim, dim)
@@ -36,7 +36,6 @@ class EfficientSelfAttention(nn.Module):
         self.apply(self._init_weights)
 
     def _init_weights(self, m):
-
         if isinstance(m, nn.Linear):
             trunc_normal_(m.weight, std=.02)
             if isinstance(m, nn.Linear) and m.bias is not None:
@@ -116,9 +115,9 @@ class MixFFN(nn.Module):
 
     def _init_weights(self, m):
         if isinstance(m, nn.Linear):
-            trunc_normal_(m, std=.02)
+            trunc_normal_(m.weight, std=.02)
             if isinstance(m, nn.Linear) and m.bias is not None:
-                nn.init.normal_(m.bias, 0)
+                nn.init.constant_(m.bias, 0)
         elif isinstance(m, nn.Conv2d):
             fan_out = m.kernel_size[0]*m.kernel_size[1]*m.out_channels
             fan_out //= m.groups
@@ -170,9 +169,9 @@ class Block(nn.Module):
                 m.bias.data.zero_()
 
 
-    def forward(self, x):
-        x = self.drop_path(self.attention(self.norm1(x))) + x
-        x = self.drop_path(self.mlp(self.norm2(x))) + x
+    def forward(self, x, H, W):
+        x = self.drop_path(self.attention(self.norm1(x), H, W)) + x
+        x = self.drop_path(self.mlp(self.norm2(x), H, W)) + x
 
         return x
 
@@ -317,40 +316,40 @@ class MixVisionTransformer(nn.Module):
         # stage 1
         x, H, W = self.patch_embed1(x)
         for i, blk in enumerate(self.block1):
-            x = blk(x)
+            x = blk(x, H, W)
         # x : [B, N, C]
         x = self.norm1(x)
-        x = x.reshape(B, H, W, -1).transpose(0, 3, 1, 2).contiguous()
+        x = x.reshape(B, H, W, -1).permute(0, 3, 1, 2).contiguous()
         output.append(x)
 
 
         # stage 2
         x, H, W = self.patch_embed2(x)
         for i, blk in enumerate(self.block2):
-            x = blk(x)
+            x = blk(x, H, W)
         # x : [B, N, C]
         x = self.norm2(x)
-        x = x.reshape(B, H, W, -1).transpose(0, 3, 1, 2).contiguous()
+        x = x.reshape(B, H, W, -1).permute(0, 3, 1, 2).contiguous()
         output.append(x)
 
 
         # stage 3
         x, H, W = self.patch_embed3(x)
         for i, blk in enumerate(self.block3):
-            x = blk(x)
+            x = blk(x, H, W)
         # x : [B, N, C]
         x = self.norm3(x)
-        x = x.reshape(B, H, W, -1).transpose(0, 3, 1, 2).contiguous()
+        x = x.reshape(B, H, W, -1).permute(0, 3, 1, 2).contiguous()
         output.append(x)
 
 
         # stage 4
         x, H, W = self.patch_embed4(x)
         for i, blk in enumerate(self.block4):
-            x = blk(x)
+            x = blk(x, H, W)
         # x : [B, N, C]
         x = self.norm4(x)
-        x = x.reshape(B, H, W, -1).transpose(0, 3, 1, 2).contiguous()
+        x = x.reshape(B, H, W, -1).permute(0, 3, 1, 2).contiguous()
         output.append(x)
 
         return output
@@ -366,7 +365,12 @@ class MixVisionTransformer(nn.Module):
         return x
 
 
-
-# if __name__=="__main__":
-#     dpr = [x.item() for x in torch.linspace(0, 0.1, 16)]
-#     print(len(dpr))
+if __name__=="__main__":
+    mitbackbone = MixVisionTransformer(img_size=256, in_chans=3, embed_dim=[64, 128, 256, 512],
+                                      depth=[2, 2, 2, 2], num_heads=[1, 2, 4, 8], qkv_bias=True,
+                                      qk_scale=1.0, sr_ratio=[8, 4, 2, 1], proj_drop=[0.0, 0.0, 0.0, 0.0], attn_drop=[0.0, 0.0, 0.0, 0.0],
+                                      drop_path_rate=0.1)
+    
+    x = torch.randn(1, 3, 256, 256)
+    output = mitbackbone(x)
+    print(output[1].shape)
