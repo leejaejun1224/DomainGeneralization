@@ -16,7 +16,7 @@ from datasets import __datasets__
 from datasets.dataloader import PrepareDataset
 from experiment import prepare_cfg
 from tools.metrics import EPE_metric, D1_metric, Thres_metric, tensor2float
-from tools.write_log import save_disparity, save_metrics
+from tools.write_log import save_disparity, save_metrics, save_att
 
 cudnn.benchmark = True
 os.environ['CUDA_VISIBLE_DEVICES'] = '0, 1'
@@ -32,6 +32,7 @@ def main():
     parser.add_argument('--ckpt', default='', help='checkpoint', )
     parser.add_argument('--compute_metrics', default=True, help='compute error')
     parser.add_argument('--save_disp', default=True, help='save disparity')
+    parser.add_argument('--save_att', default=True, help='save attention')
 
     args = parser.parse_args()
     assert args.ckpt != '', 'checkpoint is required !!'
@@ -77,6 +78,9 @@ def main():
                 data_batch[key] = data_batch[key].cuda()
                 # print(data_batch[key])
         log_vars = model.forward_test(data_batch)
+
+        if args.save_att:
+            save_att(data_batch, log_dir)
 
         if args.save_disp:
             save_disparity(data_batch, log_dir)

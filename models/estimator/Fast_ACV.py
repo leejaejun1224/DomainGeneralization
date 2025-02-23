@@ -342,5 +342,4 @@ class Fast_ACVNet(nn.Module):
             pred = regression_topk(cost.squeeze(1), disparity_sample_topk, 2)
             pred_up = context_upsample(pred, spx_pred)
             max_values, _ = att_prob.max(dim=1, keepdim=True)
-
-            return [pred_up*4, pred.squeeze(1)*4], max_values.squeeze(1)
+            return [pred_up*4, pred.squeeze(1)*4, att_prob], max_values.squeeze(1)

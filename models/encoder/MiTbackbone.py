@@ -365,12 +365,12 @@ class MixVisionTransformer(nn.Module):
         return x
 
 
-if __name__=="__main__":
-    mitbackbone = MixVisionTransformer(img_size=256, in_chans=3, embed_dim=[64, 128, 256, 512],
-                                      depth=[2, 2, 2, 2], num_heads=[1, 2, 4, 8], qkv_bias=True,
-                                      qk_scale=1.0, sr_ratio=[8, 4, 2, 1], proj_drop=[0.0, 0.0, 0.0, 0.0], attn_drop=[0.0, 0.0, 0.0, 0.0],
-                                      drop_path_rate=0.1)
+# if __name__=="__main__":
+#     mitbackbone = MixVisionTransformer(img_size=256, in_chans=3, embed_dim=[64, 128, 256, 512],
+#                                       depth=[2, 2, 2, 2], num_heads=[1, 2, 4, 8], qkv_bias=True,
+#                                       qk_scale=1.0, sr_ratio=[8, 4, 2, 1], proj_drop=[0.0, 0.0, 0.0, 0.0], attn_drop=[0.0, 0.0, 0.0, 0.0],
+#                                       drop_path_rate=0.1)
     
-    x = torch.randn(1, 3, 256, 256)
-    output = mitbackbone(x)
-    print(output[1].shape)
+#     x = torch.randn(1, 3, 256, 256)
+#     output = mitbackbone(x)
+#     print(output[1].shape)

@@ -22,6 +22,7 @@ class StereoDepthUDAInference(nn.Module):
         # flag for initializing EMA weights
         self.ema_initialized = False
         self.cfg = cfg
+        self.train = True
         self.set_model()
     
     
@@ -33,6 +34,7 @@ class StereoDepthUDAInference(nn.Module):
 
 
     def forward(self, left, right):
+        self.student_model.training = self.train
         output, _ = self.student_model(left, right)
         return output
     
