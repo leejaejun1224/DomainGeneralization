@@ -8,7 +8,6 @@ def save_att(data_batch, dir_name):
     for i in range(data_batch['src_pred_disp'][0].shape[0]):
         att_prob, _ = data_batch['src_pred_disp'][2][i].max(dim=0, keepdim=True)
         att_prob = att_prob.squeeze(0).cpu().numpy()
-        print("att_prob shape : ", att_prob.shape)
         source_left_filename = data_batch['source_left_filename'][i].split('/')[-1]
         plt.imsave(os.path.join(dir_name, 'att', source_left_filename), att_prob, cmap='gray')
 

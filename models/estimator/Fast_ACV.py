@@ -270,7 +270,9 @@ class Fast_ACVNet(nn.Module):
         features_right[1] = torch.cat((features_right[1], stem_8y), 1)
 
         corr_volume = build_gwc_volume_norm(features_left[1], features_right[1], self.maxdisp//8, 12)
+        print("corr_volume : ", corr_volume.shape)
         corr_volume = self.patch(corr_volume)
+        print("corr_volume : ", corr_volume.shape)
         cost_att = self.corr_feature_att_8(corr_volume, features_left[1])
         cost_att = self.hourglass_att(cost_att, features_left)
         att_weights = F.interpolate(cost_att, [self.maxdisp//4, left.size()[2]//4, left.size()[3]//4], mode='trilinear')
