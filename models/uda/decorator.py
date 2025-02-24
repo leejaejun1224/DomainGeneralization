@@ -34,7 +34,7 @@ class StereoDepthUDAInference(nn.Module):
 
 
     def forward(self, left, right):
-        self.student_model.training = self.train
+        # self.student_model.training = self.train
         output, _ = self.student_model(left, right)
         return output
     
