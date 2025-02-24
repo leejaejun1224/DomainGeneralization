@@ -6,11 +6,11 @@ from torch.autograd import Variable
 import torch.nn.functional as F
 from models.estimator.submodules import *
 from models.losses.loss import get_loss
+from models.encoder.MiTbackbone import MixVisionTransformer
 import math
 import gc
 import time
 import timm
-
 class SubModule(nn.Module):
     def __init__(self):
         super(SubModule, self).__init__()
@@ -58,6 +58,30 @@ class Feature(SubModule):
         x16 = self.block3(x8)
         x32 = self.block4(x16)
         return [x4, x8, x16, x32]
+    
+
+class FeatureMiT(SubModule):
+    def __init__(self):
+        super(FeatureMiT, self).__init__()
+        self.mitbackbone = MixVisionTransformer(
+            img_size=256,           
+            in_chans=3,            
+            embed_dim=[24, 32, 96, 160],
+            depth=[2, 2, 2, 2],
+            num_heads=[1, 2, 3, 5],
+            qkv_bias=True,
+            qk_scale=None,
+            sr_ratio=[8, 4, 2, 1],
+            proj_drop=[0.0, 0.0, 0.0, 0.0],
+            attn_drop=[0.0, 0.0, 0.0, 0.0],
+            drop_path_rate=0.1
+        )
+
+    def forward(self, x):
+        # 4단계 특징맵 획득
+        x4, x8, x16, x32 = self.mitbackbone(x)
+        return [x4, x8, x16, x32]
+
 
 class FeatUp(SubModule):
     def __init__(self):
@@ -154,6 +178,7 @@ class hourglass_att(nn.Module):
     def __init__(self, in_channels):
         super(hourglass_att, self).__init__()
 
+        # 논문 3.3 cost aggregation
         self.conv1 = nn.Sequential(BasicConv(in_channels, in_channels*2, is_3d=True, bn=True, relu=True, kernel_size=3,
                                              padding=1, stride=2, dilation=1),
                                    BasicConv(in_channels*2, in_channels*2, is_3d=True, bn=True, relu=True, kernel_size=3,
@@ -201,7 +226,8 @@ class Fast_ACVNet(nn.Module):
         super(Fast_ACVNet, self).__init__()
         self.att_weights_only = att_weights_only
         self.maxdisp = maxdisp 
-        self.feature = Feature()
+        # self.feature = Feature()
+        self.feature = FeatureMiT()
         self.feature_up = FeatUp()
         self.gamma = nn.Parameter(torch.zeros(1))
         self.beta = nn.Parameter(2*torch.ones(1))
@@ -270,9 +296,7 @@ class Fast_ACVNet(nn.Module):
         features_right[1] = torch.cat((features_right[1], stem_8y), 1)
 
         corr_volume = build_gwc_volume_norm(features_left[1], features_right[1], self.maxdisp//8, 12)
-        print("corr_volume : ", corr_volume.shape)
         corr_volume = self.patch(corr_volume)
-        print("corr_volume : ", corr_volume.shape)
         cost_att = self.corr_feature_att_8(corr_volume, features_left[1])
         cost_att = self.hourglass_att(cost_att, features_left)
         att_weights = F.interpolate(cost_att, [self.maxdisp//4, left.size()[2]//4, left.size()[3]//4], mode='trilinear')
@@ -306,7 +330,7 @@ class Fast_ACVNet(nn.Module):
             concat_features_left = self.concat_feature(features_left[0])
             concat_features_right = self.concat_feature(features_right[0])
             concat_volume = self.concat_volume_generator(concat_features_left, concat_features_right, disparity_sample_topk)
-            volume = att_topk * concat_volume    
+            volume = att_topk * concat_volume
             volume = self.concat_stem(volume)
             volume = self.concat_feature_att_4(volume, features_left[0])
             cost = self.hourglass(volume, features_left)
