@@ -37,7 +37,15 @@ def prepare_cfg(arg):
         uda = uda_config.uda,
         val_interval = uda_config.data['train']['val_interval'],
         save_interval = uda_config.data['train']['save_interval'],
-        epoch = uda_config.data['train']['epoch']
+        epoch = uda_config.data['train']['epoch'],
+        train_batch_size = uda_config.data['train']['batch_size'],  
+        train_num_workers = uda_config.data['train']['num_workers'],
+        train_shuffle = uda_config.data['train']['shuffle'],
+        train_pin_memory = uda_config.data['train']['pin_memory'],
+        test_batch_size = uda_config.data['test']['batch_size'],
+        test_num_workers = uda_config.data['test']['num_workers'],
+        test_shuffle = uda_config.data['test']['shuffle'],
+        test_pin_memory = uda_config.data['test']['pin_memory']
     )
 
     return cfg
