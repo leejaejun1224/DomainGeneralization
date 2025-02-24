@@ -54,7 +54,7 @@ def main():
                                 targetfile_list=cfg['dataset']['tgt_filelist'],
                                 training=False)
     
-    test_loader = DataLoader(test_dataset, batch_size=cfg['batch_size'], shuffle=False, num_workers=cfg['num_workers'], drop_last=False)
+    test_loader = DataLoader(test_dataset, batch_size=cfg['test_batch_size'], shuffle=False, num_workers=cfg['test_num_workers'], drop_last=False)
     # print(cfg)
 
     model = __models__['StereoDepthUDA'](cfg)
