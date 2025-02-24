@@ -62,7 +62,6 @@ class StereoDepthUDA(StereoDepthUDAInference):
     @torch.no_grad()
     def forward_test(self, data_batch):
         
-        self.train = False
         data_batch['src_pred_disp'] = self.forward(data_batch['src_left'], data_batch['src_right'])
         data_batch['tgt_pred_disp'] = self.forward(data_batch['tgt_left'], data_batch['tgt_right'])
         
@@ -109,7 +108,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
         pseudo_loss = calc_pseudo_loss(data_batch, self.cfg)
 
         # 만약에 pseudo loss가 nan이 나오면 그냥 total loss로만 backward를 하면 되나
-        
+
         # total_loss = supervised_loss + pseudo_loss
         total_loss = supervised_loss
 
