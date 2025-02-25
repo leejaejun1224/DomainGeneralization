@@ -70,15 +70,15 @@ class EfficientSelfAttention(nn.Module):
 
         # q : [B, num_heads, N, C/num_head], k : [B, num_heads, N/R, C/num_head]
         attn = (q @ k.transpose(-2,-1))*self.scale
-        attn = attn.softmax(dim=-1)
-        attn = self.attn_drop(attn)
+        attn_weights = attn.softmax(dim=-1)
+        attn = self.attn_drop(attn_weights)
 
         # v : [B, num_head, N/R(sr_ratio^2), C/num_head]
         x = (attn @ v).transpose(1,2).reshape(B, N, C)
         x = self.proj(x)
         x = self.proj_drop(x)
 
-        return x
+        return x, attn_weights
     
 
 
@@ -170,10 +170,11 @@ class Block(nn.Module):
 
 
     def forward(self, x, H, W):
-        x = self.drop_path(self.attention(self.norm1(x), H, W)) + x
+        output, attn_weights = self.attention(self.norm1(x), H, W)
+        x = self.drop_path(output) + x
         x = self.drop_path(self.mlp(self.norm2(x), H, W)) + x
 
-        return x
+        return x, attn_weights
 
 
 
@@ -312,47 +313,50 @@ class MixVisionTransformer(nn.Module):
     def forward_feature(self, x):
         B = x.shape[0]
         output = []
+        attn_weights = []
 
         # stage 1
         x, H, W = self.patch_embed1(x)
         for i, blk in enumerate(self.block1):
-            x = blk(x, H, W)
+            x, attn_weight = blk(x, H, W)
         # x : [B, N, C]
         x = self.norm1(x)
         x = x.reshape(B, H, W, -1).permute(0, 3, 1, 2).contiguous()
         output.append(x)
+        attn_weights.append(attn_weight)
 
 
         # stage 2
         x, H, W = self.patch_embed2(x)
         for i, blk in enumerate(self.block2):
-            x = blk(x, H, W)
+            x, attn_weight = blk(x, H, W)
         # x : [B, N, C]
         x = self.norm2(x)
         x = x.reshape(B, H, W, -1).permute(0, 3, 1, 2).contiguous()
         output.append(x)
-
+        attn_weights.append(attn_weight)
 
         # stage 3
         x, H, W = self.patch_embed3(x)
         for i, blk in enumerate(self.block3):
-            x = blk(x, H, W)
+            x, attn_weight = blk(x, H, W)
         # x : [B, N, C]
         x = self.norm3(x)
         x = x.reshape(B, H, W, -1).permute(0, 3, 1, 2).contiguous()
         output.append(x)
-
+        attn_weights.append(attn_weight)        
 
         # stage 4
         x, H, W = self.patch_embed4(x)
         for i, blk in enumerate(self.block4):
-            x = blk(x, H, W)
+            x, attn_weight = blk(x, H, W)    
         # x : [B, N, C]
         x = self.norm4(x)
         x = x.reshape(B, H, W, -1).permute(0, 3, 1, 2).contiguous()
         output.append(x)
-
-        return output
+        attn_weights.append(attn_weight)
+        
+        return output, attn_weights
     
 
     def forward_head(self, x):
@@ -360,9 +364,9 @@ class MixVisionTransformer(nn.Module):
 
 
     def forward(self, x):
-        x = self.forward_feature(x)
+        x, attn_weights = self.forward_feature(x)
         # x = self.forward_head(x)
-        return x
+        return x, attn_weights
 
 
 # if __name__=="__main__":

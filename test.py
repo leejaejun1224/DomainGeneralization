@@ -69,6 +69,7 @@ def main():
     train_losses = []
     step_loss = {}
     metrics_dict = {}
+    model.eval()
     for batch_idx, data_batch in enumerate(test_loader):
         # print(data_batch)
         source_filename = data_batch['source_left_filename'][0].split('/')[-1]
@@ -79,8 +80,8 @@ def main():
                 # print(data_batch[key])
         log_vars = model.forward_test(data_batch)
 
-        # if args.save_att:
-        #     save_att(data_batch, log_dir)
+        if args.save_att:
+            save_att(data_batch, log_dir)
 
         if args.save_disp:
             save_disparity(data_batch, log_dir)

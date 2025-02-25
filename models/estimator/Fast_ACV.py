@@ -79,8 +79,9 @@ class FeatureMiT(SubModule):
 
     def forward(self, x):
         # 4단계 특징맵 획득
-        x4, x8, x16, x32 = self.mitbackbone(x)
-        return [x4, x8, x16, x32]
+        outputs, attn_weights = self.mitbackbone(x)
+
+        return [outputs[0], outputs[1], outputs[2], outputs[3]], [attn_weights[0], attn_weights[1], attn_weights[2], attn_weights[3]]
 
 
 class FeatUp(SubModule):
@@ -277,8 +278,8 @@ class Fast_ACVNet(nn.Module):
 
     def forward(self, left, right):
 
-        features_left = self.feature(left)
-        features_right = self.feature(right)
+        features_left, attn_weights_left = self.feature(left)
+        features_right, attn_weights_right = self.feature(right)
         features_left, features_right = self.feature_up(features_left, features_right)
 
         stem_2x = self.stem_2(left)
