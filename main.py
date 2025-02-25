@@ -87,7 +87,8 @@ def main():
 
     # optimizer 좀 더 고민해보자.
     optimizer = torch.optim.Adam(model.parameters(), lr=cfg['lr'])
-    log_dict['numParams'] = sum(p.numel() for p in model.parameters())
+    log_dict['student_params'] = sum(p.numel() for p in model.student_model.parameters())
+    log_dict['teacher_params'] = sum(p.numel() for p in model.teacher_model.parameters())
     # 시작하자잉
     for epoch in range(cfg['epoch']): 
         model.train()
