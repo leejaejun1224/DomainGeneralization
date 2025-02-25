@@ -31,6 +31,33 @@ def save_disparity(data_batch, dir_name):
 
 
 def save_metrics(metrics, dir_name):
+    total_epe = 0
+    total_d1 = 0
+    total_thres1 = 0
+    total_thres2 = 0
+    total_thres3 = 0
+    count = 0
+
+    for disp_metrics in metrics.values():
+        if all(key in disp_metrics for key in ['EPE', 'D1', 'Thres1', 'Thres2', 'Thres3']):
+            total_epe += disp_metrics['EPE'][0]
+            total_d1 += disp_metrics['D1'][0]
+            total_thres1 += disp_metrics['Thres1'][0]
+            total_thres2 += disp_metrics['Thres2'][0]
+            total_thres3 += disp_metrics['Thres3'][0]
+            count += 1
+
+    averages = {
+        'average_metric' : {
+            'EPE' : total_epe / count if count > 0 else 0,
+            'D1' : total_d1 / count if count > 0 else 0,
+            'Thres1' : total_thres1 / count if count > 0 else 0,
+            'Thres2' : total_thres2 / count if count > 0 else 0,
+            'Thres3' : total_thres3 / count if count > 0 else 0
+        }
+    }
+
+    metrics.update(averages)
     metrics_dir = os.path.join(dir_name, 'metrics')
     os.makedirs(metrics_dir, exist_ok=True)
     with open(os.path.join(metrics_dir, 'metrics.json'), 'w') as f:

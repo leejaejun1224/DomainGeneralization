@@ -79,8 +79,8 @@ def main():
                 # print(data_batch[key])
         log_vars = model.forward_test(data_batch)
 
-        if args.save_att:
-            save_att(data_batch, log_dir)
+        # if args.save_att:
+        #     save_att(data_batch, log_dir)
 
         if args.save_disp:
             save_disparity(data_batch, log_dir)
@@ -94,7 +94,7 @@ def main():
             scalar_outputs["Thres3"] = [Thres_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'], 3.0)]
             metrics_dict[source_filename] = tensor2float(scalar_outputs)
 
-            save_metrics(metrics_dict, log_dir)
+    save_metrics(metrics_dict, log_dir)
             
 
     return 0
