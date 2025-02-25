@@ -87,8 +87,6 @@ class StereoDepthUDA(StereoDepthUDAInference):
     
     "back propagation"
     "forward propagation"
-    
-    
     def forward_train(self, data_batch):
         
         src_pred = self.forward(data_batch['src_left'], data_batch['src_right'])
