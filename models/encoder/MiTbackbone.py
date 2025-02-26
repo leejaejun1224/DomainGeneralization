@@ -1,6 +1,7 @@
 import math
 import torch
 import torch.nn as nn
+import torchsummary
 from timm.models.layers import DropPath, to_2tuple, trunc_normal_
 
 
@@ -28,6 +29,7 @@ class EfficientSelfAttention(nn.Module):
         # who are you?
         self.proj = nn.Linear(dim, dim)
         if sr_ratio > 1:
+            # reduction ratio
             self.sr = nn.Conv2d(dim, dim, kernel_size=sr_ratio, stride=sr_ratio)
             self.norm = nn.LayerNorm(dim)
 
@@ -52,10 +54,15 @@ class EfficientSelfAttention(nn.Module):
             if m.bias is not None:
                 m.bias.data.zero_()
 
-       
-    
     def forward(self, x, H, W):
         B, N, C = x.shape
+        # output of overlap patch embedding
+
+        # b 8192 24
+        # b 2048 32
+        # b 512 96
+        # b 128 160
+
         q = self.q(x).reshape(B, N, self.num_heads, C // self.num_heads).permute(0, 2, 1, 3)
 
         if self.sr_ratio > 1:
@@ -70,6 +77,9 @@ class EfficientSelfAttention(nn.Module):
 
         # q : [B, num_heads, N, C/num_head], k : [B, num_heads, N/R, C/num_head]
         attn = (q @ k.transpose(-2,-1))*self.scale
+        # attn : [B, num_heads, N, N/R]
+
+
         attn_weights = attn.softmax(dim=-1)
         attn = self.attn_drop(attn_weights)
 
@@ -317,6 +327,11 @@ class MixVisionTransformer(nn.Module):
 
         # stage 1
         x, H, W = self.patch_embed1(x)
+        # output size 
+        # x.shape : [B, 8192, 24]
+        # H, W : 64, 128
+
+
         for i, blk in enumerate(self.block1):
             x, attn_weight = blk(x, H, W)
         # x : [B, N, C]
@@ -355,7 +370,7 @@ class MixVisionTransformer(nn.Module):
         x = x.reshape(B, H, W, -1).permute(0, 3, 1, 2).contiguous()
         output.append(x)
         attn_weights.append(attn_weight)
-        
+
         return output, attn_weights
     
 
@@ -375,6 +390,11 @@ class MixVisionTransformer(nn.Module):
 #                                       qk_scale=1.0, sr_ratio=[8, 4, 2, 1], proj_drop=[0.0, 0.0, 0.0, 0.0], attn_drop=[0.0, 0.0, 0.0, 0.0],
 #                                       drop_path_rate=0.1)
     
-#     x = torch.randn(1, 3, 256, 256)
-#     output = mitbackbone(x)
-#     print(output[1].shape)
+#     # x = torch.randn(1, 3, 256, 256)
+#     # output = mitbackbone(x)
+#     # print(output)
+#     device = torch.device("cuda")
+#     mitbackbone.to(device)
+#     torchsummary.summary(mitbackbone, (3, 256, 256))
+
+    
