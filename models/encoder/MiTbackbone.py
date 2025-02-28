@@ -77,12 +77,16 @@ class EfficientSelfAttention(nn.Module):
 
         # q : [B, num_heads, N, C/num_head], k : [B, num_heads, N/R, C/num_head]
         attn = (q @ k.transpose(-2,-1))*self.scale
+        
         # attn : [B, num_heads, N, N/R]
 
 
         attn_weights = attn.softmax(dim=-1)
+
         attn = self.attn_drop(attn_weights)
 
+        # 아래의 계산은 attention weight를 value의 embedding 벡터에 곱해줘서
+        # 각 헤드별로 embedding 벡터를 조정해준다.
         # v : [B, num_head, N/R(sr_ratio^2), C/num_head]
         x = (attn @ v).transpose(1,2).reshape(B, N, C)
         x = self.proj(x)
@@ -334,7 +338,10 @@ class MixVisionTransformer(nn.Module):
 
         for i, blk in enumerate(self.block1):
             x, attn_weight = blk(x, H, W)
+            
         # x : [B, N, C]
+        # attn_weight : [B, num_heads, C, C/num_heads]
+
         x = self.norm1(x)
         x = x.reshape(B, H, W, -1).permute(0, 3, 1, 2).contiguous()
         output.append(x)
@@ -346,6 +353,7 @@ class MixVisionTransformer(nn.Module):
         for i, blk in enumerate(self.block2):
             x, attn_weight = blk(x, H, W)
         # x : [B, N, C]
+
         x = self.norm2(x)
         x = x.reshape(B, H, W, -1).permute(0, 3, 1, 2).contiguous()
         output.append(x)
@@ -355,6 +363,8 @@ class MixVisionTransformer(nn.Module):
         x, H, W = self.patch_embed3(x)
         for i, blk in enumerate(self.block3):
             x, attn_weight = blk(x, H, W)
+
+        
         # x : [B, N, C]
         x = self.norm3(x)
         x = x.reshape(B, H, W, -1).permute(0, 3, 1, 2).contiguous()
@@ -365,9 +375,15 @@ class MixVisionTransformer(nn.Module):
         x, H, W = self.patch_embed4(x)
         for i, blk in enumerate(self.block4):
             x, attn_weight = blk(x, H, W)    
+        
+
+
         # x : [B, N, C]
+        # attn_weight : [B, num_heads, N, C/num_heads]
         x = self.norm4(x)
         x = x.reshape(B, H, W, -1).permute(0, 3, 1, 2).contiguous()
+
+        
         output.append(x)
         attn_weights.append(attn_weight)
 
@@ -390,11 +406,8 @@ class MixVisionTransformer(nn.Module):
 #                                       qk_scale=1.0, sr_ratio=[8, 4, 2, 1], proj_drop=[0.0, 0.0, 0.0, 0.0], attn_drop=[0.0, 0.0, 0.0, 0.0],
 #                                       drop_path_rate=0.1)
     
-#     # x = torch.randn(1, 3, 256, 256)
-#     # output = mitbackbone(x)
+#     x = torch.randn(1, 3, 256, 256)
+#     output = mitbackbone(x)
 #     # print(output)
-#     device = torch.device("cuda")
-#     mitbackbone.to(device)
-#     torchsummary.summary(mitbackbone, (3, 256, 256))
 
     
