@@ -196,6 +196,7 @@ def SpatialTransformer_grid(x, y, disp_range_samples):
 def cost_volume_entropy(cost_volume, dim=2):
     # cost_volume shape : (B, 12, D, H, W)
     
+    ### variance meth
     # prob = F.softmax(cost_volume, dim=dim)
     # log_p = torch.log(prob + 1e-8)
     # entropy = -(prob*log_p).sum(dim=dim, keepdim=True)
@@ -204,7 +205,7 @@ def cost_volume_entropy(cost_volume, dim=2):
     # entropy = entropy * (1 + variance)
 
 
-    ## top k method
+    ### top k method
     prob = F.softmax(cost_volume, dim=dim)
     # 상위 k개 값만 선택
     k = 10
