@@ -11,6 +11,9 @@ import math
 import gc
 import time
 import timm
+
+
+
 class SubModule(nn.Module):
     def __init__(self):
         super(SubModule, self).__init__()
@@ -297,11 +300,17 @@ class Fast_ACVNet(nn.Module):
         features_right[1] = torch.cat((features_right[1], stem_8y), 1)
 
         corr_volume = build_gwc_volume_norm(features_left[1], features_right[1], self.maxdisp//8, 12)
+        # corr_volume shape : (B, 12,24,32,64)
         corr_volume = self.patch(corr_volume)
+
+        shape_map = cost_volume_entropy(corr_volume, dim=2)
+
         cost_att = self.corr_feature_att_8(corr_volume, features_left[1])
         cost_att = self.hourglass_att(cost_att, features_left)
+        # cost_att shape : (B, 1,24,32,64)
         att_weights = F.interpolate(cost_att, [self.maxdisp//4, left.size()[2]//4, left.size()[3]//4], mode='trilinear')
-        
+        # after interpolate, att_weights shape : (B, 1, 48, 64,128)
+
         pred_att = torch.squeeze(att_weights, 1)
         pred_att_prob = F.softmax(pred_att, dim=1)
         pred_att = disparity_regression(pred_att_prob, self.maxdisp // 4)
@@ -369,4 +378,5 @@ class Fast_ACVNet(nn.Module):
             pred = regression_topk(cost.squeeze(1), disparity_sample_topk, 2)
             pred_up = context_upsample(pred, spx_pred)
             max_values, _ = att_prob.max(dim=1, keepdim=True)
-            return [pred_up*4, pred.squeeze(1)*4, att_prob], max_values.squeeze(1)
+            return [pred_up*4, pred.squeeze(1)*4, att_prob], max_values.squeeze(1), shape_map
+        

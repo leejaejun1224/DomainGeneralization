@@ -1,10 +1,12 @@
 import os
 import json
 import matplotlib.pyplot as plt
-
+import torch.nn.functional as F
 def save_att(data_batch, dir_name):
     os.makedirs(dir_name + '/att', exist_ok=True)
     # print("data_batch['src_pred_disp']", len(data_batch['src_pred_disp']))
+
+    # this for loop is for batch size
     for i in range(data_batch['src_pred_disp'][0].shape[0]):
         att_prob, _ = data_batch['src_pred_disp'][2][i].max(dim=0, keepdim=True)
         att_prob = att_prob.squeeze(0).cpu().numpy()
@@ -28,6 +30,19 @@ def save_disparity(data_batch, dir_name):
         target_left_filename = data_batch['target_left_filename'][i].split('/')[-1] 
         plt.imsave(os.path.join(pred_tgt_dir, target_left_filename), pred_tgt, cmap='jet')
 
+def save_entropy(data_batch, dir_name):
+    os.makedirs(os.path.join(dir_name, './entropy'), exist_ok=True)
+    entropy_dir = os.path.join(dir_name, 'entropy')
+
+    for i in range(data_batch['src_shape_map'].shape[0]):
+        shape_map = data_batch['src_shape_map'][i]
+        shape_map_avg = shape_map.mean(dim=0, keepdim=True)  # 그룹 평균 계산
+        shape_map_resized = F.interpolate(shape_map_avg, scale_factor=4, mode="bilinear", align_corners=False)
+        # shape_map_resized = (shape_map_resized - shape_map_resized.min()) / (shape_map_resized.max() - shape_map_resized.min())
+        shape_map_resized = shape_map_resized.squeeze(0).squeeze(0)
+        source_left_filename = data_batch['source_left_filename'][i].split('/')[-1]
+
+        plt.imsave(os.path.join(entropy_dir, source_left_filename), shape_map_resized.cpu().numpy(), cmap='gray')
 
 
 def save_metrics(metrics, dir_name):

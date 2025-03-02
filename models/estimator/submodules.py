@@ -193,6 +193,29 @@ def SpatialTransformer_grid(x, y, disp_range_samples):
 
     return y_warped, x_warped
 
+def cost_volume_entropy(cost_volume, dim=2):
+    # cost_volume shape : (B, 12, D, H, W)
+    
+    # prob = F.softmax(cost_volume, dim=dim)
+    # log_p = torch.log(prob + 1e-8)
+    # entropy = -(prob*log_p).sum(dim=dim, keepdim=True)
+
+    # variance = prob.var(dim=dim, keepdim=True)
+    # entropy = entropy * (1 + variance)
+
+
+    ## top k method
+    prob = F.softmax(cost_volume, dim=dim)
+    # 상위 k개 값만 선택
+    k = 10
+    topk_values, _ = torch.topk(prob, k, dim=dim)
+    log_p = torch.log(topk_values + 1e-8)
+    entropy = -(topk_values * log_p).sum(dim=dim, keepdim=True)
+
+    return entropy
+
+
+
 class Propagation(nn.Module):
     def __init__(self):
         super(Propagation, self).__init__()

@@ -15,8 +15,9 @@ from torch.utils.data import DataLoader
 from datasets import __datasets__
 from datasets.dataloader import PrepareDataset
 from experiment import prepare_cfg
-from tools.metrics import EPE_metric, D1_metric, Thres_metric, tensor2float
-from tools.write_log import save_disparity, save_metrics, save_att
+from tools.compute_metrics import EPE_metric, D1_metric, Thres_metric, tensor2float
+from tools.write_log import save_disparity, save_metrics, save_att, save_entropy
+from tools.save_heatmap import save_heatmap
 
 cudnn.benchmark = True
 os.environ['CUDA_VISIBLE_DEVICES'] = '0, 1'
@@ -33,6 +34,8 @@ def main():
     parser.add_argument('--compute_metrics', default=True, help='compute error')
     parser.add_argument('--save_disp', default=True, help='save disparity')
     parser.add_argument('--save_att', default=True, help='save attention')
+    parser.add_argument('--save_heatmap', default=True, help='save heatmap')
+    parser.add_argument('--save_entropy', default=True, help='save entropy')
 
     args = parser.parse_args()
     assert args.ckpt != '', 'checkpoint is required !!'
@@ -80,11 +83,21 @@ def main():
                 # print(data_batch[key])
         log_vars = model.forward_test(data_batch)
 
+        if args.save_entropy:
+            save_entropy(data_batch, log_dir)
+            print("entropy_map shape: ", data_batch['src_shape_map'].shape)
+
+
         if args.save_att:
             save_att(data_batch, log_dir)
 
         if args.save_disp:
             save_disparity(data_batch, log_dir)
+
+        if args.save_heatmap:   
+            image_tensor = data_batch['src_left']
+            feature_map, attn_weights = model.student_model.feature(image_tensor)
+            save_heatmap(image_tensor, feature_map, attn_weights)
 
         if args.compute_metrics:
             scalar_outputs = {}
