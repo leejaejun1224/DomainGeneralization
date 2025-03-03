@@ -4,8 +4,14 @@ import torch.nn as nn
 import torchsummary
 from timm.models.layers import DropPath, to_2tuple, trunc_normal_
 
+class PositionalEncoding(nn.Module):
+    def __init__(self, embed_dim, height, width):
+        super().__init__()
+        self.embed_dim = embed_dim
+        self.pos_embedding = nn.Parameter(torch.zeros(1, embed_dim, height, width))
 
-
+    def forward(self, x):
+        return x + self.pos_embedding(x)
     
 """
 input : x (batch, width, height, channel)
