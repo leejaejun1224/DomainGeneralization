@@ -87,6 +87,8 @@ class FeatureMiT(SubModule):
         return [outputs[0], outputs[1], outputs[2], outputs[3]], [attn_weights[0], attn_weights[1], attn_weights[2], attn_weights[3]]
 
 
+
+
 class FeatUp(SubModule):
     def __init__(self):
         super(FeatUp, self).__init__()
