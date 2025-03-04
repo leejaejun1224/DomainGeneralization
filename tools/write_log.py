@@ -36,7 +36,10 @@ def save_entropy(data_batch, dir_name):
 
     for i in range(data_batch['src_shape_map'].shape[0]):
         shape_map = data_batch['src_shape_map'][i]
+        
+        # 여기서는 group의 평균을 계산하려고 했는데 이렇게 하는게 맞나? 이 중에서도 entropy가 높은 놈이 있을텐데 이걸 그냥 갈겨도 되나?
         shape_map_avg = shape_map.mean(dim=0, keepdim=True)  # 그룹 평균 계산
+
         shape_map_resized = F.interpolate(shape_map_avg, scale_factor=4, mode="bilinear", align_corners=False)
         # shape_map_resized = (shape_map_resized - shape_map_resized.min()) / (shape_map_resized.max() - shape_map_resized.min())
         shape_map_resized = shape_map_resized.squeeze(0).squeeze(0)
