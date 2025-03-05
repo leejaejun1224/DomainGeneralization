@@ -314,7 +314,7 @@ class OverlapPatchEmbedding(nn.Module):
                               padding=(patch_size // 2, patch_size // 2))
 
         # positional encoding
-        self.pos_embedding = PositionalEncoding(embed_dim, img_size[0] // stride, img_size[1] // stride)
+        # self.pos_embedding = PositionalEncoding(embed_dim, img_size[0] // stride, img_size[1] // stride)
 
 
         self.norm = nn.LayerNorm(embed_dim)
@@ -340,7 +340,7 @@ class OverlapPatchEmbedding(nn.Module):
         x = self.proj(x)
         _, _, H, W = x.shape
         ## positional encoding
-        x = self.pos_embedding(x)
+        # x = self.pos_embedding(x)
         # B, N(H*W), C(embed_dim)
         x = x.flatten(2).transpose(1,2)
         x = self.norm(x)
