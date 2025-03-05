@@ -67,7 +67,7 @@ class FeatureMiT(SubModule):
     def __init__(self):
         super(FeatureMiT, self).__init__()
         self.mitbackbone = MixVisionTransformer(
-            img_size=256,           
+            img_size=[256, 512],           
             in_chans=3,            
             embed_dim=[24, 32, 96, 160],
             depth=[2, 2, 2, 2],
@@ -380,5 +380,5 @@ class Fast_ACVNet(nn.Module):
             pred = regression_topk(cost.squeeze(1), disparity_sample_topk, 2)
             pred_up = context_upsample(pred, spx_pred)
             max_values, _ = att_prob.max(dim=1, keepdim=True)
-            return [pred_up*4, pred.squeeze(1)*4, att_prob], max_values.squeeze(1), shape_map
+            return [pred_up*4, pred.squeeze(1)*4, att_prob], max_values.squeeze(1)
         

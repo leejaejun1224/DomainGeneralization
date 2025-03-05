@@ -83,9 +83,9 @@ def main():
                 # print(data_batch[key])
         log_vars = model.forward_test(data_batch)
 
-        if args.save_entropy:
-            save_entropy(data_batch, log_dir)
-            print("entropy_map shape: ", data_batch['src_shape_map'].shape)
+        # if args.save_entropy:
+        #     save_entropy(data_batch, log_dir)
+        #     print("entropy_map shape: ", data_batch['src_shape_map'].shape)
 
 
         if args.save_att:

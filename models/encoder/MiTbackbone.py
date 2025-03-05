@@ -4,15 +4,33 @@ import torch.nn as nn
 import torchsummary
 from timm.models.layers import DropPath, to_2tuple, trunc_normal_
 
+import torch.nn.functional as F  # 보간법(interpolation) 사용을 위해 추가
+
 class PositionalEncoding(nn.Module):
     def __init__(self, embed_dim, height, width):
         super().__init__()
         self.embed_dim = embed_dim
+        # 초기에는 고정된 사이즈로 파라미터를 정의합니다.
         self.pos_embedding = nn.Parameter(torch.zeros(1, embed_dim, height, width))
+        # Optional: 초기화 (필요에 따라 적용)
+        self.apply(self._init_weights)
+
+    def _init_weights(self, m):
+        if isinstance(m, nn.Parameter):
+            trunc_normal_(m, std=0.02)
+            if m.bias is not None:
+                nn.init.constant_(m.bias, 0)
 
     def forward(self, x):
-        return x + self.pos_embedding(x)
-    
+        # x의 shape: (B, C, H, W)
+        B, C, H, W = x.shape
+        # 만약 입력 feature map의 H, W가 저장된 positional encoding과 다르면 보간법으로 크기를 맞춰줍니다.
+        if H != self.pos_embedding.shape[2] or W != self.pos_embedding.shape[3]:
+            pos_embedding = F.interpolate(self.pos_embedding, size=(H, W), mode='bilinear', align_corners=False)
+        else:
+            pos_embedding = self.pos_embedding
+        return x + pos_embedding
+
 """
 input : x (batch, width, height, channel)
 """
@@ -199,6 +217,9 @@ class Block(nn.Module):
 
 
 
+
+
+
 """
 input : image, kernal, stride, padding
 
@@ -206,19 +227,14 @@ input : image, kernal, stride, padding
 class OverlapPatchEmbedding(nn.Module):
     def __init__(self, img_size, patch_size, stride, in_chans, embed_dim):
         super().__init__()
-        img_size = to_2tuple(img_size)
-        patch_size = to_2tuple(patch_size)
-        
-        self.img_size = img_size
-        self.patch_size = patch_size
 
-        self.num_patches_H = img_size[0] // patch_size[0]
-        self.num_patches_W = img_size[1] // patch_size[1]
-
-        self.num_patches = self.num_patches_H * self.num_patches_W
 
         self.proj = nn.Conv2d(in_chans, embed_dim, kernel_size=patch_size,stride=stride,
-                              padding=(patch_size[0] // 2, patch_size[1] // 2))
+                              padding=(patch_size // 2, patch_size // 2))
+
+        # positional encoding
+        self.pos_embedding = PositionalEncoding(embed_dim, img_size[0] // stride, img_size[1] // stride)
+
 
         self.norm = nn.LayerNorm(embed_dim)
         self.apply(self._init_weights)
@@ -239,15 +255,23 @@ class OverlapPatchEmbedding(nn.Module):
                 m.bias.data.zero_()
         
     def forward(self, x):
+
         x = self.proj(x)
         _, _, H, W = x.shape
-
+        ## positional encoding
+        x = self.pos_embedding(x)
         # B, N(H*W), C(embed_dim)
         x = x.flatten(2).transpose(1,2)
         x = self.norm(x)
 
         return x, H, W
     
+
+
+
+
+
+
 
 class MixVisionTransformer(nn.Module):
     def __init__(self, img_size, in_chans, embed_dim,
@@ -257,11 +281,11 @@ class MixVisionTransformer(nn.Module):
         
         self.patch_embed1 = OverlapPatchEmbedding(img_size=img_size, patch_size=7, stride=4, 
                                                   in_chans=in_chans, embed_dim=embed_dim[0])
-        self.patch_embed2 = OverlapPatchEmbedding(img_size=img_size // 4, patch_size=3, stride=2, 
+        self.patch_embed2 = OverlapPatchEmbedding(img_size=[img_size[0]//4, img_size[1]//4], patch_size=3, stride=2, 
                                                   in_chans=embed_dim[0], embed_dim=embed_dim[1])
-        self.patch_embed3 = OverlapPatchEmbedding(img_size=img_size // 8, patch_size=3, stride=2, 
+        self.patch_embed3 = OverlapPatchEmbedding(img_size=[img_size[0]//8, img_size[1]//8], patch_size=3, stride=2, 
                                                   in_chans=embed_dim[1], embed_dim=embed_dim[2])
-        self.patch_embed4 = OverlapPatchEmbedding(img_size=img_size // 16, patch_size=3, stride=2, 
+        self.patch_embed4 = OverlapPatchEmbedding(img_size=[img_size[0]//16, img_size[1]//16], patch_size=3, stride=2, 
                                                   in_chans=embed_dim[2], embed_dim=embed_dim[3])
 
         dpr = [x.item() for x in torch.linspace(0, drop_path_rate, sum(depth))]
@@ -337,6 +361,7 @@ class MixVisionTransformer(nn.Module):
 
         # stage 1
         x, H, W = self.patch_embed1(x)
+        
         # output size 
         # x.shape : [B, 8192, 24]
         # H, W : 64, 128

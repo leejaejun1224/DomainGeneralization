@@ -3,7 +3,7 @@
 
 depth_model = dict(
     name = 'Fast_ACVNet',
-    maxdisp = 192,
+    maxdisp = 256,
     att_weights_only = False
 )
 

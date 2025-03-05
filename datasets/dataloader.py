@@ -34,13 +34,15 @@ class PrepareDataset(Dataset):
             return left_images, right_images, disp_images
 
     def load_image(self, filename):
+        filename = os.path.expanduser(filename)
         return Image.open(filename).convert('RGB')
 
     def load_disp(self, filename):
+        filename = os.path.expanduser(filename)
         data = Image.open(filename)
         data = np.array(data, dtype=np.float32) / 256.
         return data
-    
+
     def __len__(self):
         # 이 함수가 필요한 이유 : dataloader 클래스에서 이 길이의 안쪽에 있는 dataset의 인덱스를 가져옴
         # 고로 하나가 더 커버리면 반대쪽에서 가져올 인덱스가 없어서 에러가 남. 
