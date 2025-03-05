@@ -119,7 +119,87 @@ class EfficientSelfAttention(nn.Module):
         return x, attn_weights
     
 
+class EfficientSelfAttentionWithRelPos(nn.Module):
+    def __init__(self, dim, num_heads, qkv_bias=True, qk_scale=None,
+                 attn_drop=0., proj_drop=0., sr_ratio=1, H=16, W=16):
+        super().__init__()
+        assert dim % num_heads == 0, "dim must be divisible by num_heads."
+        self.dim = dim
+        self.num_heads = num_heads
+        head_dim = dim // num_heads
+        self.scale = qk_scale or head_dim ** -0.5
 
+        self.q = nn.Linear(dim, dim, bias=qkv_bias)
+        self.kv = nn.Linear(dim, dim * 2, bias=qkv_bias)
+
+        self.attn_drop = nn.Dropout(attn_drop)
+        self.proj = nn.Linear(dim, dim)
+        self.proj_drop = nn.Dropout(proj_drop)
+
+        self.sr_ratio = sr_ratio
+        if sr_ratio > 1:
+            self.sr = nn.Conv2d(dim, dim, kernel_size=sr_ratio, stride=sr_ratio)
+            self.norm = nn.LayerNorm(dim)
+
+        # 상대적 위치 바이어스 테이블: (2*H-1) * (2*W-1)개의 위치에 대해 num_heads 차원의 bias
+        num_relative_positions = (2 * H - 1) * (2 * W - 1)
+        self.relative_position_bias_table = nn.Parameter(
+            torch.zeros(num_relative_positions, num_heads)
+        )
+
+        # 상대적 위치 인덱스 미리 계산 (H*W 패치 기준)
+        coords_h = torch.arange(H)
+        coords_w = torch.arange(W)
+        coords = torch.stack(torch.meshgrid(coords_h, coords_w, indexing='ij'))  # [2, H, W]
+        coords_flatten = coords.flatten(1)  # [2, H*W]
+        relative_coords = coords_flatten[:, :, None] - coords_flatten[:, None, :]  # [2, H*W, H*W]
+        relative_coords = relative_coords.permute(1, 2, 0).contiguous()  # [H*W, H*W, 2]
+        relative_coords[:, :, 0] += H - 1  # shift to start from 0
+        relative_coords[:, :, 1] += W - 1
+        relative_coords[:, :, 0] *= 2 * W - 1
+        relative_position_index = relative_coords.sum(-1)  # [H*W, H*W]
+        self.register_buffer("relative_position_index", relative_position_index)
+
+        trunc_normal_(self.relative_position_bias_table, std=0.02)
+
+    def forward(self, x, H, W):
+        """
+        x: [B, N, C] 토큰 시퀀스 (N=H*W)
+        H, W: 현재 입력의 height, width (patch 개수 기준)
+        """
+        B, N, C = x.shape
+
+        q = self.q(x).reshape(B, N, self.num_heads, C // self.num_heads).permute(0, 2, 1, 3)
+
+        if self.sr_ratio > 1:
+            # sr_ratio가 있는 경우 feature map으로 복원 후 downsample
+            x_ = x.transpose(1, 2).reshape(B, C, H, W)
+            x_ = self.sr(x_).reshape(B, C, -1).transpose(1, 2)
+            x_ = self.norm(x_)
+            kv = self.kv(x_).reshape(B, -1, 2, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
+        else:
+            kv = self.kv(x).reshape(B, -1, 2, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
+
+        k, v = kv[0], kv[1]  # k, v: [B, num_heads, N', C//num_heads]
+
+        # Attention score 계산 (q @ k^T)
+        attn = (q @ k.transpose(-2, -1)) * self.scale  # [B, num_heads, N, N']
+
+        # 상대적 위치 바이어스 추가 (H, W가 초기 설정과 같을 때)
+        if H * W == self.relative_position_index.shape[0]:
+            # relative_position_index: [N, N]로 펼쳐서 bias table에서 인덱싱
+            relative_position_bias = self.relative_position_bias_table[
+                self.relative_position_index.view(-1)
+            ].view(H * W, H * W, -1).permute(2, 0, 1)  # [num_heads, N, N]
+            attn = attn + relative_position_bias.unsqueeze(0)  # [B, num_heads, N, N]
+
+        attn = attn.softmax(dim=-1)
+        attn = self.attn_drop(attn)
+
+        x = (attn @ v).transpose(1, 2).reshape(B, N, C)
+        x = self.proj(x)
+        x = self.proj_drop(x)
+        return x, attn
 
 # torch.flatten(n, m) n차원부터 시작해서 m차원까지 포함해서 flatten하라는 뜻(m의 기본값은 -1) 
 class DWConv(nn.Module):
@@ -183,7 +263,8 @@ class Block(nn.Module):
         super().__init__()
 
         self.norm1 = norm_layer(dim)
-        self.attention = EfficientSelfAttention(dim, num_heads, qkv_bias, qk_scale, attn_drop, proj_drop, sr_ratio)
+        # self.attention = EfficientSelfAttention(dim, num_heads, qkv_bias, qk_scale, attn_drop, proj_drop, sr_ratio)
+        self.attention = EfficientSelfAttentionWithRelPos(dim, num_heads, qkv_bias, qk_scale, attn_drop, proj_drop, sr_ratio)
         self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
         mlp_hidden_dim = int(dim*mlp_ratio)
         self.mlp = MixFFN(in_features=dim, hidden_features=mlp_hidden_dim, 

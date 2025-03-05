@@ -232,6 +232,7 @@ class Fast_ACVNet(nn.Module):
         super(Fast_ACVNet, self).__init__()
         self.att_weights_only = att_weights_only
         self.maxdisp = maxdisp 
+        
         # self.feature = Feature()
         self.feature = FeatureMiT()
         self.feature_up = FeatUp()
