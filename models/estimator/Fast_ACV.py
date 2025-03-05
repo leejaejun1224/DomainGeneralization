@@ -233,8 +233,8 @@ class Fast_ACVNet(nn.Module):
         self.att_weights_only = att_weights_only
         self.maxdisp = maxdisp 
         
-        # self.feature = Feature()
-        self.feature = FeatureMiT()
+        self.feature = Feature()
+        # self.feature = FeatureMiT()
         self.feature_up = FeatUp()
         self.gamma = nn.Parameter(torch.zeros(1))
         self.beta = nn.Parameter(2*torch.ones(1))
@@ -284,8 +284,12 @@ class Fast_ACVNet(nn.Module):
 
     def forward(self, left, right):
 
-        features_left, attn_weights_left = self.feature(left)
-        features_right, attn_weights_right = self.feature(right)
+        # features_left, attn_weights_left = self.feature(left)
+        # features_right, attn_weights_right = self.feature(right)
+
+        # if feature extractor is mobileNetv2
+        features_left = self.feature(left)
+        features_right = self.feature(right)
         features_left, features_right = self.feature_up(features_left, features_right)
 
         stem_2x = self.stem_2(left)

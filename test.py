@@ -34,7 +34,7 @@ def main():
     parser.add_argument('--compute_metrics', default=True, help='compute error')
     parser.add_argument('--save_disp', default=True, help='save disparity')
     parser.add_argument('--save_att', default=True, help='save attention')
-    parser.add_argument('--save_heatmap', default=True, help='save heatmap')
+    parser.add_argument('--save_heatmap', default=False, help='save heatmap')
     parser.add_argument('--save_entropy', default=True, help='save entropy')
 
     args = parser.parse_args()

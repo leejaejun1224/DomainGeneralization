@@ -254,7 +254,6 @@ class MixFFN(nn.Module):
         return x
 
 
-
 class Block(nn.Module):
     def __init__(self, dim, num_heads, qkv_bias, qk_scale, attn_drop, 
                  proj_drop, sr_ratio, 
@@ -294,9 +293,6 @@ class Block(nn.Module):
         x = self.drop_path(self.mlp(self.norm2(x), H, W)) + x
 
         return x, attn_weights
-
-
-
 
 
 
