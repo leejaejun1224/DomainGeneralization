@@ -45,7 +45,7 @@ def save_entropy(data_batch, dir_name):
         shape_map_resized = shape_map_resized.squeeze(0).squeeze(0)
         source_left_filename = data_batch['source_left_filename'][i].split('/')[-1]
 
-        plt.imsave(os.path.join(entropy_dir, source_left_filename), shape_map_resized.cpu().numpy(), cmap='gray')
+        plt.imsave(os.path.join(entropy_dir, source_left_filename), shape_map_resized.cpu().numpy(), cmap='jet')
 
 
 def save_metrics(metrics, dir_name):
