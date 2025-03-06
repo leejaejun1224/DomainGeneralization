@@ -1,5 +1,23 @@
 import importlib.util
 
+def adjust_learning_rate(optimizer, epoch, start_lr, lr_per_epoch):
+    splits = lr_per_epoch.split(':')
+    assert len(splits) == 2
+
+    downscale_epochs = [int(downscale_epoch) for downscale_epoch in splits[0].split(',')]
+    downscale_rate = float(splits[1])
+
+    lr = start_lr
+    for downscale_epoch in downscale_epochs:
+        if epoch >= downscale_epoch:
+            lr /= downscale_rate
+        else:
+            break
+    print("current learning rate is {}".format(lr))
+
+    for param_group in optimizer.param_groups:
+        param_group['lr'] = lr
+
 
 def compute_error(pred_disp, gt_disp):
     mask = (gt_disp > 0) & (gt_disp < 192)
@@ -45,7 +63,8 @@ def prepare_cfg(arg):
         test_batch_size = uda_config.data['test']['batch_size'],
         test_num_workers = uda_config.data['test']['num_workers'],
         test_shuffle = uda_config.data['test']['shuffle'],
-        test_pin_memory = uda_config.data['test']['pin_memory']
+        test_pin_memory = uda_config.data['test']['pin_memory'],
+        adjust_lr = uda_config.optimizer['adjust_lr']
     )
 
     return cfg

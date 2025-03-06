@@ -15,7 +15,7 @@ from torch.utils.data import DataLoader
 from datasets import __datasets__
 from datasets.dataloader import PrepareDataset
 from datasets.cityscapes import CityscapesDataset
-from experiment import prepare_cfg
+from experiment import prepare_cfg, adjust_learning_rate
 # from models.losses.loss import compute_uda_loss
 from tools.plot_loss import plot_loss_graph
 from tools.compute_metrics import EPE_metric, D1_metric, Thres_metric
@@ -92,6 +92,7 @@ def main():
     # 시작하자잉
     for epoch in range(cfg['epoch']): 
         model.train()
+        adjust_learning_rate(optimizer, epoch, cfg['lr'], cfg['adjust_lr'])
         train_losses = []
         step_loss = {}
         for batch_idx, data_batch in enumerate(train_loader):
@@ -135,7 +136,7 @@ def main():
                         if isinstance(data_batch[key], torch.Tensor):
                             data_batch[key] = data_batch[key].cuda()
                     log_vars = model.forward_test(data_batch)
-                            
+                    
                     # EMA model로 검증
                     # log_vars = val_step(model, data_batch, cfg, train=False)
                     if not math.isnan(log_vars['loss']):

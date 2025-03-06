@@ -15,7 +15,8 @@ uda = dict(
 
 optimizer = dict(
     optimizer = "Adam",
-    lr = 1e-4
+    lr = 1e-4,
+    adjust_lr = "300:10"
 )
 
 # name_dataset = 'kitti2015_to_kitti2012'
