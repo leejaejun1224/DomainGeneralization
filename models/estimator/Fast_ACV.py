@@ -307,12 +307,14 @@ class Fast_ACVNet(nn.Module):
         features_right[1] = torch.cat((features_right[1], stem_8y), 1)
 
         corr_volume = build_gwc_volume_norm(features_left[1], features_right[1], self.maxdisp//8, 12)
+        print(corr_volume)
         # while training
-        # corr_volume shape : (B, 12,24,32,64)
-
+        # corr_volume shape : (B, 12, 24, 32, 64)
+        # shape_map = cost_volume_entropy(corr_volume, dim=2)
+        shape_map = cost_volume_distribution(corr_volume, dim=2)
+        # print(shape_map)
         corr_volume = self.patch(corr_volume)
 
-        shape_map = cost_volume_entropy(corr_volume, dim=2)
 
         cost_att = self.corr_feature_att_8(corr_volume, features_left[1])
         cost_att = self.hourglass_att(cost_att, features_left)

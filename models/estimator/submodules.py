@@ -194,9 +194,13 @@ def SpatialTransformer_grid(x, y, disp_range_samples):
     return y_warped, x_warped
 
 def cost_volume_entropy(cost_volume, dim=2):
+    print('cost volume shape : ', cost_volume.shape)
     # cost_volume shape : (B, 12, D, H, W)
     
-    ### variance meth
+    ### in the case of Fast acv plus with just norm correlation volume (not group wise)
+    ### cost volume shape(training) : (B, 1, max_disp//4, 64, 128)
+
+    ### variance method
     # prob = F.softmax(cost_volume, dim=dim)
     # log_p = torch.log(prob + 1e-8)
     # entropy = -(prob*log_p).sum(dim=dim, keepdim=True)
@@ -212,9 +216,15 @@ def cost_volume_entropy(cost_volume, dim=2):
     topk_values, _ = torch.topk(prob, k, dim=dim)
     log_p = torch.log(topk_values + 1e-8)
     entropy = -(topk_values * log_p).sum(dim=dim, keepdim=True)
-
     return entropy
 
+def cost_volume_distribution(cost_volume, dim=2):
+    mean = torch.mean(cost_volume, dim=dim, keepdim=True)
+    max, _ = torch.max(cost_volume, dim=dim)
+    max, _ = torch.max(cost_volume, dim=2)
+    print(max)
+    maxmean_distribution = max / (mean + 1e-8)
+    return maxmean_distribution
 
 
 class Propagation(nn.Module):
@@ -233,7 +243,6 @@ class Propagation(nn.Module):
         disparity_samples = self.replicationpad(disparity_samples)
         aggregated_disparity_samples = F.conv2d(disparity_samples,
                                                     one_hot_filter,padding=0)
-                                                    
         return aggregated_disparity_samples
         
 
@@ -268,7 +277,7 @@ def context_upsample(depth_low, up_weights):
     depth_unfold = F.interpolate(depth_unfold,(h*4,w*4),mode='nearest').reshape(b,9,h*4,w*4)
 
     depth = (depth_unfold*up_weights).sum(1)
-        
+    
     return depth
 
 

@@ -48,6 +48,7 @@ class Feature(SubModule):
         self.block2 = torch.nn.Sequential(*model.blocks[layers[1]:layers[2]])
         self.block3 = torch.nn.Sequential(*model.blocks[layers[2]:layers[3]])
         self.block4 = torch.nn.Sequential(*model.blocks[layers[3]:layers[4]])
+
     def forward(self, x):
         x = self.act1(self.bn1(self.conv_stem(x)))
         x2 = self.block0(x)
@@ -274,12 +275,9 @@ class Fast_ACVNet_plus(nn.Module):
         corr_volume = build_norm_correlation_volume(match_left, match_right, self.maxdisp//4)
 
         ## for entropy map
-        entropy_map = cost_volume_entropy(corr_volume, dim=2)
-
+        entropy_map = cost_volume_distribution(corr_volume, dim=2)
 
         corr_volume = self.corr_stem(corr_volume)
-
-
 
         cost_att = self.corr_feature_att_4(corr_volume, features_left[0])
         att_weights = self.hourglass_att(cost_att, features_left)
@@ -323,10 +321,12 @@ class Fast_ACVNet_plus(nn.Module):
         else:
             att_prob = torch.gather(att_weights, 2, ind_k).squeeze(1)
             att_prob = F.softmax(att_prob, dim=1)
+
             if self.att_weights_only:
                 pred_att = torch.sum(att_prob*disparity_sample_topk, dim=1)
                 pred_att_up = context_upsample(pred_att.unsqueeze(1), spx_pred)
                 return [pred_att_up*4]
+            
             pred = regression_topk(cost.squeeze(1), disparity_sample_topk, 2)
             pred_up = context_upsample(pred, spx_pred)
             confidence_map, _ = att_prob.max(dim=1, keepdim=True)
