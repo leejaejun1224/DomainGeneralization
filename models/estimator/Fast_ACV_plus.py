@@ -9,6 +9,9 @@ import math
 import gc
 import time
 import timm
+from models.encoder.MiTbackbone import MixVisionTransformer
+
+
 
 class SubModule(nn.Module):
     def __init__(self):
@@ -28,6 +31,30 @@ class SubModule(nn.Module):
             elif isinstance(m, nn.BatchNorm3d):
                 m.weight.data.fill_(1)
                 m.bias.data.zero_()
+
+
+class FeatureMiT(SubModule):
+    def __init__(self):
+        super(FeatureMiT, self).__init__()
+        self.mitbackbone = MixVisionTransformer(
+            img_size=[256, 512],           
+            in_chans=3,            
+            embed_dim=[24, 32, 96, 160],
+            depth=[2, 2, 2, 2],
+            num_heads=[1, 2, 3, 5],
+            qkv_bias=True,
+            qk_scale=None,
+            sr_ratio=[8, 4, 2, 1],
+            proj_drop=[0.0, 0.0, 0.0, 0.0],
+            attn_drop=[0.0, 0.0, 0.0, 0.0],
+            drop_path_rate=0.1
+        )
+
+    def forward(self, x):
+        # 4단계 특징맵 획득
+        outputs, attn_weights = self.mitbackbone(x)
+
+        return [outputs[0], outputs[1], outputs[2], outputs[3]], [attn_weights[0], attn_weights[1], attn_weights[2], attn_weights[3]]
 
 
 class Feature(SubModule):
@@ -217,7 +244,10 @@ class Fast_ACVNet_plus(nn.Module):
         super(Fast_ACVNet_plus, self).__init__()
         self.maxdisp = maxdisp
         self.att_weights_only = att_weights_only
-        self.feature = Feature()
+
+        # self.feature = Feature()
+        self.feature = FeatureMiT()
+
         self.feature_up = FeatUp()
         chans = [16, 24, 32, 96, 160]
 
@@ -258,8 +288,16 @@ class Fast_ACVNet_plus(nn.Module):
 
     def forward(self, left, right):
 
-        features_left = self.feature(left)
-        features_right = self.feature(right)
+        ### for mobilenet
+        # features_left = self.feature(left)
+        # features_right = self.feature(right)
+        
+        ### for attention
+        features_left, _ = self.feature(left)
+        features_right, _ = self.feature(right)
+        
+        
+        
         features_left, features_right = self.feature_up(features_left, features_right)
         stem_2x = self.stem_2(left)
         stem_4x = self.stem_4(stem_2x)
