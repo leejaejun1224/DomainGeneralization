@@ -275,9 +275,9 @@ class Fast_ACVNet_plus(nn.Module):
         corr_volume = build_norm_correlation_volume(match_left, match_right, self.maxdisp//4)
 
         ## for entropy map
-        entropy_map = cost_volume_distribution(corr_volume, dim=2)
-
+        entropy_map = cost_volume_entropy(corr_volume, dim=2)
         corr_volume = self.corr_stem(corr_volume)
+
 
         cost_att = self.corr_feature_att_4(corr_volume, features_left[0])
         att_weights = self.hourglass_att(cost_att, features_left)

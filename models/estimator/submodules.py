@@ -194,7 +194,7 @@ def SpatialTransformer_grid(x, y, disp_range_samples):
     return y_warped, x_warped
 
 def cost_volume_entropy(cost_volume, dim=2):
-    print('cost volume shape : ', cost_volume.shape)
+    # print('cost volume shape : ', cost_volume.shape)
     # cost_volume shape : (B, 12, D, H, W)
     
     ### in the case of Fast acv plus with just norm correlation volume (not group wise)
@@ -210,19 +210,18 @@ def cost_volume_entropy(cost_volume, dim=2):
 
 
     ### top k method
-    prob = F.softmax(cost_volume, dim=dim)
-    # 상위 k개 값만 선택
-    k = 10
+    k = cost_volume.shape[dim]
+    prob = F.softmax(cost_volume, dim=dim)  # 확률 분포
     topk_values, _ = torch.topk(prob, k, dim=dim)
-    log_p = torch.log(topk_values + 1e-8)
-    entropy = -(topk_values * log_p).sum(dim=dim, keepdim=True)
+    log_p = torch.log(topk_values + 1e-8)          # 로그 확률
+    entropy = -(topk_values * log_p).sum(dim=dim, keepdim=True)  # 엔트로피 계산
     return entropy
 
 def cost_volume_distribution(cost_volume, dim=2):
     mean = torch.mean(cost_volume, dim=dim, keepdim=True)
     max, _ = torch.max(cost_volume, dim=dim)
     max, _ = torch.max(cost_volume, dim=2)
-    print(max)
+    # print(max)
     maxmean_distribution = max / (mean + 1e-8)
     return maxmean_distribution
 
