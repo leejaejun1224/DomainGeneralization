@@ -208,9 +208,16 @@ def cost_volume_entropy(cost_volume, dim=2):
     # variance = prob.var(dim=dim, keepdim=True)
     # entropy = entropy * (1 + variance)
 
+    # k = cost_volume.shape[dim] 
+    k = 24 
+    ### top k method (before softmax)
+    # topk_values, _ = torch.topk(cost_volume, k, dim=dim)
+    # topk_prob = F.softmax(topk_values, dim=dim)
+    # log_p = torch.log(topk_prob + 1e-8)
+    # entropy = -(topk_prob * log_p).sum(dim=dim, keepdim=True)
 
-    ### top k method
-    k = cost_volume.shape[dim]
+
+    ### top k method (after softmax)
     prob = F.softmax(cost_volume, dim=dim)  # 확률 분포
     topk_values, _ = torch.topk(prob, k, dim=dim)
     log_p = torch.log(topk_values + 1e-8)          # 로그 확률

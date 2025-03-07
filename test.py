@@ -18,6 +18,7 @@ from experiment import prepare_cfg
 from tools.compute_metrics import EPE_metric, D1_metric, Thres_metric, tensor2float
 from tools.write_log import save_disparity, save_metrics, save_att, save_entropy
 from tools.save_heatmap import save_heatmap
+from models.estimator.Fast_ACV_plus import Feature
 
 cudnn.benchmark = True
 os.environ['CUDA_VISIBLE_DEVICES'] = '0, 1'
@@ -61,10 +62,10 @@ def main():
     # print(cfg)
 
     model = __models__['StereoDepthUDA'](cfg)
-    model.to('cuda:0')
     
     model.student_model.load_state_dict(torch.load(args.ckpt)['student_state_dict'])
     model.teacher_model.load_state_dict(torch.load(args.ckpt)['teacher_state_dict'])
+    model.to('cuda:0')
     # 이거 init하는 조건은 좀 더 생각을 해봐야겠는데
 
     # optimizer 좀 더 고민해보자.

@@ -1,7 +1,10 @@
 import os
 import json
+import torch
 import matplotlib.pyplot as plt
 import torch.nn.functional as F
+from skimage import exposure
+
 def save_att(data_batch, dir_name):
     os.makedirs(dir_name + '/att', exist_ok=True)
     # print("data_batch['src_pred_disp']", len(data_batch['src_pred_disp']))
@@ -30,23 +33,51 @@ def save_disparity(data_batch, dir_name):
         target_left_filename = data_batch['target_left_filename'][i].split('/')[-1] 
         plt.imsave(os.path.join(pred_tgt_dir, target_left_filename), pred_tgt, cmap='jet')
 
+
 def save_entropy(data_batch, dir_name):
-    os.makedirs(os.path.join(dir_name, './entropy'), exist_ok=True)
+    # 저장할 디렉터리 생성
     entropy_dir = os.path.join(dir_name, 'entropy')
+    os.makedirs(entropy_dir, exist_ok=True)
 
     for i in range(data_batch['src_shape_map'].shape[0]):
         shape_map = data_batch['src_shape_map'][i]
-        
-        # 여기서는 group의 평균을 계산하려고 했는데 이렇게 하는게 맞나? 이 중에서도 entropy가 높은 놈이 있을텐데 이걸 그냥 갈겨도 되나?
-        shape_map_avg = shape_map.mean(dim=0, keepdim=True)  # 그룹 평균 계산
-        # shape_map_resized = shape_map_avg
-        shape_map_resized = F.interpolate(shape_map_avg, scale_factor=4, mode="bilinear", align_corners=False)
-        # shape_map_resized = (shape_map_resized - shape_map_resized.min()) / (shape_map_resized.max() - shape_map_resized.min())
-        shape_map_resized = shape_map_resized.squeeze(0).squeeze(0)
-        source_left_filename = data_batch['source_left_filename'][i].split('/')[-1]
-        # plt.imsave(os.path.join(entropy_dir, source_left_filename), shape_map_resized.cpu().numpy(), cmap='gray')
-        plt.imsave(os.path.join(entropy_dir, source_left_filename), shape_map_resized.cpu().numpy(), cmap='jet')
 
+        # 그룹 평균 계산
+        shape_map_avg = shape_map.mean(dim=0, keepdim=True)
+
+        # 해상도 확대 (scale_factor=4) 및 차원 축소
+        shape_map_resized = F.interpolate(shape_map_avg, scale_factor=4, mode="bilinear", align_corners=False)
+        shape_map_resized = shape_map_resized.squeeze(0).squeeze(0).cpu().numpy()
+
+
+        map_min = shape_map_resized.min()
+        map_max = shape_map_resized.max()
+        shape_map_norm = (shape_map_resized - map_min) / (map_max - map_min + 1e-8)
+
+        # 차이를 더 강조하기 위해 추가 스케일링
+        alpha = 2.0  # 예: 2배 확대
+        shape_map_scaled = shape_map_norm * alpha
+        # 스케일링 이후 1을 초과한 값은 1로 클리핑
+        # shape_map_scaled = torch.clamp(shape_map_scaled, 0, 1)
+        # 저장할 파일 이름 설정
+        source_left_filename = data_batch['source_left_filename'][i].split('/')[-1]
+        save_path = os.path.join(entropy_dir, source_left_filename)
+
+        # 컬러바 포함 이미지 저장 (컬러바 크기 조절)
+        plt.figure(figsize=(12, 8))
+        img = plt.imshow(shape_map_scaled, cmap='jet')
+        
+        # 컬러바 추가 (크기 조절)
+        cbar = plt.colorbar(img, fraction=0.015, pad=0.04)
+        cbar.ax.tick_params(labelsize=8)  # 컬러바 숫자 크기 조절
+
+        plt.axis('off')  # 축을 없애서 깔끔하게 저장
+        plt.savefig(save_path, bbox_inches='tight', pad_inches=0.1)
+        plt.close()
+
+
+
+        # plt.imsave(os.path.join(entropy_dir, source_left_filename), shape_map_resized.cpu().numpy(), cmap='jet')
 
 def save_metrics(metrics, dir_name):
     total_epe = 0
