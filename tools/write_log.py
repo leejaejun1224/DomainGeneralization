@@ -43,20 +43,21 @@ def save_entropy(data_batch, dir_name):
         shape_map = data_batch['src_shape_map'][i]
 
         # 그룹 평균 계산
-        shape_map_avg = shape_map.mean(dim=0, keepdim=True)
+        print("shape_map shape : ", shape_map.shape)
+        # shape_map_avg = shape_map.mean(dim=0, keepdim=True)
 
         # 해상도 확대 (scale_factor=4) 및 차원 축소
-        shape_map_resized = F.interpolate(shape_map_avg, scale_factor=4, mode="bilinear", align_corners=False)
+        shape_map_resized = F.interpolate(shape_map.float(), scale_factor=4, mode="nearest")
         shape_map_resized = shape_map_resized.squeeze(0).squeeze(0).cpu().numpy()
 
 
-        map_min = shape_map_resized.min()
-        map_max = shape_map_resized.max()
-        shape_map_norm = (shape_map_resized - map_min) / (map_max - map_min + 1e-8)
+        # map_min = shape_map_resized.min()
+        # map_max = shape_map_resized.max()
+        # shape_map_norm = (shape_map_resized - map_min) / (map_max - map_min + 1e-8)
 
-        # 차이를 더 강조하기 위해 추가 스케일링
-        alpha = 2.0  # 예: 2배 확대
-        shape_map_scaled = shape_map_norm * alpha
+        # # 차이를 더 강조하기 위해 추가 스케일링
+        # alpha = 2.0  # 예: 2배 확대
+        # shape_map_scaled = shape_map_norm * alpha
         # 스케일링 이후 1을 초과한 값은 1로 클리핑
         # shape_map_scaled = torch.clamp(shape_map_scaled, 0, 1)
         # 저장할 파일 이름 설정
@@ -65,7 +66,7 @@ def save_entropy(data_batch, dir_name):
 
         # 컬러바 포함 이미지 저장 (컬러바 크기 조절)
         plt.figure(figsize=(12, 8))
-        img = plt.imshow(shape_map_scaled, cmap='jet')
+        img = plt.imshow(shape_map_resized, cmap='jet')
         
         # 컬러바 추가 (크기 조절)
         cbar = plt.colorbar(img, fraction=0.015, pad=0.04)

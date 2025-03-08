@@ -245,8 +245,8 @@ class Fast_ACVNet_plus(nn.Module):
         self.maxdisp = maxdisp
         self.att_weights_only = att_weights_only
 
-        self.feature = Feature()
-        # self.feature = FeatureMiT()
+        # self.feature = Feature()
+        self.feature = FeatureMiT()
 
         self.feature_up = FeatUp()
         chans = [16, 24, 32, 96, 160]
@@ -289,12 +289,12 @@ class Fast_ACVNet_plus(nn.Module):
     def forward(self, left, right):
 
         ### for mobilenet
-        features_left = self.feature(left)
-        features_right = self.feature(right)
+        # features_left = self.feature(left)
+        # features_right = self.feature(right)
         
         ### for attention
-        # features_left, _ = self.feature(left)
-        # features_right, _ = self.feature(right)
+        features_left, _ = self.feature(left)
+        features_right, _ = self.feature(right)
         
         
         

@@ -8,7 +8,7 @@ from models.estimator import __models__
 from models.uda.decorator import StereoDepthUDAInference
 
 from models.losses.loss import calc_supervised_train_loss, calc_supervised_val_loss, calc_pseudo_loss
-
+import time
 
 
 class StereoDepthUDA(StereoDepthUDAInference):
@@ -60,8 +60,10 @@ class StereoDepthUDA(StereoDepthUDAInference):
     # automatically make model's training member variable False
     @torch.no_grad()
     def forward_test(self, data_batch):
-        
+        start = time.time()
         data_batch['src_pred_disp'], map = self.forward(data_batch['src_left'], data_batch['src_right'])
+        end = time.time()
+        print(f"forward time: {end - start}")
         data_batch['tgt_pred_disp'], map = self.forward(data_batch['tgt_left'], data_batch['tgt_right'])
         
         data_batch['src_shape_map'] = map[1]

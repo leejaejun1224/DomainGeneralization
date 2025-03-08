@@ -19,6 +19,7 @@ from tools.compute_metrics import EPE_metric, D1_metric, Thres_metric, tensor2fl
 from tools.write_log import save_disparity, save_metrics, save_att, save_entropy
 from tools.save_heatmap import save_heatmap
 from models.estimator.Fast_ACV_plus import Feature
+from collections import OrderedDict
 
 cudnn.benchmark = True
 os.environ['CUDA_VISIBLE_DEVICES'] = '0, 1'
@@ -65,7 +66,19 @@ def main():
     
     model.student_model.load_state_dict(torch.load(args.ckpt)['student_state_dict'])
     model.teacher_model.load_state_dict(torch.load(args.ckpt)['teacher_state_dict'])
+    
+    # checkpoint = torch.load(args.ckpt, map_location="cuda:0")
+    # new_state_dict = OrderedDict()
+    # for k, v in checkpoint['model'].items():
+    #     name = k.replace("module.", "")  # DataParallel로 저장된 모델 처리
+    #     new_state_dict[name] = v
+
+    # model.student_model.load_state_dict(new_state_dict, strict=True)
+    # model.teacher_model.load_state_dict(new_state_dict, strict=True)
     model.to('cuda:0')
+    num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print(f"Number of trainable parameters: {num_params}")
+    
     # 이거 init하는 조건은 좀 더 생각을 해봐야겠는데
 
     # optimizer 좀 더 고민해보자.
@@ -88,7 +101,7 @@ def main():
             save_entropy(data_batch, log_dir)
 
             # [batch, 12, 1, 48, 156]
-            print("entropy_map shape: ", data_batch['src_shape_map'].shape)
+            # print("entropy_map shape: ", data_batch['src_shape_map'].shape)
 
 
         if args.save_att:

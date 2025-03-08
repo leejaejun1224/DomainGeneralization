@@ -208,21 +208,54 @@ def cost_volume_entropy(cost_volume, dim=2):
     # variance = prob.var(dim=dim, keepdim=True)
     # entropy = entropy * (1 + variance)
 
-    # k = cost_volume.shape[dim] 
-    k = 24 
+    # k = cost_volume.shape[dim]
+    k = 16
     ### top k method (before softmax)
-    # topk_values, _ = torch.topk(cost_volume, k, dim=dim)
-    # topk_prob = F.softmax(topk_values, dim=dim)
-    # log_p = torch.log(topk_prob + 1e-8)
-    # entropy = -(topk_prob * log_p).sum(dim=dim, keepdim=True)
+    width = cost_volume.shape[-1]
+    cost_volume_cropped = cost_volume[..., 30:]
+    
+    topk_values, topk_indices = torch.topk(cost_volume_cropped, k, dim=dim)
+    topk_prob = F.softmax(topk_values, dim=dim)
+    topk_prob_max, _ = torch.max(topk_prob, dim=dim, keepdim=True)
 
+    log_p = torch.log(topk_prob + 1e-8)
+    entropy = -(topk_prob * log_p).sum(dim=dim, keepdim=True)
+
+    # min = 5.5
+    # max = entropy.max()
+    # entropy = ((entropy - min) / (max - min + 1e-8)) * 255 * 100000
 
     ### top k method (after softmax)
-    prob = F.softmax(cost_volume, dim=dim)  # 확률 분포
-    topk_values, _ = torch.topk(prob, k, dim=dim)
-    log_p = torch.log(topk_values + 1e-8)          # 로그 확률
-    entropy = -(topk_values * log_p).sum(dim=dim, keepdim=True)  # 엔트로피 계산
+    # prob = F.softmax(cost_volume, dim=dim)  # 확률 분포
+    # topk_values, _ = torch.topk(prob, k, dim=dim)
+    # log_p = torch.log(topk_values + 1e-8)          # 로그 확률
+    # entropy = -(topk_values * log_p).sum(dim=dim, keepdim=True)  # 엔트로피 계산
+
     return entropy
+
+def compute_disparity_from_cost(cost_volume, dim=2, multiplier=4, top_k=1):
+    B, C, D, H, W = cost_volume.shape
+    
+    # Softmax 적용하여 확률 분포 생성
+    prob = F.softmax(cost_volume, dim=dim)  # shape: [B, 1, D, H, W]
+
+    # (1) Top-K 확률 및 해당 disparity index 가져오기
+    topk_prob, topk_indices = torch.topk(prob, k=top_k, dim=dim)  # (B, 1, K, H, W)
+    max_disparity = torch.max(topk_indices)
+    print("Max disparity:", max_disparity.item())
+
+    # (2) Top-K disparity index 값 그대로 사용 (이미 정수 값)
+    disp_map = torch.sum(topk_prob * topk_indices, dim=dim, keepdim=False)
+
+    # (3) Max disparity 확인
+    max_disp = torch.max(disp_map)
+
+    return disp_map
+
+
+
+
+
 
 def cost_volume_distribution(cost_volume, dim=2):
     mean = torch.mean(cost_volume, dim=dim, keepdim=True)
