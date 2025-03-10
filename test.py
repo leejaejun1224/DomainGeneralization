@@ -16,7 +16,7 @@ from datasets import __datasets__
 from datasets.dataloader import PrepareDataset
 from experiment import prepare_cfg
 from tools.compute_metrics import EPE_metric, D1_metric, Thres_metric, tensor2float
-from tools.write_log import save_disparity, save_metrics, save_att, save_entropy
+from tools.write_log import save_disparity, save_metrics, save_att, save_entropy, save_testdata
 from tools.save_heatmap import save_heatmap
 from models.estimator.Fast_ACV_plus import Feature
 from collections import OrderedDict
@@ -38,7 +38,8 @@ def main():
     parser.add_argument('--save_att', default=True, help='save attention')
     parser.add_argument('--save_heatmap', default=False, help='save heatmap')
     parser.add_argument('--save_entropy', default=True, help='save entropy')
-
+    parser.add_argument('--save_testdata', default=True, help='save testdata')
+    
     args = parser.parse_args()
     assert args.ckpt != '', 'checkpoint is required !!'
 
@@ -72,9 +73,11 @@ def main():
     # for k, v in checkpoint['model'].items():
     #     name = k.replace("module.", "")  # DataParallel로 저장된 모델 처리
     #     new_state_dict[name] = v
-
     # model.student_model.load_state_dict(new_state_dict, strict=True)
     # model.teacher_model.load_state_dict(new_state_dict, strict=True)
+
+
+
     model.to('cuda:0')
     num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"Number of trainable parameters: {num_params}")
@@ -102,7 +105,8 @@ def main():
 
             # [batch, 12, 1, 48, 156]
             # print("entropy_map shape: ", data_batch['src_shape_map'].shape)
-
+        if args.save_testdata:
+            save_testdata(data_batch, log_dir)
 
         if args.save_att:
             save_att(data_batch, log_dir)

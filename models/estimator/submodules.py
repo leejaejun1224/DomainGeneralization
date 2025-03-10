@@ -6,7 +6,7 @@ from torch.autograd import Variable
 from torch.autograd.function import Function
 import torch.nn.functional as F
 import numpy as np
-
+import math
 
 
 class BasicConv(nn.Module):
@@ -209,7 +209,7 @@ def cost_volume_entropy(cost_volume, dim=2):
     # entropy = entropy * (1 + variance)
 
     # k = cost_volume.shape[dim]
-    k = 16
+    k = 12
     ### top k method (before softmax)
     width = cost_volume.shape[-1]
     cost_volume_cropped = cost_volume[..., 30:]
@@ -221,17 +221,23 @@ def cost_volume_entropy(cost_volume, dim=2):
     log_p = torch.log(topk_prob + 1e-8)
     entropy = -(topk_prob * log_p).sum(dim=dim, keepdim=True)
 
-    # min = 5.5
-    # max = entropy.max()
-    # entropy = ((entropy - min) / (max - min + 1e-8)) * 255 * 100000
+    max_entropy = math.log(k + 1e-8)
+    entropy_norm = torch.clamp(entropy / (max_entropy + 1e-8), 0.0, 1.0)
+
+    # For disparity regression, we should use the probabilities to weight the indices
+    # Current: disparity_regress = topk_indices*topk_prob_max 
+    # This only uses the max probability and ignores other probabilities
+    # Correct way: weighted sum of indices with all probabilities
+    disparity_regress = (topk_indices * topk_prob).sum(dim=dim, keepdim=True)
 
     ### top k method (after softmax)
     # prob = F.softmax(cost_volume, dim=dim)  # 확률 분포
     # topk_values, _ = torch.topk(prob, k, dim=dim)
     # log_p = torch.log(topk_values + 1e-8)          # 로그 확률
     # entropy = -(topk_values * log_p).sum(dim=dim, keepdim=True)  # 엔트로피 계산
-
-    return entropy
+    # return topk_indices
+    return entropy_norm
+    # return disparity_regress
 
 def compute_disparity_from_cost(cost_volume, dim=2, multiplier=4, top_k=1):
     B, C, D, H, W = cost_volume.shape

@@ -262,8 +262,8 @@ class Block(nn.Module):
         super().__init__()
 
         self.norm1 = norm_layer(dim)
-        # self.attention = EfficientSelfAttention(dim, num_heads, qkv_bias, qk_scale, attn_drop, proj_drop, sr_ratio)
-        self.attention = EfficientSelfAttentionWithRelPos(dim, num_heads, qkv_bias, qk_scale, attn_drop, proj_drop, sr_ratio)
+        self.attention = EfficientSelfAttention(dim, num_heads, qkv_bias, qk_scale, attn_drop, proj_drop, sr_ratio)
+        # self.attention = EfficientSelfAttentionWithRelPos(dim, num_heads, qkv_bias, qk_scale, attn_drop, proj_drop, sr_ratio)
         self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
         mlp_hidden_dim = int(dim*mlp_ratio)
         self.mlp = MixFFN(in_features=dim, hidden_features=mlp_hidden_dim, 
@@ -397,7 +397,6 @@ class MixVisionTransformer(nn.Module):
                   act_layer=nn.GELU)
         for i in range(depth[2])])
         self.norm3 = norm_layer(embed_dim[2])
-
 
 
         cur += depth[2]

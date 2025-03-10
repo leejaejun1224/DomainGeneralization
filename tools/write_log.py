@@ -16,6 +16,12 @@ def save_att(data_batch, dir_name):
         source_left_filename = data_batch['source_left_filename'][i].split('/')[-1]
         plt.imsave(os.path.join(dir_name, 'att', source_left_filename), att_prob, cmap='gray')
 
+def save_testdata(data_batch, dir_name):
+    os.makedirs(dir_name + '/testdata', exist_ok=True)
+    for i in range(data_batch['src_pred_disp'][0].shape[0]):
+        source_left_filename = data_batch['source_left_filename'][i].split('/')[-1]
+        # plt.imsave(os.path.join(dir_name, 'testdata', source_left_filename), data_batch['src_left'][0][i].cpu().numpy(), cmap='jet')
+        plt.imsave(os.path.join(dir_name, 'testdata', source_left_filename), data_batch['src_disparity'][i].cpu().numpy(), cmap='jet')
 
 def save_disparity(data_batch, dir_name):
     os.makedirs(dir_name + '/disp/src', exist_ok=True)
@@ -25,7 +31,7 @@ def save_disparity(data_batch, dir_name):
     for i in range(data_batch['src_pred_disp'][0].shape[0]):
         pred_src = data_batch['src_pred_disp'][0][i].cpu().numpy()
         source_left_filename = data_batch['source_left_filename'][i].split('/')[-1]
-        plt.imsave(os.path.join(pred_src_dir, source_left_filename), pred_src, cmap='jet')
+        plt.imsave(os.path.join(pred_src_dir, source_left_filename), pred_src, cmap='gray')
 
         pred_tgt_dir = os.path.join(dir_name, 'disp', 'tgt')
         os.makedirs(pred_tgt_dir, exist_ok=True)
