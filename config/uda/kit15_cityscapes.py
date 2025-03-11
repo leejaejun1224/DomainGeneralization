@@ -9,7 +9,7 @@ depth_model = dict(
 )
 
 uda = dict(
-    threshold = 0.35,
+    threshold = 0.65,
     alpha = 0.99,
     train_source_only = True
 )
@@ -17,7 +17,7 @@ uda = dict(
 optimizer = dict(
     optimizer = "Adam",
     lr = 1e-4,
-    adjust_lr = "300,400:10"
+    adjust_lr = "300,500:10"
 )
 
 # name_dataset = 'kitti2015_to_kitti2012'
@@ -26,7 +26,7 @@ name_dataset = 'cityscapes_to_kitti2015'
 
 data = dict(
     train = dict(
-        epoch = 500,
+        epoch = 750,
         batch_size = 2,
         num_workers = 2,
         shuffle = True,
@@ -36,7 +36,7 @@ data = dict(
     ),
     test = dict(
         batch_size = 1,
-        num_workers = 2,
+        num_workers = 0,
         shuffle = False,
         pin_memory = True
     )

@@ -40,16 +40,24 @@ def calc_supervised_val_loss(data_batch):
 def calc_pseudo_loss(data_batch, cfg):
     threshold = cfg['uda']['threshold']
     pred_disp, pseudo_disp, confidence_map = data_batch['tgt_pred_disp'], data_batch['pseudo_disp'], data_batch['confidence_map']
+
+    # print("confidence_map", confidence_map.shape)
+    # print("pseudo_disp", pseudo_disp.shape)
+    # print("pred_disp", pred_disp[1].shape)
+    
     pred_disp = pred_disp[1]
-    mask = (pseudo_disp[0] > 0) & (pseudo_disp[0] < 192) & (confidence_map.float() >= threshold)
+    mask = (pseudo_disp[0] > 0) & (pseudo_disp[0] < 256) & (confidence_map.float() >= threshold)
     data_batch['pseudo_mask'] = mask
     mask = mask.tolist()
     weights = [1.0]
     confidence_mask = confidence_map.float() >= threshold
     true_count = confidence_mask.sum(dim=(0,1,2)) 
-    total_pixels = confidence_mask.numel() // confidence_mask.shape[0]
+    print("true_count", true_count)
+    total_pixels = confidence_mask.numel()
+    print("total_pixels", total_pixels)
     true_ratio = true_count.float() / total_pixels
+    print("true_ratio", true_ratio)
 
     pseudo_label_loss = get_loss(pred_disp, pseudo_disp, mask, weights)
-    return pseudo_label_loss * true_ratio
+    return pseudo_label_loss * true_ratio, true_ratio
 

@@ -18,7 +18,7 @@ from datasets.cityscapes import CityscapesDataset
 from experiment import prepare_cfg, adjust_learning_rate
 # from models.losses.loss import compute_uda_loss
 from tools.plot_loss import plot_loss_graph
-from tools.compute_metrics import EPE_metric, D1_metric, Thres_metric
+from tools.metrics import EPE_metric, D1_metric, Thres_metric
 
 cudnn.benchmark = True
 os.environ['CUDA_VISIBLE_DEVICES'] = '0, 1'

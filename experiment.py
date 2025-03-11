@@ -31,12 +31,19 @@ def load_config(name, path):
     return config
 
 
-def prepare_cfg(arg):
+def prepare_cfg(arg, mode='train'):
     dataset_config = load_config('dataset_config', arg.dataset_config)
     uda_config = load_config('uda_config', arg.uda_config)
     
-    train_source = dataset_config.dataset['train']['source']
-    train_target = dataset_config.dataset['train']['target']
+    # train_source = dataset_config.dataset['train']['source']
+    # train_target = dataset_config.dataset['train']['target']
+    
+    if mode == 'train':
+        train_source = dataset_config.dataset['train']['source']
+        train_target = dataset_config.dataset['train']['target']
+    else:
+        train_source = dataset_config.dataset['test']['source']
+        train_target = dataset_config.dataset['test']['target']
     
     cfg = dict(
         dataset = dict(

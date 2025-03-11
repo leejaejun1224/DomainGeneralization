@@ -37,6 +37,35 @@ class PrepareDataset(Dataset):
         filename = os.path.expanduser(filename)
         return Image.open(filename).convert('RGB')
 
+    def load_image1(self, filename):
+        filename = os.path.expanduser(filename)
+        img = Image.open(filename).convert('RGB')
+        
+        # 파일 이름을 이미지에 추가하기 위해 OpenCV 형식으로 변환
+        img_cv = np.array(img)  # PIL -> NumPy 변환 (H, W, C)
+        img_cv = cv2.cvtColor(img_cv, cv2.COLOR_RGB2BGR)  # RGB -> BGR 변환 (OpenCV는 BGR 사용)
+        
+        # 텍스트 위치 및 스타일 설정
+        text = os.path.basename(filename)  # 파일 이름만 추출
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        font_scale = 1
+        font_color = (0, 255, 0)  # 초록색
+        thickness = 2
+        position = (50, 50)  # 좌측 상단
+        
+        # 이미지에 텍스트 추가
+        img_cv = cv2.putText(img_cv, text, position, font, font_scale, font_color, thickness, cv2.LINE_AA)
+
+        # 저장할 경로 설정 (예제: "debug_images/" 디렉토리에 저장)
+        save_dir = "debug_images"
+        os.makedirs(save_dir, exist_ok=True)
+        save_path = os.path.join(save_dir, os.path.basename(filename))
+        cv2.imwrite(save_path, img_cv)  # 이미지 저장
+
+        print(f"Saved image with filename text: {save_path}")  # 디버깅용 출력
+        
+        return img  # 원본 PIL 이미지 반환
+
     def load_disp(self, filename):
         filename = os.path.expanduser(filename)
         data = Image.open(filename)
@@ -52,8 +81,7 @@ class PrepareDataset(Dataset):
     def __getitem__(self, index):
         src_index = index
         tgt_index = index
-
-        src_left_img = self.load_image(os.path.join(self.source_datapath, self.source_left_filenames[src_index]))
+        src_left_img = self.load_image(os.path.join(self.source_datapath, self.source_left_filenames[src_index]))        
         src_right_img = self.load_image(os.path.join(self.source_datapath, self.source_right_filenames[src_index]))
         src_disparity = self.load_disp(os.path.join(self.source_datapath, self.source_disp_filenames[src_index]))
 
@@ -77,6 +105,7 @@ class PrepareDataset(Dataset):
         #         tgt_disparity = cv2.resize(tgt_disparity, (1242, 375), interpolation=cv2.INTER_LANCZOS4)
 
         if self.training:
+
             w, h = src_left_img.size
             crop_w, crop_h = 512, 256
 

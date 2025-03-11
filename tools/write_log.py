@@ -1,6 +1,8 @@
 import os
+import cv2
 import json
 import torch
+import numpy as np
 import matplotlib.pyplot as plt
 import torch.nn.functional as F
 from skimage import exposure
@@ -16,12 +18,12 @@ def save_att(data_batch, dir_name):
         source_left_filename = data_batch['source_left_filename'][i].split('/')[-1]
         plt.imsave(os.path.join(dir_name, 'att', source_left_filename), att_prob, cmap='gray')
 
-def save_testdata(data_batch, dir_name):
-    os.makedirs(dir_name + '/testdata', exist_ok=True)
+def save_gt(data_batch, dir_name):
+    os.makedirs(dir_name + '/save_gt', exist_ok=True)
     for i in range(data_batch['src_pred_disp'][0].shape[0]):
         source_left_filename = data_batch['source_left_filename'][i].split('/')[-1]
-        # plt.imsave(os.path.join(dir_name, 'testdata', source_left_filename), data_batch['src_left'][0][i].cpu().numpy(), cmap='jet')
-        plt.imsave(os.path.join(dir_name, 'testdata', source_left_filename), data_batch['src_disparity'][i].cpu().numpy(), cmap='jet')
+        plt.imsave(os.path.join(dir_name, 'save_gt', source_left_filename), data_batch['src_disparity'][i].cpu().numpy(), cmap='jet')
+
 
 def save_disparity(data_batch, dir_name):
     os.makedirs(dir_name + '/disp/src', exist_ok=True)
@@ -29,9 +31,10 @@ def save_disparity(data_batch, dir_name):
     pred_src_dir = os.path.join(dir_name, 'disp', 'src')
     os.makedirs(pred_src_dir, exist_ok=True)
     for i in range(data_batch['src_pred_disp'][0].shape[0]):
+
         pred_src = data_batch['src_pred_disp'][0][i].cpu().numpy()
         source_left_filename = data_batch['source_left_filename'][i].split('/')[-1]
-        plt.imsave(os.path.join(pred_src_dir, source_left_filename), pred_src, cmap='gray')
+        plt.imsave(os.path.join(pred_src_dir, source_left_filename), pred_src, cmap='jet')
 
         pred_tgt_dir = os.path.join(dir_name, 'disp', 'tgt')
         os.makedirs(pred_tgt_dir, exist_ok=True)
@@ -40,23 +43,40 @@ def save_disparity(data_batch, dir_name):
         plt.imsave(os.path.join(pred_tgt_dir, target_left_filename), pred_tgt, cmap='jet')
 
 
+def compare(data_batch, dir_name):
+    cost_volume_compare_dir = os.path.join(dir_name, 'cost_volume_compare')
+    os.makedirs(cost_volume_compare_dir, exist_ok=True)
+    for i in range(data_batch['src_pred_disp'][0].shape[0]):
+
+        source_left_filename = data_batch['source_left_filename'][i].split('/')[-1]
+        shape_map_resized = F.interpolate(data_batch['src_shape_map'][i].float(), scale_factor=4, mode="nearest")
+        shape_map_resized = shape_map_resized.squeeze(0).squeeze(0).cpu().numpy()
+        disparity = data_batch['src_disparity'][i].cpu().numpy()
+
+
+        if shape_map_resized.shape != disparity.shape:
+            print("shape_map_resized shape : ", shape_map_resized.shape)
+            print("disparity shape : ", disparity.shape)
+
+        diff = np.abs(shape_map_resized - disparity)
+        mask = np.where(diff <= 1, disparity, 0).astype(disparity.dtype)
+        plt.imsave(os.path.join(cost_volume_compare_dir, source_left_filename), mask, cmap='jet')
+
 def save_entropy(data_batch, dir_name):
     # 저장할 디렉터리 생성
     entropy_dir = os.path.join(dir_name, 'entropy')
     os.makedirs(entropy_dir, exist_ok=True)
 
-    for i in range(data_batch['src_shape_map'].shape[0]):
+    for i in range(data_batch['src_pred_disp'][0].shape[0]):
         shape_map = data_batch['src_shape_map'][i]
 
         # 그룹 평균 계산
-        print("shape_map shape : ", shape_map.shape)
         # shape_map_avg = shape_map.mean(dim=0, keepdim=True)
 
         # 해상도 확대 (scale_factor=4) 및 차원 축소
         shape_map_resized = F.interpolate(shape_map.float(), scale_factor=4, mode="nearest")
         shape_map_resized = shape_map_resized.squeeze(0).squeeze(0).cpu().numpy()
-
-
+        
         # map_min = shape_map_resized.min()
         # map_max = shape_map_resized.max()
         # shape_map_norm = (shape_map_resized - map_min) / (map_max - map_min + 1e-8)
@@ -73,6 +93,8 @@ def save_entropy(data_batch, dir_name):
         # 컬러바 포함 이미지 저장 (컬러바 크기 조절)
         plt.figure(figsize=(12, 8))
         img = plt.imshow(shape_map_resized, cmap='jet')
+        
+
         
         # 컬러바 추가 (크기 조절)
         cbar = plt.colorbar(img, fraction=0.015, pad=0.04)

@@ -75,7 +75,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
             data_batch['confidence_map'] = map[0]
     
         supervised_loss = calc_supervised_val_loss(data_batch)
-        pseudo_loss = calc_pseudo_loss(data_batch, self.cfg)
+        pseudo_loss, true_ratio = calc_pseudo_loss(data_batch, self.cfg)
         total_loss = supervised_loss + pseudo_loss
         
         log_vars = {
@@ -105,17 +105,18 @@ class StereoDepthUDA(StereoDepthUDAInference):
             data_batch['confidence_map'] = map[0]
 
         supervised_loss = calc_supervised_train_loss(data_batch)
-        pseudo_loss = calc_pseudo_loss(data_batch, self.cfg)
+        pseudo_loss, true_ratio = calc_pseudo_loss(data_batch, self.cfg)
 
         # 만약에 pseudo loss가 nan이 나오면 그냥 total loss로만 backward를 하면 되나
 
-        # total_loss = supervised_loss + pseudo_loss
-        total_loss = supervised_loss
+        total_loss = supervised_loss + pseudo_loss
+        # total_loss = supervised_loss
 
         log_vars = {
             'loss': total_loss.item(),
             'supervised_loss': supervised_loss.item(),
-            'unsupervised_loss': pseudo_loss.item()
+            'unsupervised_loss': pseudo_loss.item(),
+            'true_ratio': true_ratio.item()
         }
         total_loss.backward()
     

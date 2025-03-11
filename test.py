@@ -15,8 +15,8 @@ from torch.utils.data import DataLoader
 from datasets import __datasets__
 from datasets.dataloader import PrepareDataset
 from experiment import prepare_cfg
-from tools.compute_metrics import EPE_metric, D1_metric, Thres_metric, tensor2float
-from tools.write_log import save_disparity, save_metrics, save_att, save_entropy, save_testdata
+from tools.metrics import EPE_metric, D1_metric, Thres_metric, tensor2float
+from tools.write_log import save_disparity, save_metrics, save_att, compare, save_entropy, save_gt
 from tools.save_heatmap import save_heatmap
 from models.estimator.Fast_ACV_plus import Feature
 from collections import OrderedDict
@@ -38,8 +38,8 @@ def main():
     parser.add_argument('--save_att', default=True, help='save attention')
     parser.add_argument('--save_heatmap', default=False, help='save heatmap')
     parser.add_argument('--save_entropy', default=True, help='save entropy')
-    parser.add_argument('--save_testdata', default=True, help='save testdata')
-    
+    parser.add_argument('--save_gt', default=True, help='save gt')
+    parser.add_argument('--compare_costvolume', default=True, help='compare costvolume')
     args = parser.parse_args()
     assert args.ckpt != '', 'checkpoint is required !!'
 
@@ -51,7 +51,7 @@ def main():
     
     os.makedirs(save_dir, exist_ok=True)
 
-    cfg = prepare_cfg(args)
+    cfg = prepare_cfg(args, mode='test')
     log_dict = {'parameters': cfg}
 
     test_dataset = PrepareDataset(source_datapath=cfg['dataset']['src_root'],
@@ -59,7 +59,6 @@ def main():
                                 sourcefile_list=cfg['dataset']['src_filelist'], 
                                 targetfile_list=cfg['dataset']['tgt_filelist'],
                                 training=False)
-    
     test_loader = DataLoader(test_dataset, batch_size=cfg['test_batch_size'], shuffle=False, num_workers=cfg['test_num_workers'], drop_last=False)
     # print(cfg)
 
@@ -103,10 +102,12 @@ def main():
         if args.save_entropy:
             save_entropy(data_batch, log_dir)
 
+        if args.compare_costvolume:
+            compare(data_batch, log_dir)
             # [batch, 12, 1, 48, 156]
             # print("entropy_map shape: ", data_batch['src_shape_map'].shape)
-        if args.save_testdata:
-            save_testdata(data_batch, log_dir)
+        if args.save_gt:
+            save_gt(data_batch, log_dir)
 
         if args.save_att:
             save_att(data_batch, log_dir)

@@ -208,13 +208,14 @@ def cost_volume_entropy(cost_volume, dim=2):
     # variance = prob.var(dim=dim, keepdim=True)
     # entropy = entropy * (1 + variance)
 
-    # k = cost_volume.shape[dim]
+    ### k = cost_volume.shape[dim]
     k = 12
     ### top k method (before softmax)
     width = cost_volume.shape[-1]
     cost_volume_cropped = cost_volume[..., 30:]
     
-    topk_values, topk_indices = torch.topk(cost_volume_cropped, k, dim=dim)
+    # topk_values, topk_indices = torch.topk(cost_volume, k, dim=dim)
+    topk_values, topk_indices = torch.topk(cost_volume, k, dim=dim)
     topk_prob = F.softmax(topk_values, dim=dim)
     topk_prob_max, _ = torch.max(topk_prob, dim=dim, keepdim=True)
 
@@ -236,8 +237,8 @@ def cost_volume_entropy(cost_volume, dim=2):
     # log_p = torch.log(topk_values + 1e-8)          # 로그 확률
     # entropy = -(topk_values * log_p).sum(dim=dim, keepdim=True)  # 엔트로피 계산
     # return topk_indices
-    return entropy_norm
-    # return disparity_regress
+    # return entropy_norm
+    return disparity_regress
 
 def compute_disparity_from_cost(cost_volume, dim=2, multiplier=4, top_k=1):
     B, C, D, H, W = cost_volume.shape
