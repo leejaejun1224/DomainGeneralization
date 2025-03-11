@@ -17,7 +17,7 @@ from datasets.dataloader import PrepareDataset
 from datasets.cityscapes import CityscapesDataset
 from experiment import prepare_cfg, adjust_learning_rate
 # from models.losses.loss import compute_uda_loss
-from tools.plot_loss import plot_loss_graph
+from tools.plot_loss import plot_loss_graph, plot_true_ratio
 from tools.metrics import EPE_metric, D1_metric, Thres_metric
 
 cudnn.benchmark = True
@@ -93,6 +93,7 @@ def main():
     for epoch in range(cfg['epoch']): 
         model.train()
         adjust_learning_rate(optimizer, epoch, cfg['lr'], cfg['adjust_lr'])
+        true_ratios = []
         train_losses = []
         step_loss = {}
         for batch_idx, data_batch in enumerate(train_loader):
@@ -105,6 +106,7 @@ def main():
             log_vars = model.train_step(data_batch, optimizer, batch_idx)
             if not math.isnan(log_vars['loss']):
                 train_losses.append(log_vars['loss'])
+                true_ratios.append(log_vars['true_ratio'])
 
                 # metric을 뭘 계산할건데?
                 # target이 teacher이 얼마나 잘 계산이 되었는지는 test.py에서 계산을 하도록 하고
@@ -119,15 +121,17 @@ def main():
         
         if len(train_losses) > 0:
             avg_loss = sum(train_losses) / len(train_losses)
+            avg_true_ratio_train = sum(true_ratios) / len(true_ratios)
             print(f'Epoch [{epoch + 1}/{cfg["epoch"]}] Average Loss: {avg_loss:.4f}')
-            step_loss = {'train_loss' : avg_loss}
+            step_loss = {'train_loss' : avg_loss, 'true_ratio_train' : avg_true_ratio_train}
         else:
             print(f'Epoch [{epoch + 1}/{cfg["epoch"]}] Average Loss: {0:.4f}')
-            step_loss = {'train_loss' : 0}
+            step_loss = {'train_loss' : 0, 'true_ratio_train' : 0}
 
 
         if (epoch + 1) % cfg['val_interval'] == 0:
             val_losses = []
+            true_ratios = []
             model.eval()
             with torch.no_grad():
                 for data_batch in test_loader:
@@ -141,7 +145,7 @@ def main():
                     # log_vars = val_step(model, data_batch, cfg, train=False)
                     if not math.isnan(log_vars['loss']):
                         val_losses.append(log_vars['loss'])
-                    
+                        true_ratios.append(log_vars['true_ratio'])
                         # if args.compute_metrics:
                         #     scalar_outputs = {}
                         #     scalar_outputs["EPE"] = [EPE_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'])]
@@ -150,13 +154,14 @@ def main():
                         #     scalar_outputs["Thres2"] = [Thres_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'], 2.0)]
                         #     scalar_outputs["Thres3"] = [Thres_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'], 3.0)]
             if len(val_losses) > 0:
+                
                 avg_val_loss = sum(val_losses) / len(val_losses)
+                avg_true_ratio_val = sum(true_ratios) / len(true_ratios)
                 print(f'Validation Loss: {avg_val_loss:.4f}')
-                step_loss['val_loss'] = avg_val_loss 
+                step_loss = {'val_loss' : avg_val_loss, 'true_ratio_val' : avg_true_ratio_val}
             else:
                 print(f'Validation Loss: {0:.4f}')
-                step_loss['val_loss'] = 0
-
+                step_loss = {'val_loss' : 0, 'true_ratio_val' : 0}
             # Save checkpoint
             if (epoch + 1) % cfg['save_interval'] == 0:
                 checkpoint = {
@@ -186,6 +191,7 @@ def main():
     with open(f'{save_dir}/training_log.json', 'w') as f:
         json.dump(log_dict, f, indent=4)
     plot_loss_graph(log_dict, f'{save_dir}/loss_graph.png')
+    plot_true_ratio(log_dict, f'{save_dir}/true_ratio_graph.png')
 
     return 0
 

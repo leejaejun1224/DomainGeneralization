@@ -52,12 +52,9 @@ def calc_pseudo_loss(data_batch, cfg):
     weights = [1.0]
     confidence_mask = confidence_map.float() >= threshold
     true_count = confidence_mask.sum(dim=(0,1,2)) 
-    print("true_count", true_count)
     total_pixels = confidence_mask.numel()
-    print("total_pixels", total_pixels)
     true_ratio = true_count.float() / total_pixels
-    print("true_ratio", true_ratio)
 
     pseudo_label_loss = get_loss(pred_disp, pseudo_disp, mask, weights)
-    return pseudo_label_loss * true_ratio, true_ratio
+    return pseudo_label_loss, true_ratio
 

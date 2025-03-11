@@ -76,12 +76,13 @@ class StereoDepthUDA(StereoDepthUDAInference):
     
         supervised_loss = calc_supervised_val_loss(data_batch)
         pseudo_loss, true_ratio = calc_pseudo_loss(data_batch, self.cfg)
-        total_loss = supervised_loss + pseudo_loss
+        total_loss = supervised_loss + pseudo_loss * true_ratio
         
         log_vars = {
             'loss': total_loss.item(),
             'supervised_loss': supervised_loss.item(),
-            'unsupervised_loss': pseudo_loss.item()
+            'unsupervised_loss': pseudo_loss.item(),
+            'true_ratio': true_ratio.item()
         }
 
         return log_vars
