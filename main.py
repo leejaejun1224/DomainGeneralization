@@ -93,8 +93,9 @@ def main():
     for epoch in range(cfg['epoch']): 
         model.train()
         adjust_learning_rate(optimizer, epoch, cfg['lr'], cfg['adjust_lr'])
+
         true_ratios = []
-        train_losses = []
+        train_losses, train_pseudo_losses = [], []
         step_loss = {}
         for batch_idx, data_batch in enumerate(train_loader):
 
@@ -106,6 +107,7 @@ def main():
             log_vars = model.train_step(data_batch, optimizer, batch_idx)
             if not math.isnan(log_vars['loss']):
                 train_losses.append(log_vars['loss'])
+                train_pseudo_losses.append(log_vars['unsupervised_loss'])
                 true_ratios.append(log_vars['true_ratio'])
 
                 # metric을 뭘 계산할건데?
@@ -122,15 +124,16 @@ def main():
         if len(train_losses) > 0:
             avg_loss = sum(train_losses) / len(train_losses)
             avg_true_ratio_train = sum(true_ratios) / len(true_ratios)
+            avg_pseudo_loss = sum(train_pseudo_losses) / len(train_pseudo_losses)
             print(f'Epoch [{epoch + 1}/{cfg["epoch"]}] Average Loss: {avg_loss:.4f}')
-            step_loss = {'train_loss' : avg_loss, 'true_ratio_train' : avg_true_ratio_train}
+            step_loss = {'train_loss' : avg_loss, 'true_ratio_train' : avg_true_ratio_train, 'train_pseudo_loss' : avg_pseudo_loss}
         else:
             print(f'Epoch [{epoch + 1}/{cfg["epoch"]}] Average Loss: {0:.4f}')
-            step_loss = {'train_loss' : 0, 'true_ratio_train' : 0}
+            step_loss = {'train_loss' : 0, 'true_ratio_train' : 0, 'train_pseudo_loss' : 0}
 
 
         if (epoch + 1) % cfg['val_interval'] == 0:
-            val_losses = []
+            val_losses, val_pseudo_losses = [], []
             true_ratios = []
             model.eval()
             with torch.no_grad():
@@ -146,6 +149,7 @@ def main():
                     if not math.isnan(log_vars['loss']):
                         val_losses.append(log_vars['loss'])
                         true_ratios.append(log_vars['true_ratio'])
+                        val_pseudo_losses.append(log_vars['unsupervised_loss'])
                         # if args.compute_metrics:
                         #     scalar_outputs = {}
                         #     scalar_outputs["EPE"] = [EPE_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'])]
@@ -157,11 +161,12 @@ def main():
                 
                 avg_val_loss = sum(val_losses) / len(val_losses)
                 avg_true_ratio_val = sum(true_ratios) / len(true_ratios)
+                avg_val_pseudo_loss = sum(val_pseudo_losses) / len(val_pseudo_losses)
                 print(f'Validation Loss: {avg_val_loss:.4f}')
-                step_loss = {'val_loss' : avg_val_loss, 'true_ratio_val' : avg_true_ratio_val}
+                step_loss = {'val_loss' : avg_val_loss, 'true_ratio_val' : avg_true_ratio_val, 'val_pseudo_loss' : avg_val_pseudo_loss}
             else:
                 print(f'Validation Loss: {0:.4f}')
-                step_loss = {'val_loss' : 0, 'true_ratio_val' : 0}
+                step_loss = {'val_loss' : 0, 'true_ratio_val' : 0, 'val_pseudo_loss' : 0}
             # Save checkpoint
             if (epoch + 1) % cfg['save_interval'] == 0:
                 checkpoint = {
@@ -172,18 +177,18 @@ def main():
                 }
                 torch.save(checkpoint, os.path.join(save_dir, f'checkpoint_epoch{epoch+1}.pth'))
             
-            if 'confidence_map' in data_batch:
-                confidence_map_dir = os.path.join(save_dir, 'confidence_maps')
-                os.makedirs(confidence_map_dir, exist_ok=True)
-                confidence_map = data_batch['confidence_map'].cpu().numpy()
-                target_left_filename = data_batch['target_left_filename']
-                for idx, conf_map in enumerate(confidence_map):
-                    plt.figure(figsize=(10, 8))
-                    plt.imshow(conf_map, cmap='viridis')  # viridis is good for confidence visualization
-                    plt.colorbar(label='Confidence')
-                    plt.title(f'Confidence Map - Epoch {epoch+1} Batch {idx}')
-                    plt.savefig(os.path.join(confidence_map_dir, target_left_filename[idx].split('/')[-1]))
-                    plt.close() 
+            # if 'confidence_map' in data_batch:
+            #     confidence_map_dir = os.path.join(save_dir, 'confidence_maps')
+            #     os.makedirs(confidence_map_dir, exist_ok=True)
+            #     confidence_map = data_batch['confidence_map'].cpu().numpy()
+            #     target_left_filename = data_batch['target_left_filename']
+            #     for idx, conf_map in enumerate(confidence_map):
+            #         plt.figure(figsize=(10, 8))
+            #         plt.imshow(conf_map, cmap='viridis')  # viridis is good for confidence visualization
+            #         plt.colorbar(label='Confidence')
+            #         plt.title(f'Confidence Map - Epoch {epoch+1} Batch {idx}')
+            #         plt.savefig(os.path.join(confidence_map_dir, target_left_filename[idx].split('/')[-1]))
+            #         plt.close() 
 
             # 이거 좀 더 고민해보자.
             log_dict[f'epoch_{epoch+1}'] = step_loss

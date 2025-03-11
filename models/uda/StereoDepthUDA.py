@@ -63,7 +63,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
         start = time.time()
         data_batch['src_pred_disp'], map = self.forward(data_batch['src_left'], data_batch['src_right'])
         end = time.time()
-        print(f"forward time: {end - start}")
+        # print(f"forward time: {end - start}")
         data_batch['tgt_pred_disp'], map = self.forward(data_batch['tgt_left'], data_batch['tgt_right'])
         
         data_batch['src_shape_map'] = map[1]
@@ -110,7 +110,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
 
         # 만약에 pseudo loss가 nan이 나오면 그냥 total loss로만 backward를 하면 되나
 
-        total_loss = supervised_loss + pseudo_loss
+        total_loss = supervised_loss + pseudo_loss*true_ratio
         # total_loss = supervised_loss
 
         log_vars = {
