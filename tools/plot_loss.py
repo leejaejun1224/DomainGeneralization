@@ -44,7 +44,7 @@ def plot_loss_graph(loss_dict, output_image_path):
         val_pseudo_losses.append(val_pseudo_loss)
 
     # 그래프 그리기
-    plt.figure(figsize=(10, 6))
+    plt.figure(figsize=(20, 10))
     plt.plot(epochs, train_losses, label='Train Loss', marker='o', linestyle='-')
     plt.plot(epochs, val_losses, label='Validation Loss', marker='s', linestyle='-')
     plt.plot(epochs, train_pseudo_losses, label='Train Pseudo Loss', marker='^', linestyle='-')
@@ -90,7 +90,7 @@ def plot_true_ratio(loss_dict, output_image_path):
         val_true_ratios.append(val_true_ratio)
 
     # 그래프 그리기
-    plt.figure(figsize=(10, 6))
+    plt.figure(figsize=(20, 10))
     plt.plot(epochs, train_true_ratios, label='Train True Ratio', marker='o', linestyle='-')
     plt.plot(epochs, val_true_ratios, label='Validation True Ratio', marker='s', linestyle='-')
     plt.xlabel('Epoch')
