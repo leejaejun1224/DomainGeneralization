@@ -36,7 +36,7 @@ data = dict(
     ),
     test = dict(
         batch_size = 1,
-        num_workers = 0,
+        num_workers = 2,
         shuffle = False,
         pin_memory = True
     )
