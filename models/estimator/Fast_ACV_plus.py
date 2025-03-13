@@ -10,7 +10,7 @@ import gc
 import time
 import timm
 from models.encoder.MiTbackbone import MixVisionTransformer
-
+from transformers import SegformerModel
 
 
 class SubModule(nn.Module):
@@ -32,6 +32,15 @@ class SubModule(nn.Module):
                 m.weight.data.fill_(1)
                 m.bias.data.zero_()
 
+class FeatureMiTPtr(SubModule):
+    def __init__(self):
+        super(FeatureMiTPtr, self).__init__()
+        self.model = SegformerModel.from_pretrained('nvidia/segformer-b0-finetuned-ade-512-512')
+        self.encoder = self.model.encoder
+
+    def forward(self, x):
+        outputs = self.encoder(x, output_hidden_states=True)
+        return outputs.hidden_states
 
 class FeatureMiT(SubModule):
     def __init__(self):
@@ -246,8 +255,8 @@ class Fast_ACVNet_plus(nn.Module):
         self.att_weights_only = att_weights_only
 
         # self.feature = Feature()
-        self.feature = FeatureMiT()
-
+        # self.feature = FeatureMiT()
+        self.feature_ptr = FeatureMiTPtr()
         self.feature_up = FeatUp()
         chans = [16, 24, 32, 96, 160]
 
@@ -289,12 +298,12 @@ class Fast_ACVNet_plus(nn.Module):
     def forward(self, left, right):
 
         ### for mobilenet
-        # features_left = self.feature(left)
-        # features_right = self.feature(right)
+        features_left = self.feature(left)
+        features_right = self.feature(right)
         
         ### for attention
-        features_left, _ = self.feature(left)
-        features_right, _ = self.feature(right)
+        # features_left, _ = self.feature(left)
+        # features_right, _ = self.feature(right)
         
         
         
