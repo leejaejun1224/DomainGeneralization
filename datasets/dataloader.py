@@ -163,7 +163,7 @@ class PrepareDataset(Dataset):
                 tgt_disparity_t = None
 
             # 결과 딕셔너리 반환
-            if tgt_disparity_t is not None:
+            if tgt_disparity_t is not None and src_disparity_t is not None:
                 return {
                     "src_left": src_left_img_t,
                     "src_right": src_right_img_t,
@@ -180,7 +180,6 @@ class PrepareDataset(Dataset):
                 return {
                     "src_left": src_left_img_t,
                     "src_right": src_right_img_t,
-                    "src_disparity": src_disparity_t,
                     "tgt_left": tgt_left_img_t,
                     "tgt_right": tgt_right_img_t,
                     "source_left_filename": self.source_left_filenames[src_index],
