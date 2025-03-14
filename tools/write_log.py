@@ -46,21 +46,22 @@ def save_disparity(data_batch, dir_name):
 def compare(data_batch, dir_name):
     cost_volume_compare_dir = os.path.join(dir_name, 'cost_volume_compare')
     os.makedirs(cost_volume_compare_dir, exist_ok=True)
-    for i in range(data_batch['src_pred_disp'][0].shape[0]):
+    if 'src_disparity' in data_batch.keys():
+        for i in range(data_batch['src_pred_disp'][0].shape[0]):
 
-        source_left_filename = data_batch['source_left_filename'][i].split('/')[-1]
-        shape_map_resized = F.interpolate(data_batch['src_shape_map'][i].float(), scale_factor=4, mode="nearest")
-        shape_map_resized = shape_map_resized.squeeze(0).squeeze(0).cpu().numpy()
-        disparity = data_batch['src_disparity'][i].cpu().numpy()
+            source_left_filename = data_batch['source_left_filename'][i].split('/')[-1]
+            shape_map_resized = F.interpolate(data_batch['src_shape_map'][i].float(), scale_factor=4, mode="nearest")
+            shape_map_resized = shape_map_resized.squeeze(0).squeeze(0).cpu().numpy()
+            disparity = data_batch['src_disparity'][i].cpu().numpy()
 
 
-        if shape_map_resized.shape != disparity.shape:
-            print("shape_map_resized shape : ", shape_map_resized.shape)
-            print("disparity shape : ", disparity.shape)
+            if shape_map_resized.shape != disparity.shape:
+                print("shape_map_resized shape : ", shape_map_resized.shape)
+                print("disparity shape : ", disparity.shape)
 
-        diff = np.abs(shape_map_resized - disparity)
-        mask = np.where(diff <= 1, disparity, 0).astype(disparity.dtype)
-        plt.imsave(os.path.join(cost_volume_compare_dir, source_left_filename), mask, cmap='jet')
+            diff = np.abs(shape_map_resized - disparity)
+            mask = np.where(diff <= 1, disparity, 0).astype(disparity.dtype)
+            plt.imsave(os.path.join(cost_volume_compare_dir, source_left_filename), mask, cmap='jet')
 
 def save_entropy(data_batch, dir_name):
     # 저장할 디렉터리 생성

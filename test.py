@@ -106,7 +106,7 @@ def main():
             compare(data_batch, log_dir)
             # [batch, 12, 1, 48, 156]
             # print("entropy_map shape: ", data_batch['src_shape_map'].shape)
-        if args.save_gt:
+        if args.save_gt and 'src_disparity' in data_batch.keys():
             save_gt(data_batch, log_dir)
 
         if args.save_att:
@@ -120,7 +120,7 @@ def main():
             feature_map, attn_weights = model.student_model.feature(image_tensor)
             save_heatmap(image_tensor, feature_map, attn_weights)
 
-        if args.compute_metrics:
+        if args.compute_metrics and 'src_disparity' in data_batch.keys():
             scalar_outputs = {}
             scalar_outputs["EPE"] = [EPE_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'])]
             scalar_outputs["D1"] = [D1_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'])]
