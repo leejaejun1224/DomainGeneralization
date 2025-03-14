@@ -73,6 +73,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
                 data_batch['tgt_left'], data_batch['tgt_right'])
             data_batch['pseudo_disp'] = pseudo_disp
             data_batch['confidence_map'] = map[0]
+            data_batch['tgt_shape_map'] = map[1]
     
         
         pseudo_loss, true_ratio = calc_pseudo_loss(data_batch, self.cfg)

@@ -19,6 +19,7 @@ from experiment import prepare_cfg, adjust_learning_rate
 # from models.losses.loss import compute_uda_loss
 from tools.plot_loss import plot_loss_graph, plot_true_ratio
 from tools.metrics import EPE_metric, D1_metric, Thres_metric
+from models.tools.threshold_manager import ThresholdManager
 
 cudnn.benchmark = True
 os.environ['CUDA_VISIBLE_DEVICES'] = '0, 1'
@@ -89,6 +90,9 @@ def main():
     optimizer = torch.optim.Adam(model.parameters(), lr=cfg['lr'])
     log_dict['student_params'] = sum(p.numel() for p in model.student_model.parameters())
     log_dict['teacher_params'] = sum(p.numel() for p in model.teacher_model.parameters())
+
+    threshold_manager = ThresholdManager(save_dir=save_dir)
+
     # 시작하자잉
     for epoch in range(cfg['epoch']): 
         model.train()
@@ -103,6 +107,10 @@ def main():
             for key in data_batch:
                 if isinstance(data_batch[key], torch.Tensor):
                     data_batch[key] = data_batch[key].cuda()
+
+            image_ids = data_batch['target_left_filename']
+            threshold_manager.initialize_log(image_ids)
+
                     # print(data_batch[key])
             log_vars = model.train_step(data_batch, optimizer, batch_idx)
             if not math.isnan(log_vars['loss']):
@@ -110,6 +118,9 @@ def main():
                 train_pseudo_losses.append(log_vars['unsupervised_loss'])
                 true_ratios.append(log_vars['true_ratio'])
 
+
+                ### 이 unsupervised loss는 그대로 사용할거야? 아니면 그냥 photometric error를 사용할거야.
+                threshold_manager.update_log(image_ids, log_vars['true_ratio'], log_vars['unsupervised_loss'], epoch)
                 # metric을 뭘 계산할건데?
                 # target이 teacher이 얼마나 잘 계산이 되었는지는 test.py에서 계산을 하도록 하고
                 # source가 student이 얼마나 잘 계산이 되었는지는 여기서 계산을 하도록 하자.
@@ -195,6 +206,8 @@ def main():
 
     with open(f'{save_dir}/training_log.json', 'w') as f:
         json.dump(log_dict, f, indent=4)
+
+    threshold_manager.save_log()
     plot_loss_graph(log_dict, f'{save_dir}/loss_graph.png')
     plot_true_ratio(log_dict, f'{save_dir}/true_ratio_graph.png')
 

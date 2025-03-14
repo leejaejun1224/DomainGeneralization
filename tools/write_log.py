@@ -69,7 +69,7 @@ def save_entropy(data_batch, dir_name):
     os.makedirs(entropy_dir, exist_ok=True)
 
     for i in range(data_batch['src_pred_disp'][0].shape[0]):
-        shape_map = data_batch['src_shape_map'][i]
+        shape_map = data_batch['tgt_shape_map'][i]
 
         # 그룹 평균 계산
         # shape_map_avg = shape_map.mean(dim=0, keepdim=True)
@@ -88,15 +88,15 @@ def save_entropy(data_batch, dir_name):
         # 스케일링 이후 1을 초과한 값은 1로 클리핑
         # shape_map_scaled = torch.clamp(shape_map_scaled, 0, 1)
         # 저장할 파일 이름 설정
-        source_left_filename = data_batch['source_left_filename'][i].split('/')[-1]
-        save_path = os.path.join(entropy_dir, source_left_filename)
+        target_left_filename = data_batch['target_left_filename'][i].split('/')[-1]
+        save_path = os.path.join(entropy_dir, target_left_filename)
 
         # 컬러바 포함 이미지 저장 (컬러바 크기 조절)
         plt.figure(figsize=(12, 8))
         img = plt.imshow(shape_map_resized, cmap='jet')
         
 
-        
+
         # 컬러바 추가 (크기 조절)
         cbar = plt.colorbar(img, fraction=0.015, pad=0.04)
         cbar.ax.tick_params(labelsize=8)  # 컬러바 숫자 크기 조절

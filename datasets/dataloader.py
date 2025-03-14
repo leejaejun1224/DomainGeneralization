@@ -109,16 +109,20 @@ class PrepareDataset(Dataset):
 
             # ToTensor + Normalize
             transform_func = get_transform()
-            src_left_img = transform_func(src_left_img)   # (C,H,W) tensor
+            src_left_img = transform_func(src_left_img)
             src_right_img = transform_func(src_right_img)
             tgt_left_img = transform_func(tgt_left_img)
-            tgt_right_img = transform_func(tgt_right_img)
+            tgt_right_img = transform_func(tgt_right_img) 
 
             return {
                 "src_left": src_left_img,   # torch.Tensor
                 "src_right": src_right_img,
                 "src_disparity": src_disparity,  # 여기는 아직 numpy
                 "src_disparity_low": src_disparity_low,  # numpy
+                "source_left_filename": self.source_left_filenames[src_index],
+                "source_right_filename": self.source_right_filenames[src_index],
+                "target_left_filename": self.target_left_filenames[tgt_index],
+                "target_right_filename": self.target_right_filenames[tgt_index],
                 "tgt_left": tgt_left_img,
                 "tgt_right": tgt_right_img,
                 "tgt_disparity": tgt_disparity,
