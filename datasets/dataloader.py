@@ -55,7 +55,12 @@ class PrepareDataset(Dataset):
         # (1) 이미지 / disparity 불러오기
         src_left_img = self.load_image(os.path.join(self.source_datapath, self.source_left_filenames[src_index]))
         src_right_img = self.load_image(os.path.join(self.source_datapath, self.source_right_filenames[src_index]))
-        src_disparity = self.load_disp(os.path.join(self.source_datapath, self.source_disp_filenames[src_index]))
+        
+        if self.source_disp_filenames:
+            src_disparity = self.load_disp(os.path.join(self.source_datapath, self.source_disp_filenames[src_index]))
+        else:
+            src_disparity = None
+
 
         tgt_left_img = self.load_image(os.path.join(self.target_datapath, self.target_left_filenames[tgt_index]))
         tgt_right_img = self.load_image(os.path.join(self.target_datapath, self.target_right_filenames[tgt_index]))
@@ -126,7 +131,11 @@ class PrepareDataset(Dataset):
             # 함수 내부에서 get_transform() 호출 -> ToTensor & Normalize -> numpy array로 반환
             src_left_img_np = reshape_image(src_left_img)    # shape: (C, 384, 1248)
             src_right_img_np = reshape_image(src_right_img)
-            src_disparity_np = reshape_disparity(src_disparity)  # shape: (384, 1248)
+
+            if src_disparity is not None:
+                src_disparity_np = reshape_disparity(src_disparity)  # shape: (384, 1248)
+            else:
+                src_disparity_np = None
 
             tgt_left_img_np = reshape_image(tgt_left_img)
             tgt_right_img_np = reshape_image(tgt_right_img)
@@ -139,7 +148,11 @@ class PrepareDataset(Dataset):
             # numpy -> torch
             src_left_img_t = torch.from_numpy(src_left_img_np).float()   # (C,384,1248)
             src_right_img_t = torch.from_numpy(src_right_img_np).float()
-            src_disparity_t = torch.from_numpy(src_disparity_np).float() # (384,1248)
+
+            if src_disparity_np is not None:
+                src_disparity_t = torch.from_numpy(src_disparity_np).float() # (384,1248)
+            else:
+                src_disparity_t = None
 
             tgt_left_img_t = torch.from_numpy(tgt_left_img_np).float()
             tgt_right_img_t = torch.from_numpy(tgt_right_img_np).float()
