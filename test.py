@@ -85,6 +85,7 @@ def main():
 
     # optimizer 좀 더 고민해보자.
     # 시작하자잉
+    # target에 대해서 metric를 구할 줄 알아야 한다.
     train_losses = []
     step_loss = {}
     metrics_dict = {}
