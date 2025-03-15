@@ -22,21 +22,19 @@ def check_shape_for_metric_computation(*vars):
 
 
 def compute_metric_for_each_image(metric_func):
-    def wrapper(D_ests, D_gts, masks, *nargs):
-        check_shape_for_metric_computation(D_ests, D_gts, masks)
+    def wrapper(D_ests, D_gts, *nargs):  # masks 제거
+        # check_shape_for_metric_computation에서 masks도 제거 필요
+        assert isinstance(D_ests, torch.Tensor) and isinstance(D_gts, torch.Tensor)
+        assert len(D_ests.size()) == 3 and len(D_gts.size()) == 3
+        assert D_ests.size() == D_gts.size()
+        
         bn = D_gts.shape[0]  # batch size
-        results = []  # a list to store results for each image
-        # compute result one by one
+        results = []
         for idx in range(bn):
-            # if tensor, then pick idx, else pass the same value
             cur_nargs = [x[idx] if isinstance(x, (Tensor, Variable)) else x for x in nargs]
-            if masks[idx].float().mean() / (D_gts[idx] > 0).float().mean() < 0.1:
-                print("masks[idx].float().mean() too small, skip")
-            else:
-                ret = metric_func(D_ests[idx], D_gts[idx], masks[idx], *cur_nargs)
-                results.append(ret)
+            ret = metric_func(D_ests[idx], D_gts[idx], *cur_nargs)  # masks 전달 안 함
+            results.append(ret)
         if len(results) == 0:
-            print("masks[idx].float().mean() too small for all images in this batch, return 0")
             return torch.tensor(0, dtype=torch.float32, device=D_gts.device)
         else:
             return torch.stack(results).mean()
@@ -45,24 +43,27 @@ def compute_metric_for_each_image(metric_func):
 
 @make_nograd_func
 @compute_metric_for_each_image
-def EPE_metric(pred_disp, gt_disp, mask):
-    pred_disp, gt_disp = pred_disp[mask], gt_disp[mask]
+def EPE_metric(pred_disp, gt_disp, max_disp):
+    valid_mask = (gt_disp > 0) & (gt_disp < max_disp)
+    pred_disp, gt_disp = pred_disp[valid_mask], gt_disp[valid_mask]
     return F.l1_loss(pred_disp, gt_disp, size_average=True)
 
 
 @make_nograd_func
 @compute_metric_for_each_image
-def D1_metric(D_est, D_gt, mask):
-    D_est, D_gt = D_est[mask], D_gt[mask]
+def D1_metric(D_est, D_gt, max_disp):
+    valid_mask = (D_gt > 0) & (D_gt < max_disp)
+    D_est, D_gt = D_est[valid_mask], D_gt[valid_mask]
     E = torch.abs(D_gt - D_est)
     err_mask = (E > 3) & (E / D_gt.abs() > 0.05)
     return torch.mean(err_mask.float())
 
 @make_nograd_func
 @compute_metric_for_each_image
-def Thres_metric(D_est, D_gt, mask, thres):
+def Thres_metric(D_est, D_gt, max_disp, thres):
     assert isinstance(thres, (int, float))
-    D_est, D_gt = D_est[mask], D_gt[mask]
+    valid_mask = (D_gt > 0) & (D_gt < max_disp)
+    D_est, D_gt = D_est[valid_mask], D_gt[valid_mask]
     E = torch.abs(D_gt - D_est)
     err_mask = E > thres
     return torch.mean(err_mask.float())

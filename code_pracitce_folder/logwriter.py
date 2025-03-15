@@ -20,12 +20,13 @@ def split_batch(data_batch, batch_idx):
             batch[key] = value[batch_idx].data  
         elif isinstance(value, list):
             if isinstance(value[0], torch.Tensor):
-                batch[key] = [v[batch_idx].data for v in value]  
+                batch[key] = [v.data for v in value]  
             else:
                 batch[key] = value[batch_idx] 
+                print(value[batch_idx])
     return batch
 
-batch_size = 2
+batch_size = 1
 for i in range(batch_size):
     batch = split_batch(data_batch, i)
     print(f"batch_idx {i}")

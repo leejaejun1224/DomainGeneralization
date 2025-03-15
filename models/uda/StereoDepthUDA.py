@@ -106,6 +106,8 @@ class StereoDepthUDA(StereoDepthUDAInference):
         with torch.no_grad():
             pseudo_disp, map = self.ema_forward(
                 data_batch['tgt_left'], data_batch['tgt_right'])
+            
+            # ㅋㅋ 이 1이 뭐더라 시발
             data_batch['pseudo_disp'] = pseudo_disp
             data_batch['confidence_map'] = map[0]
             data_batch['tgt_shape_map'] = map[1]
@@ -126,5 +128,4 @@ class StereoDepthUDA(StereoDepthUDAInference):
             'unsupervised_loss': pseudo_loss.item(),
             'true_ratio': true_ratio.item()
         }
-
         return log_vars

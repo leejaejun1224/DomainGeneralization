@@ -55,23 +55,14 @@ def split_batch(data_batch, batch_idx):
     batch = {}
     for key, value in data_batch.items():
         if isinstance(value, torch.Tensor):
-            batch[key] = value[batch_idx].data  
+            batch[key] = value[batch_idx].detach().unsqueeze(0)
         elif isinstance(value, list):
             if isinstance(value[0], torch.Tensor):
-                batch[key] = [v[batch_idx].data for v in value]  
+                batch[key] = [v[batch_idx].detach().unsqueeze(0) for v in value]
             else:
-                batch[key] = value[batch_idx] 
+                batch[key] = value[batch_idx]
     return batch
 
-def compute_metrics_dict(data_batch, mask):
-    scalar_outputs = {
-        "EPE": [EPE_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], mask)],
-        "D1": [D1_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], mask)],
-        "Thres1": [Thres_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], mask, 1.0)],
-        "Thres2": [Thres_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], mask, 2.0)],
-        "Thres3": [Thres_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], mask, 3.0)]
-    }
-    return scalar_outputs
 
 def main():
     args = setup_args()
@@ -81,8 +72,6 @@ def main():
     torch.cuda.manual_seed(args.seed)
     
     log_dir = '/'.join(args.ckpt.split('/')[:-1])
-    save_dir = os.path.join(log_dir, 'disp')
-    os.makedirs(save_dir, exist_ok=True)
 
     cfg = prepare_cfg(args, mode='test')
     
@@ -106,7 +95,7 @@ def main():
     model.eval()
     
     metrics_dict = {}
-    logger = Logger(save_dir)
+    logger = Logger(log_dir)
     logger._setup_directories()
 
     with torch.no_grad():
@@ -117,13 +106,11 @@ def main():
             
             data_batch = process_batch(data_batch)
             log_vars = model.forward_test(data_batch)
-
-
             for i in range(cfg['test_batch_size']):
                 batch = split_batch(data_batch, i)
-                logger.log(batch, log_vars)
+                logger.log(batch)
 
-    logger.save_metrics(metrics_dict, log_dir)
+    logger.save_metrics()
     return 0
 
 if __name__=="__main__":

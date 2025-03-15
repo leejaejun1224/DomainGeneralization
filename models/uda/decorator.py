@@ -45,7 +45,7 @@ class StereoDepthUDAInference(nn.Module):
         else:
             output, map = self.teacher_model(left, right)
         
-        return output[1], map
+        return output, map
         
 
 

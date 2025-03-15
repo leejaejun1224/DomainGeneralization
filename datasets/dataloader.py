@@ -157,7 +157,6 @@ class PrepareDataset(Dataset):
             result["src_disparity"] = src_disp
         if tgt_disp is not None:
             result["tgt_disparity"] = tgt_disp
-
         return result
 
     def __getitem__(self, index):

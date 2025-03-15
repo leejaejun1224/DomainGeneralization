@@ -38,7 +38,7 @@ def calc_supervised_val_loss(data_batch):
 
 
 def calc_pseudo_loss(data_batch, threshold):
-    pred_disp, pseudo_disp, confidence_map = data_batch['tgt_pred_disp'], data_batch['pseudo_disp'], data_batch['confidence_map']
+    pred_disp, pseudo_disp, confidence_map = data_batch['tgt_pred_disp'], data_batch['pseudo_disp'][1], data_batch['confidence_map']
     # print("confidence_map", confidence_map.shape)
     # print("pseudo_disp", pseudo_disp.shape)
     # print("pred_disp", pred_disp[1].shape)
