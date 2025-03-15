@@ -47,15 +47,50 @@ class StereoDepthUDA(StereoDepthUDAInference):
         pass
     
     "args : optimizer, data_batchhhhh"
-    def train_step(self, data_batch, optimizer, iter):
+    def train_step(self, data_batch, optimizer, iter, threshold):
         
         optimizer.zero_grad()
-        log_vars = self.forward_train(data_batch)
+        log_vars = self.forward_train(data_batch, threshold)
         optimizer.step()
         self.update_ema(iter, alpha=0.99)
         
         return log_vars
     
+
+    "back propagation"
+    "forward propagation"
+    def forward_train(self, data_batch, threshold):
+        
+        src_pred, map = self.forward(data_batch['src_left'], data_batch['src_right'])
+        data_batch['src_pred_disp'] = src_pred
+        
+        tgt_pred, map = self.forward(data_batch['tgt_left'], data_batch['tgt_right'])  
+        data_batch['tgt_pred_disp'] = tgt_pred
+        
+        
+        with torch.no_grad():
+            pseudo_disp, map = self.ema_forward(
+                data_batch['tgt_left'], data_batch['tgt_right'])
+            data_batch['pseudo_disp'] = pseudo_disp
+            data_batch['confidence_map'] = map[0]
+
+        supervised_loss = calc_supervised_train_loss(data_batch)
+        pseudo_loss, true_ratio = calc_pseudo_loss(data_batch, threshold)
+
+        # 만약에 pseudo loss가 nan이 나오면 그냥 total loss로만 backward를 하면 되나
+
+        total_loss = supervised_loss + pseudo_loss*true_ratio
+        # total_loss = supervised_loss
+
+        log_vars = {
+            'loss': total_loss.item(),
+            'supervised_loss': supervised_loss.item(),
+            'unsupervised_loss': pseudo_loss.item(),
+            'true_ratio': true_ratio.item()
+        }
+        total_loss.backward()
+    
+        return log_vars
 
     # automatically make model's training member variable False
     @torch.no_grad()
@@ -92,40 +127,4 @@ class StereoDepthUDA(StereoDepthUDAInference):
             'true_ratio': true_ratio.item()
         }
 
-        return log_vars
-    
-    
-    "back propagation"
-    "forward propagation"
-    def forward_train(self, data_batch):
-        
-        src_pred, map = self.forward(data_batch['src_left'], data_batch['src_right'])
-        data_batch['src_pred_disp'] = src_pred
-        
-        tgt_pred, map = self.forward(data_batch['tgt_left'], data_batch['tgt_right'])  
-        data_batch['tgt_pred_disp'] = tgt_pred
-        
-        
-        with torch.no_grad():
-            pseudo_disp, map = self.ema_forward(
-                data_batch['tgt_left'], data_batch['tgt_right'])
-            data_batch['pseudo_disp'] = pseudo_disp
-            data_batch['confidence_map'] = map[0]
-
-        supervised_loss = calc_supervised_train_loss(data_batch)
-        pseudo_loss, true_ratio = calc_pseudo_loss(data_batch, self.cfg)
-
-        # 만약에 pseudo loss가 nan이 나오면 그냥 total loss로만 backward를 하면 되나
-
-        total_loss = supervised_loss + pseudo_loss*true_ratio
-        # total_loss = supervised_loss
-
-        log_vars = {
-            'loss': total_loss.item(),
-            'supervised_loss': supervised_loss.item(),
-            'unsupervised_loss': pseudo_loss.item(),
-            'true_ratio': true_ratio.item()
-        }
-        total_loss.backward()
-    
         return log_vars

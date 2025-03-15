@@ -23,8 +23,8 @@ class ThresholdManager:
                     'unsupervised_loss': []
                 }
     
-    def get_threshold(self, img_id):
-        return torch.tensor([self.image_log[img_id]['threshold']] for img_id in self.image_log.keys())
+    def get_threshold(self, img_ids):
+        return torch.tensor([self.image_log[img_id]['threshold'] for img_id in img_ids])
     
     def update_log(self, image_ids, true_ratio, unsupervised_loss, epoch):
         for i, img_id in enumerate(image_ids):
@@ -39,6 +39,7 @@ class ThresholdManager:
                 ratio_change = np.average(np.diff(recent_true_ratio))
                 error_change = np.average(np.diff(recent_unsupervised_loss))
 
+                # 정체 조건을 일단 이렇게 판단을 해봄.
                 if ratio_change < 0.01 and error_change < 0.05:
                     self.image_log[img_id]['stagnation_count'] += 1
                 else:

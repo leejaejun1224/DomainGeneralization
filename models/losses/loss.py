@@ -14,9 +14,9 @@ def get_loss(disp_ests, disp_gts, img_masks, weights):
 
 def calc_supervised_train_loss(data_batch):
     pred_disp, gt_disp, gt_disp_low = data_batch['src_pred_disp'], data_batch['src_disparity'], data_batch['src_disparity_low']
-    mask = (gt_disp > 0) & (gt_disp < 192)
+    mask = (gt_disp > 0) & (gt_disp < 256)
     data_batch['mask'] = mask
-    mask_low = (gt_disp_low > 0) & (gt_disp_low < 192)
+    mask_low = (gt_disp_low > 0) & (gt_disp_low < 256)
     masks = [mask, mask_low, mask, mask_low]
     gt_disps = [gt_disp, gt_disp_low, gt_disp, gt_disp_low]
     # scale별 weight 예시
@@ -27,7 +27,7 @@ def calc_supervised_train_loss(data_batch):
 
 def calc_supervised_val_loss(data_batch):
     pred_disp, gt_disp = data_batch['src_pred_disp'], data_batch['src_disparity']
-    mask = (gt_disp > 0) & (gt_disp < 192)
+    mask = (gt_disp > 0) & (gt_disp < 256)
     data_batch['mask'] = mask
     masks = [mask]
     gt_disps = [gt_disp]
@@ -37,15 +37,20 @@ def calc_supervised_val_loss(data_batch):
     return loss
 
 
-def calc_pseudo_loss(data_batch, cfg):
-    threshold = cfg['uda']['threshold']
+def calc_pseudo_loss(data_batch, threshold):
     pred_disp, pseudo_disp, confidence_map = data_batch['tgt_pred_disp'], data_batch['pseudo_disp'], data_batch['confidence_map']
 
     # print("confidence_map", confidence_map.shape)
     # print("pseudo_disp", pseudo_disp.shape)
     # print("pred_disp", pred_disp[1].shape)
-    
+
+
+    ### only calculate loss for the index number one of output
+    ### not the batch size!!!!!!!!!!!!!!!
     pred_disp = pred_disp[1]
+    print("pred_disp.shape", pred_disp.shape)
+    print("pseudo_disp", pseudo_disp[0].shape)
+    print("threshold", threshold.shape)
     mask = (pseudo_disp[0] > 0) & (pseudo_disp[0] < 256) & (confidence_map.float() >= threshold)
     data_batch['pseudo_mask'] = mask
     mask = mask.tolist()

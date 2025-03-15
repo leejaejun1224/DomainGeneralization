@@ -83,8 +83,10 @@ def train_epoch(model, train_loader, optimizer, threshold_manager, epoch, cfg, a
         data_batch = process_batch(data_batch)
         image_ids = data_batch['target_left_filename']
         threshold_manager.initialize_log(image_ids)
-        
-        log_vars = model.train_step(data_batch, optimizer, batch_idx)
+        threshold = threshold_manager.get_threshold(image_ids).float()
+        print("threshold", threshold)
+
+        log_vars = model.train_step(data_batch, optimizer, batch_idx, threshold)
         
         if not math.isnan(log_vars['loss']):
             train_losses.append(log_vars['loss'])
