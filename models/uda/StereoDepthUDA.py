@@ -110,8 +110,8 @@ class StereoDepthUDA(StereoDepthUDAInference):
             data_batch['confidence_map'] = map[0]
             data_batch['tgt_shape_map'] = map[1]
     
-        
-        pseudo_loss, true_ratio = calc_pseudo_loss(data_batch, self.cfg)
+        threshold = torch.tensor([self.cfg['uda']['threshold']])
+        pseudo_loss, true_ratio = calc_pseudo_loss(data_batch, threshold)
 
         if "src_disparity" in data_batch.keys():
             supervised_loss = calc_supervised_val_loss(data_batch)

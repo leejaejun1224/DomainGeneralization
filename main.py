@@ -12,7 +12,7 @@ from models.uda import __models__
 from torch.utils.data import DataLoader
 from datasets.dataloader import PrepareDataset
 from experiment import prepare_cfg, adjust_learning_rate
-from tools.plot_loss import plot_loss_graph, plot_true_ratio
+from tools.plot_loss import plot_loss_graph, plot_true_ratio, plot_threshold
 from tools.metrics import EPE_metric, D1_metric, Thres_metric
 from models.tools.threshold_manager import ThresholdManager
 
@@ -78,14 +78,13 @@ def train_epoch(model, train_loader, optimizer, threshold_manager, epoch, cfg, a
     adjust_learning_rate(optimizer, epoch, cfg['lr'], cfg['adjust_lr'])
     
     true_ratios, train_losses, train_pseudo_losses = [], [], []
-    
+    average_threshold = []
     for batch_idx, data_batch in enumerate(train_loader):
         data_batch = process_batch(data_batch)
         image_ids = data_batch['target_left_filename']
         threshold_manager.initialize_log(image_ids)
         threshold = threshold_manager.get_threshold(image_ids).float()
-        print("threshold", threshold)
-
+        average_threshold.append(threshold.mean().item())
         log_vars = model.train_step(data_batch, optimizer, batch_idx, threshold)
         
         if not math.isnan(log_vars['loss']):
@@ -97,12 +96,15 @@ def train_epoch(model, train_loader, optimizer, threshold_manager, epoch, cfg, a
             
             if args.compute_metrics:
                 scalar_outputs = compute_metrics_dict(data_batch)
-    
+
+    print("average_threshold", sum(average_threshold)/len(average_threshold))
+
     if train_losses:
         return {
             'train_loss': sum(train_losses) / len(train_losses),
             'true_ratio_train': sum(true_ratios) / len(true_ratios),
-            'train_pseudo_loss': sum(train_pseudo_losses) / len(train_pseudo_losses)
+            'train_pseudo_loss': sum(train_pseudo_losses) / len(train_pseudo_losses),
+            'average_threshold': sum(average_threshold)/len(average_threshold)
         }
     return {'train_loss': 0, 'true_ratio_train': 0, 'train_pseudo_loss': 0}
 
@@ -172,7 +174,8 @@ def main():
     with open(f'{save_dir}/training_log.json', 'w') as f:
         json.dump(log_dict, f, indent=4)
         
-    threshold_manager.save_log()
+    # threshold_manager.save_log()
+    plot_threshold(log_dict, f'{save_dir}/threshold_graph.png')
     plot_loss_graph(log_dict, f'{save_dir}/loss_graph.png')
     plot_true_ratio(log_dict, f'{save_dir}/true_ratio_graph.png')
     

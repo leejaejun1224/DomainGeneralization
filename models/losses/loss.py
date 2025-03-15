@@ -39,27 +39,26 @@ def calc_supervised_val_loss(data_batch):
 
 def calc_pseudo_loss(data_batch, threshold):
     pred_disp, pseudo_disp, confidence_map = data_batch['tgt_pred_disp'], data_batch['pseudo_disp'], data_batch['confidence_map']
-
     # print("confidence_map", confidence_map.shape)
     # print("pseudo_disp", pseudo_disp.shape)
     # print("pred_disp", pred_disp[1].shape)
 
 
     ### only calculate loss for the index number one of output
-    ### not the batch size!!!!!!!!!!!!!!!
+    ### not the batch size!!!!!!!!!!!!!!! dont be confuse
     pred_disp = pred_disp[1]
-    print("pred_disp.shape", pred_disp.shape)
-    print("pseudo_disp", pseudo_disp[0].shape)
-    print("threshold", threshold.shape)
-    mask = (pseudo_disp[0] > 0) & (pseudo_disp[0] < 256) & (confidence_map.float() >= threshold)
+
+
+    ## oh shit it only think about the first index of the output 
+    ## no consider the batch size
+    mask = (pseudo_disp > 0) & (pseudo_disp < 256) & (confidence_map >= threshold.unsqueeze(1).unsqueeze(2).cuda())
     data_batch['pseudo_mask'] = mask
     mask = mask.tolist()
     weights = [1.0]
-    confidence_mask = confidence_map.float() >= threshold
+    confidence_mask = confidence_map >= threshold.unsqueeze(1).unsqueeze(2).cuda()
     true_count = confidence_mask.sum(dim=(0,1,2)) 
     total_pixels = confidence_mask.numel()
     true_ratio = true_count.float() / total_pixels
 
     pseudo_label_loss = get_loss(pred_disp, pseudo_disp, mask, weights)
     return pseudo_label_loss, true_ratio
-
