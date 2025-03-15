@@ -16,6 +16,7 @@ from experiment import prepare_cfg
 from tools.metrics import EPE_metric, D1_metric, Thres_metric, tensor2float
 from tools.write_log import Logger
 from collections import OrderedDict
+from itertools import starmap
 
 cudnn.benchmark = True
 os.environ['CUDA_VISIBLE_DEVICES'] = '0, 1'
@@ -49,6 +50,18 @@ def process_batch(data_batch):
         if isinstance(data_batch[key], torch.Tensor):
             data_batch[key] = data_batch[key].cuda()
     return data_batch
+
+def split_batch(data_batch, batch_idx):
+    batch = {}
+    for key, value in data_batch.items():
+        if isinstance(value, torch.Tensor):
+            batch[key] = value[batch_idx].data  
+        elif isinstance(value, list):
+            if isinstance(value[0], torch.Tensor):
+                batch[key] = [v[batch_idx].data for v in value]  
+            else:
+                batch[key] = value[batch_idx] 
+    return batch
 
 def compute_metrics_dict(data_batch, mask):
     scalar_outputs = {
@@ -95,18 +108,20 @@ def main():
     metrics_dict = {}
     logger = Logger(save_dir)
     logger._setup_directories()
-    
+
     with torch.no_grad():
         for _, data_batch in enumerate(test_loader):
             src = True if 'src_disparity' in data_batch.keys() else False
             tgt = True if 'tgt_disparity' in data_batch.keys() else False
 
-            source_filename = data_batch['source_left_filename'][0].split('/')[-1]
+            
             data_batch = process_batch(data_batch)
             log_vars = model.forward_test(data_batch)
 
-            for idx in range(cfg['test_batch_size']):
-                logger.log(data_batch[idx], log_vars)
+
+            for i in range(cfg['test_batch_size']):
+                batch = split_batch(data_batch, i)
+                logger.log(batch, log_vars)
 
     logger.save_metrics(metrics_dict, log_dir)
     return 0

@@ -36,6 +36,7 @@ class Logger:
 
 
     def save_att(self, data_batch):
+        print(len(data_batch['src_pred_disp']))
         att_prob, _ = data_batch['src_pred_disp'][2].max(dim=0, keepdim=True)
         att_prob = att_prob.squeeze(0).cpu().numpy()
         filename = data_batch['source_left_filename'].split('/')[-1]
@@ -44,9 +45,10 @@ class Logger:
 
     def save_gt(self, data_batch):
         ### just for debug and eye check
-        filename = data_batch['source_left_filename'].split('/')[-1]
-        gt_disp = data_batch['src_disparity'].cpu().numpy()
-        self._save_image(gt_disp, filename, self.gt_dir, cmap='jet')
+        if 'src_disparity' in data_batch.keys():
+            filename = data_batch['source_left_filename'].split('/')[-1]
+            gt_disp = data_batch['src_disparity'].cpu().numpy()
+            self._save_image(gt_disp, filename, self.gt_dir, cmap='jet')
 
 
     def save_disparity(self, data_batch):
@@ -107,4 +109,4 @@ class Logger:
         self.save_gt(data_batch)
         self.save_att(data_batch)
         self.save_disparity(data_batch)
-        self.save_metrics(metrics)
+        # self.save_metrics(metrics)
