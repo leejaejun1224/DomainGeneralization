@@ -62,3 +62,46 @@ def calc_pseudo_loss(data_batch, threshold):
 
     pseudo_label_loss = get_loss(pred_disp, pseudo_disp, mask, weights)
     return pseudo_label_loss, true_ratio
+
+
+def calc_reconstruction_loss(data_batch, alpha=0.85):
+    bs, _, height, width = data_batch['src_left'].shape
+    
+    x_base = torch.linspace(0, width-1, width).repeat(bs, height, 1).type_as(data_batch['src_left'])
+    y_base = torch.linspace(0, height-1, height).repeat(bs, width, 1).transpose(1, 2).type_as(data_batch['src_left'])
+
+    flow = torch.stack((x_base - data_batch['src_pred_disp'].squeeze(1), y_base), dim=1)
+
+    ### [B, C, H, W]
+    img_right_reconstructed = F.grid_sample(data_batch['src_left'], flow.permute(0, 2, 3, 1), mode='bilinear', padding_mode='zeros', align_corners=True)
+
+    ssim = compute_ssim(data_batch['src_left'], img_right_reconstructed)
+    ssim_loss = (1 - ssim)/2
+
+    l1_loss = F.l1_loss(data_batch['src_right'], img_right_reconstructed, reduction='none').mean(dim=(1,2,3))
+
+    reconstuction_loss = alpha * ssim_loss + (1 - alpha) * l1_loss
+
+    return reconstuction_loss.mean()
+
+
+def compute_ssim(img1, img2, window_size=3, channel=3):
+    window = torch.ones(1, channel, window_size, window_size) / (window_size**2)
+    window = window.type_as(img1)
+
+    mean1 = F.conv2d(img1, window, padding=window_size//2, groups=channel)
+    mean2 = F.conv2d(img2, window, padding=window_size//2, groups=channel)
+
+    mean1_sq = mean1.pow(2)
+    mean2_sq = mean2.pow(2)
+    mean12 = mean1 * mean2
+
+    sigma1_sq = F.conv2d(img1*img1, window, padding=window_size//2, groups=channel) - mean1_sq
+    sigma2_sq = F.conv2d(img2*img2, window, padding=window_size//2, groups=channel) - mean2_sq
+    sigma12 = F.conv2d(img1*img2, window, padding=window_size//2, groups=channel) - mean12
+
+    C1 = 1e-5
+    C2 = 1e-5
+
+    ssim_map = ((2*mean1*mean2 + C1)*(2*sigma12 + C2)) / ((mean1_sq + mean2_sq + C1)*(sigma1_sq + sigma2_sq + C2))
+    return ssim_map.mean(dim=(1,2,3))
