@@ -12,7 +12,7 @@ from models.uda import __models__
 from torch.utils.data import DataLoader
 from datasets.dataloader import PrepareDataset
 from experiment import prepare_cfg, adjust_learning_rate
-from tools.plot_loss import plot_loss_graph, plot_true_ratio, plot_threshold
+from tools.plot_loss import plot_loss_graph, plot_true_ratio, plot_threshold, plot_reconstruction_loss
 from tools.metrics import EPE_metric, D1_metric, Thres_metric
 from models.tools.threshold_manager import ThresholdManager
 
@@ -77,7 +77,7 @@ def train_epoch(model, train_loader, optimizer, threshold_manager, epoch, cfg, a
     model.train()
     adjust_learning_rate(optimizer, epoch, cfg['lr'], cfg['adjust_lr'])
     
-    true_ratios, train_losses, train_pseudo_losses = [], [], []
+    true_ratios, train_losses, train_pseudo_losses, reconstruction_losses = [], [], [], []
     average_threshold = []
     for batch_idx, data_batch in enumerate(train_loader):
         data_batch = process_batch(data_batch)
@@ -91,7 +91,7 @@ def train_epoch(model, train_loader, optimizer, threshold_manager, epoch, cfg, a
             train_losses.append(log_vars['loss'])
             train_pseudo_losses.append(log_vars['unsupervised_loss'])
             true_ratios.append(log_vars['true_ratio'])
-            
+            reconstruction_losses.append(log_vars['reconstruction_loss'])
             threshold_manager.update_log(image_ids, log_vars['true_ratio'], log_vars['unsupervised_loss'], epoch)
             
             if args.compute_metrics:
@@ -104,13 +104,14 @@ def train_epoch(model, train_loader, optimizer, threshold_manager, epoch, cfg, a
             'train_loss': sum(train_losses) / len(train_losses),
             'true_ratio_train': sum(true_ratios) / len(true_ratios),
             'train_pseudo_loss': sum(train_pseudo_losses) / len(train_pseudo_losses),
-            'average_threshold': sum(average_threshold)/len(average_threshold)
+            'average_threshold': sum(average_threshold)/len(average_threshold),
+            'reconstruction_loss': sum(reconstruction_losses)/len(reconstruction_losses)
         }
-    return {'train_loss': 0, 'true_ratio_train': 0, 'train_pseudo_loss': 0}
+    return {'train_loss': 0, 'true_ratio_train': 0, 'train_pseudo_loss': 0, 'reconstruction_loss': 0}
 
 def validate(model, test_loader):
     model.eval()
-    val_losses, val_pseudo_losses, true_ratios = [], [], []
+    val_losses, val_pseudo_losses, true_ratios, reconstruction_losses = [], [], [], []
     
     with torch.no_grad():
         for data_batch in test_loader:
@@ -121,14 +122,15 @@ def validate(model, test_loader):
                 val_losses.append(log_vars['loss'])
                 true_ratios.append(log_vars['true_ratio'])
                 val_pseudo_losses.append(log_vars['unsupervised_loss'])
-    
+                reconstruction_losses.append(log_vars['reconstruction_loss'])
     if val_losses:
         return {
             'val_loss': sum(val_losses) / len(val_losses),
             'true_ratio_val': sum(true_ratios) / len(true_ratios),
-            'val_pseudo_loss': sum(val_pseudo_losses) / len(val_pseudo_losses)
+            'val_pseudo_loss': sum(val_pseudo_losses) / len(val_pseudo_losses),
+            'reconstruction_loss': sum(reconstruction_losses)/len(reconstruction_losses)
         }
-    return {'val_loss': 0, 'true_ratio_val': 0, 'val_pseudo_loss': 0}
+    return {'val_loss': 0, 'true_ratio_val': 0, 'val_pseudo_loss': 0, 'reconstruction_loss': 0}
 
 def save_checkpoint(model, optimizer, epoch, save_dir):
     checkpoint = {
@@ -178,6 +180,7 @@ def main():
     plot_threshold(log_dict, f'{save_dir}/threshold_graph.png')
     plot_loss_graph(log_dict, f'{save_dir}/loss_graph.png')
     plot_true_ratio(log_dict, f'{save_dir}/true_ratio_graph.png')
+    plot_reconstruction_loss(log_dict, f'{save_dir}/reconstruction_loss_graph.png')
     
     return 0
 

@@ -7,7 +7,10 @@ from models.losses.loss import get_loss
 from models.estimator import __models__
 from models.uda.decorator import StereoDepthUDAInference
 
-from models.losses.loss import calc_supervised_train_loss, calc_supervised_val_loss, calc_pseudo_loss
+from models.losses.loss import calc_supervised_train_loss
+from models.losses.loss import calc_supervised_val_loss
+from models.losses.loss import calc_pseudo_loss
+from models.losses.loss import calc_reconstruction_loss
 import time
 
 
@@ -76,17 +79,18 @@ class StereoDepthUDA(StereoDepthUDAInference):
 
         supervised_loss = calc_supervised_train_loss(data_batch)
         pseudo_loss, true_ratio = calc_pseudo_loss(data_batch, threshold)
+        reconstruction_loss = calc_reconstruction_loss(data_batch)
 
         # 만약에 pseudo loss가 nan이 나오면 그냥 total loss로만 backward를 하면 되나
 
-        total_loss = supervised_loss + pseudo_loss*true_ratio
-        # total_loss = supervised_loss
+        total_loss = supervised_loss + pseudo_loss*true_ratio + (1-true_ratio)*reconstruction_loss
 
         log_vars = {
             'loss': total_loss.item(),
             'supervised_loss': supervised_loss.item(),
             'unsupervised_loss': pseudo_loss.item(),
-            'true_ratio': true_ratio.item()
+            'true_ratio': true_ratio.item(),
+            'reconstruction_loss': reconstruction_loss.item()
         }
         total_loss.backward()
     
@@ -119,13 +123,15 @@ class StereoDepthUDA(StereoDepthUDAInference):
             supervised_loss = calc_supervised_val_loss(data_batch)
         else:
             supervised_loss = torch.tensor(0.0)
-
-        total_loss = supervised_loss + pseudo_loss * true_ratio
         
+        reconstruction_loss = calc_reconstruction_loss(data_batch)
+
+        total_loss = supervised_loss + pseudo_loss * true_ratio + (1-true_ratio)*reconstruction_loss
         log_vars = {
             'loss': total_loss.item(),
             'supervised_loss': supervised_loss.item(),
             'unsupervised_loss': pseudo_loss.item(),
-            'true_ratio': true_ratio.item()
+            'true_ratio': true_ratio.item(),
+            'reconstruction_loss': reconstruction_loss.item()
         }
         return log_vars
