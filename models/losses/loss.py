@@ -71,10 +71,15 @@ def calc_reconstruction_loss(data_batch, alpha=0.85):
     x_base = torch.linspace(0, width-1, width).repeat(bs, height, 1).type_as(data_batch['tgt_left'])
     y_base = torch.linspace(0, height-1, height).repeat(bs, width, 1).transpose(1, 2).type_as(data_batch['tgt_left'])
 
-    flow = torch.stack((x_base - data_batch['pseudo_disp'][0].squeeze(1), y_base), dim=1)
+    x_warped = x_base - data_batch['pseudo_disp'][0].squeeze(1)
+
+    x_norm = 2.0 * x_warped / (width-1) - 1.0   
+    y_norm = 2.0 * y_base / (height-1) - 1.0
+
+    flow_field = torch.stack((x_norm, y_norm), dim=1).permute(0, 2, 3, 1)
 
     ### [B, C, H, W]
-    img_right_reconstructed = F.grid_sample(data_batch['tgt_left'], flow.permute(0, 2, 3, 1), mode='bilinear', padding_mode='zeros', align_corners=True)
+    img_right_reconstructed = F.grid_sample(data_batch['tgt_left'], flow_field.permute(0, 2, 3, 1), mode='bilinear', padding_mode='zeros', align_corners=True)
 
     ssim = compute_ssim(data_batch['tgt_right'], img_right_reconstructed)
     ssim_loss = (1 - ssim)/2
