@@ -10,9 +10,8 @@ from experiment import prepare_cfg
 
 processor = SegformerImageProcessor.from_pretrained('nvidia/segformer-b0-finetuned-ade-512-512')
 
-model = SegformerModel.from_pretrained('nvidia/segformer-b0-finetuned-ade-512-512')
-encoder = model.encoder
-model.eval()
+
+# model.eval()
 
 
 def setup_args():
@@ -45,16 +44,22 @@ def plot_attention_score(model_path, image_path, click_pos):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     # 3. 모델 로드 및 학습된 가중치 적용
-    # model = __models__['StereoDepthUDA'](cfg)
-    # checkpoint = torch.load(model_path)  # 모델 초기화
-    # model.student_model.load_state_dict(checkpoint['student_state_dict'])
-    # model.teacher_model.load_state_dict(checkpoint['teacher_state_dict'])
-    
+    model = __models__['StereoDepthUDA'](cfg)
+    checkpoint = torch.load(model_path)  # 모델 초기화
+    model.student_model.load_state_dict(checkpoint['student_state_dict'])
+    model.teacher_model.load_state_dict(checkpoint['teacher_state_dict'])
     model.to('cuda:0')
     model.eval()
+    encoder = model.student_model.feature.encoder  # Fast_ACVNet_plus의 FeatureMiT.encoder
+    
+
+
+    # model = SegformerModel.from_pretrained('nvidia/segformer-b0-finetuned-ade-512-512')
+    # encoder = model.encoder
+    # model.to('cuda:0')
+    # model.eval()
 
     # 4. FeatureMiT 인코더 접근
-    # encoder = model.student_model.feature.encoder  # Fast_ACVNet_plus의 FeatureMiT.encoder
 
     # 5. 이미지 입력
     pixel_values = preprocess_image(image_path).to(device)  # [1, 3, 512, 512]
@@ -111,17 +116,20 @@ def plot_attention_score(model_path, image_path, click_pos):
     ax1.axis('off')
 
     # Attention 히트맵
-    ax2.imshow(img, alpha=0.5)
-    ax2.imshow(attn_scores, cmap='jet', alpha=0.5)
+    im2 = ax2.imshow(img, alpha=0.5)
+    im = ax2.imshow(attn_scores, cmap='jet', alpha=0.5, vmin=0, vmax=0.03)
     ax2.scatter(y_scaled, x_scaled, c='red', s=50)
     ax2.set_title("Attention Score Heatmap")
     ax2.axis('off')
+    
+    # Add colorbar
+    plt.colorbar(im, ax=ax2, label='Attention Score')
 
     plt.show()
 
 # 9. 실행
 if __name__ == "__main__":
     model_path = "/home/jaejun/DomainGeneralization/log/2025-03-13_20_41/checkpoint_epoch750.pth"  # 학습된 가중치 파일 경로
-    image_path = "/home/jaejun/dataset/kitti_2015/training/image_2/000004_11.png"  # 실제 이미지 경로
-    click_pos = (180, 650)  # 원본 크기 기준 클릭 좌표 (예: 1280x1824)
+    image_path = "/home/jaejun/Pictures/road.jpg"  # 실제 이미지 경로
+    click_pos = (500, 700)  # 원본 크기 기준 클릭 좌표 (예: 1280x1824)
     plot_attention_score(model_path, image_path, click_pos)

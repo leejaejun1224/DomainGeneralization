@@ -79,16 +79,16 @@ def calc_reconstruction_loss(data_batch, alpha=0.85):
     flow_field = torch.stack((x_norm, y_norm), dim=1).permute(0, 2, 3, 1)
 
     ### [B, C, H, W]
-    img_right_reconstructed = F.grid_sample(data_batch['tgt_left'], flow_field.permute(0, 2, 3, 1), mode='bilinear', padding_mode='zeros', align_corners=True)
+    img_right_reconstructed = F.grid_sample(data_batch['tgt_left'], flow_field, mode='bilinear', padding_mode='zeros', align_corners=True)
 
     ssim = compute_ssim(data_batch['tgt_right'], img_right_reconstructed)
     ssim_loss = (1 - ssim)/2
 
     l1_loss = F.l1_loss(data_batch['tgt_right'], img_right_reconstructed, reduction='none').mean(dim=(1,2,3))
 
-    reconstuction_loss = alpha * ssim_loss + (1 - alpha) * l1_loss
-
-    return reconstuction_loss.mean()
+    # reconstruction_loss = alpha * ssim_loss + (1 - alpha) * l1_loss
+    reconstruction_loss = (1 - alpha) * l1_loss
+    return reconstruction_loss.mean()
 
 
 def compute_ssim(img1, img2, window_size=3, channel=3):
