@@ -67,6 +67,7 @@ def calc_pseudo_loss(data_batch, threshold):
 def calc_reconstruction_loss(data_batch, alpha=0.85):
     bs, _, height, width = data_batch['tgt_left'].shape
     
+
     x_base = torch.linspace(0, width-1, width).repeat(bs, height, 1).type_as(data_batch['tgt_left'])
     y_base = torch.linspace(0, height-1, height).repeat(bs, width, 1).transpose(1, 2).type_as(data_batch['tgt_left'])
 
@@ -75,7 +76,7 @@ def calc_reconstruction_loss(data_batch, alpha=0.85):
     ### [B, C, H, W]
     img_right_reconstructed = F.grid_sample(data_batch['tgt_left'], flow.permute(0, 2, 3, 1), mode='bilinear', padding_mode='zeros', align_corners=True)
 
-    ssim = compute_ssim(data_batch['tgt_left'], img_right_reconstructed)
+    ssim = compute_ssim(data_batch['tgt_right'], img_right_reconstructed)
     ssim_loss = (1 - ssim)/2
 
     l1_loss = F.l1_loss(data_batch['tgt_right'], img_right_reconstructed, reduction='none').mean(dim=(1,2,3))
