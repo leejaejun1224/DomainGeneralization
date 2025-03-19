@@ -3,21 +3,23 @@ import numpy as np
 import torch
 import torch.nn as nn
 from copy import deepcopy
+import torch.nn.functional as F
 from models.losses.loss import get_loss
 from models.estimator import __models__
 from models.uda.decorator import StereoDepthUDAInference
 
 from models.losses.loss import calc_supervised_train_loss
 from models.losses.loss import calc_supervised_val_loss
-from models.losses.loss import calc_pseudo_loss
+from models.losses.loss import calc_pseudo_loss, calc_pseudo_soft_loss
 from models.losses.loss import calc_reconstruction_loss
 import time
 
-
 class StereoDepthUDA(StereoDepthUDAInference):
-    def __init__(self, cfg):
+    def __init__(self, cfg, student_optimizer, teacher_optimizer):
         super().__init__(cfg)
         self.cfg = cfg
+        self.student_optimizer = student_optimizer
+        self.teacher_optimizer = teacher_optimizer
 
     def update_ema(self, iter, alpha=0.99):
         alpha_teacher = min(1 - 1 / (iter + 1), alpha)
@@ -46,7 +48,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
         return self.teacher_model.state_dict()
     
     
-    def val_step(self):
+    def val_step(self, data_batch):
         pass
     
     "args : optimizer, data_batchhhhh"
@@ -141,4 +143,57 @@ class StereoDepthUDA(StereoDepthUDAInference):
             'true_ratio': true_ratio.item(),
             'reconstruction_loss': reconstruction_loss.item()
         }
+        return log_vars
+
+    def meta_pseudo_training(self, data_batch, optimizer, iter, threshold):
+        
+        self.student_optimizer.zero_grad()
+        self.teacher_optimizer.zero_grad()
+        
+
+        teacher_supervised_loss = calc_supervised_train_loss(data_batch)
+        # teacher_unsupervised_loss = calc_pseudo_loss(data_batch, threshold)
+
+        student_loss_previous_labeled = calc_supervised_train_loss(data_batch)
+
+        ### 그러면 여기서의 loss는 teacher와 student의 soft label이다. 
+        student_loss_previous_unlabeled = calc_pseudo_soft_loss(data_batch, threshold)
+
+        ### 여기 사이에서 backpropagation이 student에게 발생을 해야한다. 
+        ### 여기서 lambda는 일단 0.5로 고정을 한 번 해보자.
+        student_total_loss = student_loss_previous_labeled + 0.5 * student_loss_previous_unlabeled
+        student_total_loss.backward()
+
+
+        self.student_optimizer.step()
+        self.student_optimizer.zero_grad()
+
+
+        student_loss_updated_labeled = calc_supervised_train_loss(data_batch)
+
+        student_update_signal = student_loss_updated_labeled - student_loss_previous_labeled
+
+        with torch.no_grad():
+            # Student가 새로 업데이트된 상태로 unlabeled predict
+            student_tgt_pred, _ = self.student_forward(data_batch['tgt_left'], data_batch['tgt_right'])
+            # stereo -> shape (B, H, W)
+        teacher_disp, _ = self.teacher_forward(data_batch['tgt_left'], data_batch['tgt_right'])
+        
+        teacher_loss_mpl = F.l1_loss(teacher_disp, student_tgt_pred, reduction='mean')
+
+        t_loss_mpl = student_update_signal * teacher_loss_mpl
+        teacher_total_loss = teacher_supervised_loss + t_loss_mpl
+        teacher_total_loss.backward()
+        self.teacher_optimizer.step()
+
+
+        total_loss = student_total_loss + teacher_total_loss
+        log_vars = {
+            'loss': total_loss.item(),
+            'supervised_loss': student_total_loss.item(),
+            'unsupervised_loss': teacher_total_loss.item()
+            # 'true_ratio': true_ratio.item()
+            # 'reconstruction_loss': reconstruction_loss.item()
+        }
+
         return log_vars

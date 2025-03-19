@@ -64,6 +64,17 @@ def calc_pseudo_loss(data_batch, threshold):
     return pseudo_label_loss, true_ratio
 
 
+def calc_pseudo_soft_loss(data_batch, threshold):
+    pred_disp, pseudo_disp = data_batch['tgt_pred_disp'], data_batch['pseudo_disp'][1]
+
+    mask = (pseudo_disp > 0) & (pseudo_disp < 256)
+    data_batch['pseudo_mask'] = mask
+    mask = mask.tolist()
+    weights = [1.0]
+    pseudo_soft_loss = get_loss(pred_disp, pseudo_disp, mask, weights)
+    return pseudo_soft_loss
+
+
 def calc_reconstruction_loss(data_batch, alpha=0.85):
     bs, _, height, width = data_batch['tgt_left'].shape
     
