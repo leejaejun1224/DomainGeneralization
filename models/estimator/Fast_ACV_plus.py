@@ -335,7 +335,11 @@ class Fast_ACVNet_plus(nn.Module):
         # else:
         att_prob = torch.gather(att_weights, 2, ind_k).squeeze(1)
         att_prob = F.softmax(att_prob, dim=1)
-        print("att_prob.shape", att_prob.shape)
+        ### att_prob.shape = [batch, 24, 64, 128]
+        ### 여기서 disparity sample top k는 top 24개의 disparity sample이다. 
+        ### 그리고 이 sample들의 확률들이 순서대로 적혀있는 것이 att_prob임. 고로 이걸 그대로 label로 쓰면
+        ### 아니지 되나?
+
         pred_att = torch.sum(att_prob * disparity_sample_topk, dim=1)
         pred_att_up = context_upsample(pred_att.unsqueeze(1), spx_pred)
 

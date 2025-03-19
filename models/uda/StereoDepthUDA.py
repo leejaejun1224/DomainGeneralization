@@ -15,7 +15,7 @@ from models.losses.loss import calc_reconstruction_loss
 import time
 
 class StereoDepthUDA(StereoDepthUDAInference):
-    def __init__(self, cfg, student_optimizer, teacher_optimizer):
+    def __init__(self, cfg, student_optimizer=0.0, teacher_optimizer=0.0):
         super().__init__(cfg)
         self.cfg = cfg
         self.student_optimizer = student_optimizer
