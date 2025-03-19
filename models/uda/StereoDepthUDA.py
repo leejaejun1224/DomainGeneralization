@@ -104,10 +104,10 @@ class StereoDepthUDA(StereoDepthUDAInference):
     @torch.no_grad()
     def forward_test(self, data_batch):
         start = time.time()
-        data_batch['src_pred_disp'], map = self.student_forward(data_batch['src_left'], data_batch['src_right'])
+        data_batch['src_pred_disp_s'], map = self.student_forward(data_batch['src_left'], data_batch['src_right'])
         end = time.time()
         print(f"forward time: {end - start}")
-        data_batch['tgt_pred_disp'], map = self.student_forward(data_batch['tgt_left'], data_batch['tgt_right'])
+        data_batch['tgt_pred_disp_s'], map = self.student_forward(data_batch['tgt_left'], data_batch['tgt_right'])
         
         data_batch['src_shape_map'] = map[1]
         data_batch['soft_label'] = map[2]
@@ -158,7 +158,6 @@ class StereoDepthUDA(StereoDepthUDAInference):
 
         ### 그러면 여기서의 loss는 teacher와 student의 soft label이다. 
         student_loss_previous_unlabeled = calc_pseudo_soft_loss(data_batch, threshold)
-
         ### 여기 사이에서 backpropagation이 student에게 발생을 해야한다. 
         ### 여기서 lambda는 일단 0.5로 고정을 한 번 해보자.
         student_total_loss = student_loss_previous_labeled + 0.5 * student_loss_previous_unlabeled
@@ -171,7 +170,9 @@ class StereoDepthUDA(StereoDepthUDAInference):
 
         student_loss_updated_labeled = calc_supervised_train_loss(data_batch)
 
-        student_update_signal = student_loss_updated_labeled - student_loss_previous_labeled
+        ## 이렇게도 쓰고 결국에는 수렴도 한다고는 하는데 일단 나는 아래의 방식을 따를 예정
+        # student_update_signal = student_loss_updated_labeled - student_loss_previous_labeled
+        student_update_signal = student_loss_previous_labeled - student_loss_updated_labeled
 
         with torch.no_grad():
             # Student가 새로 업데이트된 상태로 unlabeled predict
@@ -186,14 +187,13 @@ class StereoDepthUDA(StereoDepthUDAInference):
         teacher_total_loss.backward()
         self.teacher_optimizer.step()
 
-
         total_loss = student_total_loss + teacher_total_loss
         log_vars = {
             'loss': total_loss.item(),
             'supervised_loss': student_total_loss.item(),
-            'unsupervised_loss': teacher_total_loss.item()
-            # 'true_ratio': true_ratio.item()
-            # 'reconstruction_loss': reconstruction_loss.item()
+            'unsupervised_loss': teacher_total_loss.item(),
+            'true_ratio': 0.0,
+            'reconstruction_loss': 0.0
         }
 
         return log_vars
