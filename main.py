@@ -60,11 +60,11 @@ def setup_data_loaders(cfg):
 
 def compute_metrics_dict(data_batch):
     return {
-        "EPE": [EPE_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'])],
-        "D1": [D1_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'])],
-        "Thres1": [Thres_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'], 1.0)],
-        "Thres2": [Thres_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'], 2.0)],
-        "Thres3": [Thres_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], data_batch['mask'], 3.0)]
+        "EPE": [EPE_metric(data_batch['src_pred_disp_s'][0], data_batch['src_disparity'], data_batch['mask'])],
+        "D1": [D1_metric(data_batch['src_pred_disp_s'][0], data_batch['src_disparity'], data_batch['mask'])],
+        "Thres1": [Thres_metric(data_batch['src_pred_disp_s'][0], data_batch['src_disparity'], data_batch['mask'], 1.0)],
+        "Thres2": [Thres_metric(data_batch['src_pred_disp_s'][0], data_batch['src_disparity'], data_batch['mask'], 2.0)],
+        "Thres3": [Thres_metric(data_batch['src_pred_disp_s'][0], data_batch['src_disparity'], data_batch['mask'], 3.0)]
     }
 
 def process_batch(data_batch):

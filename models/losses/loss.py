@@ -81,7 +81,7 @@ def calc_pseudo_soft_loss(data_batch, threshold, model='s'):
     return pseudo_soft_loss
 
 
-def calc_reconstruction_loss(data_batch, alpha=0.85):
+def calc_reconstruction_loss(data_batch, model='s', alpha=0.85):
     bs, _, height, width = data_batch['tgt_left'].shape
     
 

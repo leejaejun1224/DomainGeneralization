@@ -67,10 +67,10 @@ class StereoDepthUDA(StereoDepthUDAInference):
     def forward_train(self, data_batch, threshold):
         
         src_pred, map = self.student_forward(data_batch['src_left'], data_batch['src_right'])
-        data_batch['src_pred_disp'] = src_pred
+        data_batch['src_pred_disp_s'] = src_pred
         
         tgt_pred, map = self.student_forward(data_batch['tgt_left'], data_batch['tgt_right'])  
-        data_batch['tgt_pred_disp'] = tgt_pred
+        data_batch['tgt_pred_disp_s'] = tgt_pred
         
         
         with torch.no_grad():
@@ -79,9 +79,9 @@ class StereoDepthUDA(StereoDepthUDAInference):
             data_batch['pseudo_disp'] = pseudo_disp
             data_batch['confidence_map'] = map[0]
 
-        supervised_loss = calc_supervised_train_loss(data_batch)
-        pseudo_loss, true_ratio = calc_pseudo_loss(data_batch, threshold)
-        reconstruction_loss = calc_reconstruction_loss(data_batch)
+        supervised_loss = calc_supervised_train_loss(data_batch, model='s')
+        pseudo_loss, true_ratio = calc_pseudo_loss(data_batch, threshold, model='s')
+        reconstruction_loss = calc_reconstruction_loss(data_batch, model='s')
 
         # 만약에 pseudo loss가 nan이 나오면 그냥 total loss로만 backward를 하면 되나
 
@@ -127,11 +127,11 @@ class StereoDepthUDA(StereoDepthUDAInference):
         pseudo_loss, true_ratio = calc_pseudo_loss(data_batch, threshold)
 
         if "src_disparity" in data_batch.keys():
-            supervised_loss = calc_supervised_val_loss(data_batch)
+            supervised_loss = calc_supervised_val_loss(data_batch, model='s')
         else:
             supervised_loss = torch.tensor(0.0)
         
-        reconstruction_loss = calc_reconstruction_loss(data_batch)
+        reconstruction_loss = calc_reconstruction_loss(data_batch, model='s')
 
         # total_loss = supervised_loss + true_ratio * pseudo_loss  + (1-true_ratio)*reconstruction_loss
         total_loss = supervised_loss + true_ratio * pseudo_loss 
@@ -151,13 +151,13 @@ class StereoDepthUDA(StereoDepthUDAInference):
         self.teacher_optimizer.zero_grad()
         
 
-        teacher_supervised_loss = calc_supervised_train_loss(data_batch)
+        teacher_supervised_loss = calc_supervised_train_loss(data_batch, model='t')
         # teacher_unsupervised_loss = calc_pseudo_loss(data_batch, threshold)
 
-        student_loss_previous_labeled = calc_supervised_train_loss(data_batch)
+        student_loss_previous_labeled = calc_supervised_train_loss(data_batch, model='s')
 
         ### 그러면 여기서의 loss는 teacher와 student의 soft label이다. 
-        student_loss_previous_unlabeled = calc_pseudo_soft_loss(data_batch, threshold)
+        student_loss_previous_unlabeled = calc_pseudo_soft_loss(data_batch, threshold, model='t')
         ### 여기 사이에서 backpropagation이 student에게 발생을 해야한다. 
         ### 여기서 lambda는 일단 0.5로 고정을 한 번 해보자.
         student_total_loss = student_loss_previous_labeled + 0.5 * student_loss_previous_unlabeled
@@ -168,7 +168,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
         self.student_optimizer.zero_grad()
 
 
-        student_loss_updated_labeled = calc_supervised_train_loss(data_batch)
+        student_loss_updated_labeled = calc_supervised_train_loss(data_batch, model='s')
 
         ## 이렇게도 쓰고 결국에는 수렴도 한다고는 하는데 일단 나는 아래의 방식을 따를 예정
         # student_update_signal = student_loss_updated_labeled - student_loss_previous_labeled
