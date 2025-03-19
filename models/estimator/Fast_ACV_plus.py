@@ -319,26 +319,30 @@ class Fast_ACVNet_plus(nn.Module):
         spx_pred = self.spx(xspx)
         spx_pred = F.softmax(spx_pred, 1)
 
-        if self.training:
-            att_prob = torch.gather(att_weights, 2, ind_k).squeeze(1)
-            att_prob = F.softmax(att_prob, dim=1)
-            pred_att = torch.sum(att_prob * disparity_sample_topk, dim=1)
-            pred_att_up = context_upsample(pred_att.unsqueeze(1), spx_pred)
-            if self.att_weights_only:
-                return [pred_att_up * 4, pred_att * 4]
-            else:
-                pred = regression_topk(cost.squeeze(1), disparity_sample_topk, 2)
-                pred_up = context_upsample(pred, spx_pred)
-                confidence_map, _ = att_prob.max(dim=1, keepdim=True)
-                return [pred_up * 4, pred.squeeze(1) * 4, pred_att_up * 4, pred_att * 4], [confidence_map.squeeze(1), entropy_map]
-        else:
-            att_prob = torch.gather(att_weights, 2, ind_k).squeeze(1)
-            att_prob = F.softmax(att_prob, dim=1)
-            if self.att_weights_only:
-                pred_att = torch.sum(att_prob * disparity_sample_topk, dim=1)
-                pred_att_up = context_upsample(pred_att.unsqueeze(1), spx_pred)
-                return [pred_att_up * 4]
-            pred = regression_topk(cost.squeeze(1), disparity_sample_topk, 2)
-            pred_up = context_upsample(pred, spx_pred)
-            confidence_map, _ = att_prob.max(dim=1, keepdim=True)
-            return [pred_up * 4, pred.squeeze(1) * 4, att_prob], [confidence_map.squeeze(1), entropy_map]
+        ## do i have to do this?
+        # if self.training:
+        #     att_prob = torch.gather(att_weights, 2, ind_k).squeeze(1)
+        #     att_prob = F.softmax(att_prob, dim=1)
+        #     pred_att = torch.sum(att_prob * disparity_sample_topk, dim=1)
+        #     pred_att_up = context_upsample(pred_att.unsqueeze(1), spx_pred)
+        #     if self.att_weights_only:
+        #         return [pred_att_up * 4, pred_att * 4]
+        #     else:
+        #         pred = regression_topk(cost.squeeze(1), disparity_sample_topk, 2)
+        #         pred_up = context_upsample(pred, spx_pred)
+        #         confidence_map, _ = att_prob.max(dim=1, keepdim=True)
+        #         return [pred_up * 4, pred.squeeze(1) * 4, pred_att_up * 4, pred_att * 4], [confidence_map.squeeze(1), entropy_map]
+        # else:
+        att_prob = torch.gather(att_weights, 2, ind_k).squeeze(1)
+        att_prob = F.softmax(att_prob, dim=1)
+        print("att_prob.shape", att_prob.shape)
+        pred_att = torch.sum(att_prob * disparity_sample_topk, dim=1)
+        pred_att_up = context_upsample(pred_att.unsqueeze(1), spx_pred)
+
+        if self.att_weights_only:
+            return [pred_att_up * 4, pred_att * 4]
+        
+        pred = regression_topk(cost.squeeze(1), disparity_sample_topk, 2)
+        pred_up = context_upsample(pred, spx_pred)
+        confidence_map, _ = att_prob.max(dim=1, keepdim=True)
+        return [pred_up * 4, pred.squeeze(1) * 4, pred_att_up * 4, pred_att * 4], [confidence_map.squeeze(1), entropy_map, att_prob]

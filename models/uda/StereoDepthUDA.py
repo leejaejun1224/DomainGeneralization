@@ -64,15 +64,15 @@ class StereoDepthUDA(StereoDepthUDAInference):
     "forward propagation"
     def forward_train(self, data_batch, threshold):
         
-        src_pred, map = self.forward(data_batch['src_left'], data_batch['src_right'])
+        src_pred, map = self.student_forward(data_batch['src_left'], data_batch['src_right'])
         data_batch['src_pred_disp'] = src_pred
         
-        tgt_pred, map = self.forward(data_batch['tgt_left'], data_batch['tgt_right'])  
+        tgt_pred, map = self.student_forward(data_batch['tgt_left'], data_batch['tgt_right'])  
         data_batch['tgt_pred_disp'] = tgt_pred
         
         
         with torch.no_grad():
-            pseudo_disp, map = self.ema_forward(
+            pseudo_disp, map = self.teacher_forward(
                 data_batch['tgt_left'], data_batch['tgt_right'])
             data_batch['pseudo_disp'] = pseudo_disp
             data_batch['confidence_map'] = map[0]
@@ -83,7 +83,8 @@ class StereoDepthUDA(StereoDepthUDAInference):
 
         # 만약에 pseudo loss가 nan이 나오면 그냥 total loss로만 backward를 하면 되나
 
-        total_loss = supervised_loss + pseudo_loss*true_ratio + (1-true_ratio)*reconstruction_loss
+        # total_loss = supervised_loss + pseudo_loss*true_ratio + (1-true_ratio)*reconstruction_loss
+        total_loss = supervised_loss + true_ratio * pseudo_loss
 
         log_vars = {
             'loss': total_loss.item(),
@@ -92,6 +93,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
             'true_ratio': true_ratio.item(),
             'reconstruction_loss': reconstruction_loss.item()
         }
+
         total_loss.backward()
     
         return log_vars
@@ -100,15 +102,16 @@ class StereoDepthUDA(StereoDepthUDAInference):
     @torch.no_grad()
     def forward_test(self, data_batch):
         start = time.time()
-        data_batch['src_pred_disp'], map = self.forward(data_batch['src_left'], data_batch['src_right'])
+        data_batch['src_pred_disp'], map = self.student_forward(data_batch['src_left'], data_batch['src_right'])
         end = time.time()
         print(f"forward time: {end - start}")
-        data_batch['tgt_pred_disp'], map = self.forward(data_batch['tgt_left'], data_batch['tgt_right'])
+        data_batch['tgt_pred_disp'], map = self.student_forward(data_batch['tgt_left'], data_batch['tgt_right'])
         
         data_batch['src_shape_map'] = map[1]
+        data_batch['soft_label'] = map[2]
         
         with torch.no_grad():
-            pseudo_disp, map = self.ema_forward(
+            pseudo_disp, map = self.teacher_forward(
                 data_batch['tgt_left'], data_batch['tgt_right'])
             
             # ㅋㅋ 이 1이 뭐더라 시발
@@ -116,7 +119,9 @@ class StereoDepthUDA(StereoDepthUDAInference):
             data_batch['confidence_map'] = map[0]
             data_batch['tgt_shape_map'] = map[1]
     
-        threshold = torch.tensor([self.cfg['uda']['threshold']])
+
+        ## pseudo loss를 계산을 할 때 threshold를 두는 게 맞아?
+        threshold = torch.tensor([self.cfg['uda']['val_threshold']])
         pseudo_loss, true_ratio = calc_pseudo_loss(data_batch, threshold)
 
         if "src_disparity" in data_batch.keys():
@@ -126,7 +131,9 @@ class StereoDepthUDA(StereoDepthUDAInference):
         
         reconstruction_loss = calc_reconstruction_loss(data_batch)
 
-        total_loss = supervised_loss + pseudo_loss * true_ratio + (1-true_ratio)*reconstruction_loss
+        # total_loss = supervised_loss + true_ratio * pseudo_loss  + (1-true_ratio)*reconstruction_loss
+        total_loss = supervised_loss + true_ratio * pseudo_loss 
+
         log_vars = {
             'loss': total_loss.item(),
             'supervised_loss': supervised_loss.item(),
