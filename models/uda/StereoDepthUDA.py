@@ -14,6 +14,9 @@ from models.losses.loss import calc_pseudo_loss, calc_pseudo_soft_loss
 from models.losses.loss import calc_reconstruction_loss
 import time
 
+
+### if student => model = 's'
+### if teacher => model = 't'
 class StereoDepthUDA(StereoDepthUDAInference):
     def __init__(self, cfg, student_optimizer=0.0, teacher_optimizer=0.0):
         super().__init__(cfg)
