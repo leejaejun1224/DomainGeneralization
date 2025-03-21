@@ -26,6 +26,7 @@ def parse_args():
     parser.add_argument('--seed', default=1, metavar='S', help='random seed(default = 1)')
     parser.add_argument('--log_dir', default='./log', help='log directory')
     parser.add_argument('--compute_metrics', default=True, help='compute metrics')
+    parser.add_argument('--checkpoint', default=None, help='load checkpoint')
     return parser.parse_args()
 
 def setup_environment(args):
@@ -151,6 +152,11 @@ def main():
     train_loader, test_loader = setup_data_loaders(cfg)
     
     model = __models__['StereoDepthUDA'](cfg)
+    if args.checkpoint is not None:
+        ### 여기까지의 epoch이 뭔지를 알면 좋을 것 같은데.
+        checkpoint = torch.load(args.checkpoint)
+        model.student_model.load_state_dict(checkpoint['student_state_dict'])
+        model.teacher_model.load_state_dict(checkpoint['teacher_state_dict'])
     model.to('cuda:0')
     model.init_ema()
     
