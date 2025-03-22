@@ -96,14 +96,13 @@ class DrivingStereoDataset(Dataset):
             right_img = right_img[0:880, 0:400, :]
             disparity = disparity[0:880, 0:400]
             # pad images
-            left_img = np.lib.pad(left_img, ((0, 0), (0, 0), (0, 0)), mode='constant', constant_values=0)
-            right_img = np.lib.pad(right_img, ((0, 0), (0, 0), (0, 0)), mode='constant', constant_values=0)
-            disparity = np.lib.pad(disparity, ((0, 0), (0, 0)), mode='constant', constant_values=0)
 
             if disparity is not None:
                 return {"left": left_img,
                         "right": right_img,
-                        "disparity": disparity}
+                        "disparity": disparity,
+                        "left_filename": self.left_filenames[index],
+                        "right_filename": self.right_filenames[index]}
             else:
                 return {"left": left_img,
                         "right": right_img,

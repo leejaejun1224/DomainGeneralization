@@ -16,7 +16,7 @@ source_dataset = 'kitti_2015'
 # source_dataset = 'cityscapes'
 # target_dataset = 'kitti_2015'
 # target_dataset = 'kitti_2015'
-target_dataset = 'cityscapes'
+target_dataset = 'kitti_2015'
 
 source_train = {}
 source_train['type'] = f'{source_dataset}'

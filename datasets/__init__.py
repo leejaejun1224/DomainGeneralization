@@ -5,7 +5,7 @@ from .driving_stereo import DrivingStereoDataset
 
 __datasets__ = {
     "cityscapes": CityscapesDataset,
-    "kitti2015": KITTI2015Dataset,
-    "kitti2012": KITTI2012Dataset,
+    "kitti_2015": KITTI2015Dataset,
+    "kitti_2012": KITTI2012Dataset,
     "driving_stereo": DrivingStereoDataset
 }

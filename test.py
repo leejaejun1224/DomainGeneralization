@@ -49,10 +49,14 @@ def setup_model(cfg, ckpt_path):
 def process_batch(data_batch, source_batch, target_batch):
     for key in source_batch:
         if isinstance(source_batch[key], torch.Tensor):
-            data_batch[key] = source_batch[key].cuda()
+            data_batch['src_' + key] = source_batch[key].cuda()
+        else:
+            data_batch['src_' + key] = source_batch[key]
     for key in target_batch:
         if isinstance(target_batch[key], torch.Tensor):
-            data_batch[key] = target_batch[key].cuda()
+            data_batch['tgt_' + key] = target_batch[key].cuda()
+        else:
+            data_batch['tgt_' + key] = target_batch[key]
     return data_batch
 
 def split_batch(data_batch, batch_idx):
@@ -80,14 +84,14 @@ def main():
     cfg = prepare_cfg(args, mode='test')
     
     source_dataset = __datasets__[cfg['dataset']['src_type']](
-        source_datapath=cfg['dataset']['src_root'],
-        sourcefile_list=cfg['dataset']['src_filelist'],
+        datapath=cfg['dataset']['src_root'],
+        list_filename=cfg['dataset']['src_filelist'],
         training=False
     )
 
     target_dataset = __datasets__[cfg['dataset']['tgt_type']](
-        target_datapath=cfg['dataset']['tgt_root'],
-        targetfile_list=cfg['dataset']['tgt_filelist'],
+        datapath=cfg['dataset']['tgt_root'],
+        list_filename=cfg['dataset']['tgt_filelist'],
         training=False
     )
     

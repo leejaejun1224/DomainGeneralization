@@ -30,9 +30,11 @@ class KITTI2015Dataset(Dataset):
             return left_images, right_images, disp_images
 
     def load_image(self, filename):
+        filename = os.path.expanduser(filename)
         return Image.open(filename).convert('RGB')
 
     def load_disp(self, filename):
+        filename = os.path.expanduser(filename)
         data = Image.open(filename)
         data = np.array(data, dtype=np.float32) / 256.
         return data
@@ -43,8 +45,7 @@ class KITTI2015Dataset(Dataset):
     def __getitem__(self, index):
         
         left_name = self.left_filenames[index].split('/')[1]
-        if left_name.startswith('image'):
-            self.datapath = self.datapath_15
+
 
         left_img = self.load_image(os.path.join(self.datapath, self.left_filenames[index]))
         right_img = self.load_image(os.path.join(self.datapath, self.right_filenames[index]))
@@ -107,12 +108,10 @@ class KITTI2015Dataset(Dataset):
                 return {"left": left_img,
                         "right": right_img,
                         "disparity": disparity,
-                        "top_pad": top_pad,
-                        "right_pad": right_pad}
+                        "left_filename": self.left_filenames[index],
+                        "right_filename": self.right_filenames[index]}
             else:
                 return {"left": left_img,
                         "right": right_img,
-                        "top_pad": top_pad,
-                        "right_pad": right_pad,
                         "left_filename": self.left_filenames[index],
                         "right_filename": self.right_filenames[index]}

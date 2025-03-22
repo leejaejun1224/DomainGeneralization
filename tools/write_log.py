@@ -45,14 +45,14 @@ class Logger:
     def save_att(self, data_batch):
         att_prob = data_batch['src_pred_disp_s'][2]
         att_prob = att_prob.squeeze().cpu().numpy()
-        filename = data_batch['source_left_filename'].split('/')[-1]
+        filename = data_batch['src_left_filename'].split('/')[-1]
         self._save_image(att_prob, filename, self.att_dir)
 
 
     def save_gt(self, data_batch):
         # Add colorbar with min=0, max=255 for source disparity
         if 'src_disparity' in data_batch.keys():
-            filename = data_batch['source_left_filename'].split('/')[-1]
+            filename = data_batch['src_left_filename'].split('/')[-1]
             gt_disp = data_batch['src_disparity'].squeeze().cpu().numpy()
             
             plt.figure(figsize=(12, 8))
@@ -64,7 +64,7 @@ class Logger:
             plt.close()
 
         if 'tgt_disparity' in data_batch.keys():
-            filename = data_batch['target_left_filename'].split('/')[-1]
+            filename = data_batch['tgt_left_filename'].split('/')[-1]
             gt_disp = data_batch['tgt_disparity'].squeeze().cpu().numpy()
             plt.figure(figsize=(12, 8))
             img = plt.imshow(gt_disp, cmap='jet', vmin=0, vmax=192)
@@ -78,7 +78,7 @@ class Logger:
 
     def save_disparity(self, data_batch):
         pred_src = data_batch['src_pred_disp_s'][0].squeeze().cpu().numpy()
-        src_filename = data_batch['source_left_filename'].split('/')[-1]
+        src_filename = data_batch['src_left_filename'].split('/')[-1]
         # Create figure with colorbar for source disparity
         plt.figure(figsize=(12, 8))
         img = plt.imshow(pred_src, cmap='jet', vmin=0, vmax=192)
@@ -89,7 +89,7 @@ class Logger:
         plt.close()
 
         pred_tgt = data_batch['pseudo_disp'][0].squeeze().cpu().numpy()
-        tgt_filename = data_batch['target_left_filename'].split('/')[-1]
+        tgt_filename = data_batch['tgt_left_filename'].split('/')[-1]
         plt.figure(figsize=(12, 8))
         img = plt.imshow(pred_tgt, cmap='jet', vmin=0, vmax=192)
         cbar = plt.colorbar(img, fraction=0.015, pad=0.04)
@@ -105,7 +105,7 @@ class Logger:
         shape_map_resized = F.interpolate(shape_map.float(), scale_factor=4, mode="nearest")
         shape_map_resized = shape_map_resized.squeeze(0).squeeze(0).cpu().numpy()
         
-        filename = data_batch['target_left_filename'].split('/')[-1]
+        filename = data_batch['tgt_left_filename'].split('/')[-1]
         save_path = os.path.join(self.entropy_dir, filename)
 
         # Create figure with colorbar
@@ -127,7 +127,7 @@ class Logger:
             scalar_outputs["Thres1"] = [Thres_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], self.max_disp, 1.0)]
             scalar_outputs["Thres2"] = [Thres_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], self.max_disp, 2.0)]
             scalar_outputs["Thres3"] = [Thres_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], self.max_disp, 3.0)]
-            self.metrics_dict['source'][data_batch['source_left_filename']] = tensor2float(scalar_outputs)
+            self.metrics_dict['source'][data_batch['src_left_filename']] = tensor2float(scalar_outputs)
 
         if 'tgt_disparity' in data_batch.keys():
             scalar_outputs = {}
@@ -136,7 +136,7 @@ class Logger:
             scalar_outputs["Thres1"] = [Thres_metric(data_batch['pseudo_disp'][0], data_batch['tgt_disparity'], self.max_disp, 1.0)]
             scalar_outputs["Thres2"] = [Thres_metric(data_batch['pseudo_disp'][0], data_batch['tgt_disparity'], self.max_disp, 2.0)]
             scalar_outputs["Thres3"] = [Thres_metric(data_batch['pseudo_disp'][0], data_batch['tgt_disparity'], self.max_disp, 3.0)]
-            self.metrics_dict['target'][data_batch['target_left_filename']] = tensor2float(scalar_outputs)
+            self.metrics_dict['target'][data_batch['tgt_left_filename']] = tensor2float(scalar_outputs)
 
 
     def save_metrics(self):
