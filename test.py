@@ -9,6 +9,7 @@ import torch.nn as nn
 import torch.backends.cudnn as cudnn
 import matplotlib.pyplot as plt
 from models.uda import __models__
+from datasets import __datasets__
 from torch.utils.data import DataLoader
 from datasets import __datasets__
 from datasets.dataloader import PrepareDataset
@@ -45,10 +46,13 @@ def setup_model(cfg, ckpt_path):
     model.to('cuda:0')
     return model
 
-def process_batch(data_batch):
-    for key in data_batch:
-        if isinstance(data_batch[key], torch.Tensor):
-            data_batch[key] = data_batch[key].cuda()
+def process_batch(data_batch, source_batch, target_batch):
+    for key in source_batch:
+        if isinstance(source_batch[key], torch.Tensor):
+            data_batch[key] = source_batch[key].cuda()
+    for key in target_batch:
+        if isinstance(target_batch[key], torch.Tensor):
+            data_batch[key] = target_batch[key].cuda()
     return data_batch
 
 def split_batch(data_batch, batch_idx):
@@ -75,16 +79,29 @@ def main():
 
     cfg = prepare_cfg(args, mode='test')
     
-    test_dataset = PrepareDataset(
+    source_dataset = __datasets__[cfg['dataset']['src_type']](
         source_datapath=cfg['dataset']['src_root'],
-        target_datapath=cfg['dataset']['tgt_root'],
         sourcefile_list=cfg['dataset']['src_filelist'],
+        training=False
+    )
+
+    target_dataset = __datasets__[cfg['dataset']['tgt_type']](
+        target_datapath=cfg['dataset']['tgt_root'],
         targetfile_list=cfg['dataset']['tgt_filelist'],
         training=False
     )
     
-    test_loader = DataLoader(
-        test_dataset, 
+    source_loader = DataLoader(
+        source_dataset, 
+        batch_size=cfg['test_batch_size'],
+        shuffle=False,
+        num_workers=cfg['test_num_workers'],
+        drop_last=False
+    )
+
+    
+    target_loader = DataLoader(
+        target_dataset, 
         batch_size=cfg['test_batch_size'],
         shuffle=False,
         num_workers=cfg['test_num_workers'],
@@ -99,12 +116,12 @@ def main():
     logger._setup_directories()
 
     with torch.no_grad():
-        for _, data_batch in enumerate(test_loader):
-            src = True if 'src_disparity' in data_batch.keys() else False
-            tgt = True if 'tgt_disparity' in data_batch.keys() else False
+        for source_batch, target_batch in zip(source_loader, target_loader):
+            src = True if 'src_disparity' in source_batch.keys() else False
+            tgt = True if 'tgt_disparity' in target_batch.keys() else False
 
-            
-            data_batch = process_batch(data_batch)
+            data_batch = {}
+            data_batch = process_batch(data_batch, source_batch, target_batch)
             log_vars = model.forward_test(data_batch)
             for i in range(cfg['test_batch_size']):
                 batch = split_batch(data_batch, i)

@@ -47,6 +47,8 @@ def prepare_cfg(arg, mode='train'):
     
     cfg = dict(
         dataset = dict(
+            src_type = train_source['type'],
+            tgt_type = train_target['type'],
             src_root = train_source['data_root'],
             tgt_root = train_target['data_root'],
             src_filelist = train_source['file_list'],

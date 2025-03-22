@@ -268,8 +268,6 @@ class Fast_ACVNet_plus(nn.Module):
 
 
     def concat_volume_generator(self, left_input, right_input, disparity_samples):
-
-
         right_feature_map, left_feature_map = SpatialTransformer_grid(left_input,
                                                                        right_input, disparity_samples)
         concat_volume = torch.cat((left_feature_map, right_feature_map), dim=1)

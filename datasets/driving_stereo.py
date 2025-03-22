@@ -10,7 +10,7 @@ import torch
 import matplotlib.pyplot as plt
 
 
-class KITTI2015Dataset(Dataset):
+class DrivingStereoDataset(Dataset):
     def __init__(self, datapath, list_filename, training):
         self.datapath = datapath
         self.left_filenames, self.right_filenames, self.disp_filenames = self.load_path(list_filename)
@@ -45,6 +45,8 @@ class KITTI2015Dataset(Dataset):
         left_name = self.left_filenames[index].split('/')[1]
         if left_name.startswith('image'):
             self.datapath = self.datapath_15
+        else:
+            self.datapath = self.datapath_12
 
         left_img = self.load_image(os.path.join(self.datapath, self.left_filenames[index]))
         right_img = self.load_image(os.path.join(self.datapath, self.right_filenames[index]))
@@ -89,30 +91,21 @@ class KITTI2015Dataset(Dataset):
             left_img = processed(left_img).numpy()
             right_img = processed(right_img).numpy()
 
-            # pad to size 1248x384
-            top_pad = 384 - h
-            right_pad = 1248 - w
-            assert top_pad > 0 and right_pad > 0
+            # crop to size 881x400 -> 880x400
+            left_img = left_img[0:880, 0:400, :]
+            right_img = right_img[0:880, 0:400, :]
+            disparity = disparity[0:880, 0:400]
             # pad images
-            left_img = np.lib.pad(left_img, ((0, 0), (top_pad, 0), (0, right_pad)), mode='constant', constant_values=0)
-            right_img = np.lib.pad(right_img, ((0, 0), (top_pad, 0), (0, right_pad)), mode='constant',
-                                   constant_values=0)
-            # pad disparity gt
-            if disparity is not None:
-                assert len(disparity.shape) == 2
-                disparity = np.lib.pad(disparity, ((top_pad, 0), (0, right_pad)), mode='constant', constant_values=0)
-
+            left_img = np.lib.pad(left_img, ((0, 0), (0, 0), (0, 0)), mode='constant', constant_values=0)
+            right_img = np.lib.pad(right_img, ((0, 0), (0, 0), (0, 0)), mode='constant', constant_values=0)
+            disparity = np.lib.pad(disparity, ((0, 0), (0, 0)), mode='constant', constant_values=0)
 
             if disparity is not None:
                 return {"left": left_img,
                         "right": right_img,
-                        "disparity": disparity,
-                        "top_pad": top_pad,
-                        "right_pad": right_pad}
+                        "disparity": disparity}
             else:
                 return {"left": left_img,
                         "right": right_img,
-                        "top_pad": top_pad,
-                        "right_pad": right_pad,
                         "left_filename": self.left_filenames[index],
                         "right_filename": self.right_filenames[index]}

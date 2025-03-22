@@ -56,7 +56,7 @@ class Logger:
             gt_disp = data_batch['src_disparity'].squeeze().cpu().numpy()
             
             plt.figure(figsize=(12, 8))
-            img = plt.imshow(gt_disp, cmap='jet', vmin=0, vmax=255)
+            img = plt.imshow(gt_disp, cmap='jet', vmin=0, vmax=192)
             cbar = plt.colorbar(img, fraction=0.015, pad=0.04)
             cbar.ax.tick_params(labelsize=8)
             plt.axis('off')
@@ -67,7 +67,7 @@ class Logger:
             filename = data_batch['target_left_filename'].split('/')[-1]
             gt_disp = data_batch['tgt_disparity'].squeeze().cpu().numpy()
             plt.figure(figsize=(12, 8))
-            img = plt.imshow(gt_disp, cmap='jet', vmin=0, vmax=255)
+            img = plt.imshow(gt_disp, cmap='jet', vmin=0, vmax=192)
             cbar = plt.colorbar(img, fraction=0.015, pad=0.04)
             cbar.ax.tick_params(labelsize=8)
             plt.axis('off')
@@ -79,11 +79,25 @@ class Logger:
     def save_disparity(self, data_batch):
         pred_src = data_batch['src_pred_disp_s'][0].squeeze().cpu().numpy()
         src_filename = data_batch['source_left_filename'].split('/')[-1]
-        self._save_image(pred_src, src_filename, self.disp_dir_src, cmap='jet')
+        # Create figure with colorbar for source disparity
+        plt.figure(figsize=(12, 8))
+        img = plt.imshow(pred_src, cmap='jet', vmin=0, vmax=192)
+        cbar = plt.colorbar(img, fraction=0.015, pad=0.04)
+        cbar.ax.tick_params(labelsize=8)
+        plt.axis('off')
+        plt.savefig(os.path.join(self.disp_dir_src, src_filename), bbox_inches='tight', pad_inches=0.1)
+        plt.close()
 
         pred_tgt = data_batch['pseudo_disp'][0].squeeze().cpu().numpy()
         tgt_filename = data_batch['target_left_filename'].split('/')[-1]
-        self._save_image(pred_tgt, tgt_filename, self.disp_dir_tgt, cmap='jet')
+        plt.figure(figsize=(12, 8))
+        img = plt.imshow(pred_tgt, cmap='jet', vmin=0, vmax=192)
+        cbar = plt.colorbar(img, fraction=0.015, pad=0.04)
+        cbar.ax.tick_params(labelsize=8)
+        plt.axis('off')
+        plt.savefig(os.path.join(self.disp_dir_tgt, tgt_filename), bbox_inches='tight', pad_inches=0.1)
+        plt.close()
+
 
 
     def save_entropy(self, data_batch):
