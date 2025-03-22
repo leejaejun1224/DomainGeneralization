@@ -89,7 +89,8 @@ class StereoDepthUDA(StereoDepthUDAInference):
         # 만약에 pseudo loss가 nan이 나오면 그냥 total loss로만 backward를 하면 되나
 
         # total_loss = supervised_loss + pseudo_loss*true_ratio + (1-true_ratio)*reconstruction_loss
-        total_loss = supervised_loss + true_ratio * pseudo_loss
+        # total_loss = supervised_loss + true_ratio * pseudo_loss
+        total_loss = supervised_loss 
 
         log_vars = {
             'loss': total_loss.item(),
@@ -137,7 +138,8 @@ class StereoDepthUDA(StereoDepthUDAInference):
         reconstruction_loss = calc_reconstruction_loss(data_batch, model='s')
 
         # total_loss = supervised_loss + true_ratio * pseudo_loss  + (1-true_ratio)*reconstruction_loss
-        total_loss = supervised_loss + true_ratio * pseudo_loss 
+        # total_loss = supervised_loss + true_ratio * pseudo_loss 
+        total_loss = supervised_loss 
 
         log_vars = {
             'loss': total_loss.item(),

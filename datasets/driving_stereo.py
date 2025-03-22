@@ -11,10 +11,12 @@ import matplotlib.pyplot as plt
 
 
 class DrivingStereoDataset(Dataset):
-    def __init__(self, datapath, list_filename, training):
+    def __init__(self, datapath, list_filename, training, max_len=None):
         self.datapath = datapath
         self.left_filenames, self.right_filenames, self.disp_filenames = self.load_path(list_filename)
         self.training = training
+        self.data_len = len(self.left_filenames)
+        self.max_len = max_len
         if self.training:
             assert self.disp_filenames is not None
 
@@ -30,29 +32,27 @@ class DrivingStereoDataset(Dataset):
             return left_images, right_images, disp_images
 
     def load_image(self, filename):
+        filename = os.path.expanduser(filename)
         return Image.open(filename).convert('RGB')
 
     def load_disp(self, filename):
+        filename = os.path.expanduser(filename)
         data = Image.open(filename)
         data = np.array(data, dtype=np.float32) / 256.
         return data
 
     def __len__(self):
-        return len(self.left_filenames)
+        return self.max_len if self.max_len is not None else self.data_len
 
     def __getitem__(self, index):
-        
-        left_name = self.left_filenames[index].split('/')[1]
-        if left_name.startswith('image'):
-            self.datapath = self.datapath_15
-        else:
-            self.datapath = self.datapath_12
+        idx = index if index < self.data_len else random.randint(0, self.data_len - 1)        
 
-        left_img = self.load_image(os.path.join(self.datapath, self.left_filenames[index]))
-        right_img = self.load_image(os.path.join(self.datapath, self.right_filenames[index]))
+
+        left_img = self.load_image(os.path.join(self.datapath, self.left_filenames[idx]))
+        right_img = self.load_image(os.path.join(self.datapath, self.right_filenames[idx]))
 
         if self.disp_filenames:  # has disparity ground truth
-            disparity = self.load_disp(os.path.join(self.datapath, self.disp_filenames[index]))
+            disparity = self.load_disp(os.path.join(self.datapath, self.disp_filenames[idx]))
         else:
             disparity = None
 
@@ -81,7 +81,9 @@ class DrivingStereoDataset(Dataset):
             return {"left": left_img,
                     "right": right_img,
                     "disparity": disparity,
-                    "disparity_low": disparity_low}
+                    "disparity_low": disparity_low,
+                    "left_filename": self.left_filenames[idx],
+                    "right_filename": self.right_filenames[idx]}
 
         else:
             w, h = left_img.size
@@ -92,19 +94,33 @@ class DrivingStereoDataset(Dataset):
             right_img = processed(right_img).numpy()
 
             # crop to size 881x400 -> 880x400
-            left_img = left_img[0:880, 0:400, :]
-            right_img = right_img[0:880, 0:400, :]
-            disparity = disparity[0:880, 0:400]
+            # top_pad = 400 - h
+            # right_pad = 884 - w
+            # assert top_pad >= 0 and right_pad >= 0
+            # # pad images
+            # left_img = np.lib.pad(left_img, ((0, 0), (top_pad, 0), (0, right_pad)), mode='constant', constant_values=0)
+            # right_img = np.lib.pad(right_img, ((0, 0), (top_pad, 0), (0, right_pad)), mode='constant',
+            #                        constant_values=0)
+            # # pad disparity gt
+            # if disparity is not None:
+            #     assert len(disparity.shape) == 2
+            #     disparity = np.lib.pad(disparity, ((top_pad, 0), (0, right_pad)), mode='constant', constant_values=0)
+
+            left_img = left_img[:, 16:, 0:832]
+            right_img = right_img[:, 16:, 0:832]
+            if disparity is not None:
+                disparity = disparity[16:, 0:832]
+
             # pad images
 
             if disparity is not None:
                 return {"left": left_img,
                         "right": right_img,
                         "disparity": disparity,
-                        "left_filename": self.left_filenames[index],
-                        "right_filename": self.right_filenames[index]}
+                        "left_filename": self.left_filenames[idx],
+                        "right_filename": self.right_filenames[idx]}
             else:
                 return {"left": left_img,
                         "right": right_img,
-                        "left_filename": self.left_filenames[index],
-                        "right_filename": self.right_filenames[index]}
+                        "left_filename": self.left_filenames[idx],
+                        "right_filename": self.right_filenames[idx]}

@@ -49,6 +49,12 @@ def setup_train_loaders(cfg):
         list_filename=cfg['dataset']['tgt_filelist'],
         training=True
     )
+
+    max_len = max(len(source_dataset), len(target_dataset))
+    source_dataset.max_len = max_len
+    target_dataset.max_len = max_len
+
+
     source_loader = DataLoader(
         source_dataset, 
         batch_size=cfg['test_batch_size'],
@@ -78,6 +84,11 @@ def setup_test_loaders(cfg):
         list_filename=cfg['dataset']['tgt_filelist'],
         training=False
     )
+
+    max_len = max(len(source_dataset), len(target_dataset))
+    source_dataset.max_len = max_len
+    target_dataset.max_len = max_len
+
     source_loader = DataLoader(
         source_dataset, 
         batch_size=cfg['test_batch_size'],
@@ -195,7 +206,8 @@ def main():
     cfg = prepare_cfg(args)
     log_dict = {'parameters': cfg}
     
-    source_loader, target_loader = setup_train_loaders(cfg)
+    train_source_loader, train_target_loader = setup_train_loaders(cfg)
+    test_source_loader, test_target_loader = setup_test_loaders(cfg)
     
     model = __models__['StereoDepthUDA'](cfg)
     if args.checkpoint is not None:
@@ -213,11 +225,11 @@ def main():
     threshold_manager = ThresholdManager(save_dir=save_dir)
     
     for epoch in range(cfg['epoch']):
-        train_metrics = train_epoch(model, source_loader, target_loader, optimizer, threshold_manager, epoch, cfg, args)
+        train_metrics = train_epoch(model, train_source_loader, train_target_loader, optimizer, threshold_manager, epoch, cfg, args)
         print(f'Epoch [{epoch + 1}/{cfg["epoch"]}] Average Loss: {train_metrics["train_loss"]:.4f}')
         
         if (epoch + 1) % cfg['val_interval'] == 0:
-            val_metrics = validate(model, source_loader, target_loader)
+            val_metrics = validate(model, test_source_loader, test_target_loader)
             print(f'Validation Loss: {val_metrics["val_loss"]:.4f}')
             
             if (epoch + 1) % cfg['save_interval'] == 0:

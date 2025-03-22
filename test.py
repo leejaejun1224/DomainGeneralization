@@ -94,7 +94,11 @@ def main():
         list_filename=cfg['dataset']['tgt_filelist'],
         training=False
     )
-    
+
+    max_len = max(len(source_dataset), len(target_dataset))
+    source_dataset.max_len = max_len
+    target_dataset.max_len = max_len
+
     source_loader = DataLoader(
         source_dataset, 
         batch_size=cfg['test_batch_size'],
