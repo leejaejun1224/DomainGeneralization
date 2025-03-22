@@ -9,6 +9,7 @@ import torch.nn as nn
 import torch.backends.cudnn as cudnn
 import matplotlib.pyplot as plt
 from models.uda import __models__
+from datasets import __datasets__
 from torch.utils.data import DataLoader
 from datasets.dataloader import PrepareDataset
 from experiment import prepare_cfg, adjust_learning_rate
@@ -37,27 +38,63 @@ def setup_environment(args):
     os.makedirs(save_dir, exist_ok=True)
     return save_dir
 
-def setup_data_loaders(cfg):
-    train_dataset = PrepareDataset(
-        source_datapath=cfg['dataset']['src_root'],
-        target_datapath=cfg['dataset']['tgt_root'], 
-        sourcefile_list=cfg['dataset']['src_filelist'],
-        targetfile_list=cfg['dataset']['tgt_filelist'],
+def setup_train_loaders(cfg):
+    source_dataset = __datasets__[cfg['dataset']['src_type']](
+        datapath=cfg['dataset']['src_root'],
+        list_filename=cfg['dataset']['src_filelist'],
         training=True
     )
-    
-    test_dataset = PrepareDataset(
-        source_datapath=cfg['dataset']['src_root'],
-        target_datapath=cfg['dataset']['tgt_root'],
-        sourcefile_list=cfg['dataset']['src_filelist'], 
-        targetfile_list=cfg['dataset']['tgt_filelist'],
-        training=False
+    target_dataset = __datasets__[cfg['dataset']['tgt_type']](
+        datapath=cfg['dataset']['tgt_root'],
+        list_filename=cfg['dataset']['tgt_filelist'],
+        training=True
+    )
+    source_loader = DataLoader(
+        source_dataset, 
+        batch_size=cfg['test_batch_size'],
+        shuffle=False,
+        num_workers=cfg['test_num_workers'],
+        drop_last=False
     )
     
-    train_loader = DataLoader(train_dataset, batch_size=cfg['batch_size'], shuffle=True, num_workers=cfg['num_workers'], drop_last=True)
-    test_loader = DataLoader(test_dataset, batch_size=cfg['batch_size'], shuffle=False, num_workers=cfg['num_workers'], drop_last=False)
+    target_loader = DataLoader(
+        target_dataset, 
+        batch_size=cfg['test_batch_size'],
+        shuffle=False,
+        num_workers=cfg['test_num_workers'],
+        drop_last=False
+    )
+    return source_loader, target_loader
+
+
+def setup_test_loaders(cfg):
+    source_dataset = __datasets__[cfg['dataset']['src_type']](
+        datapath=cfg['dataset']['src_root'],
+        list_filename=cfg['dataset']['src_filelist'],
+        training=False
+    )
+    target_dataset = __datasets__[cfg['dataset']['tgt_type']](
+        datapath=cfg['dataset']['tgt_root'],
+        list_filename=cfg['dataset']['tgt_filelist'],
+        training=False
+    )
+    source_loader = DataLoader(
+        source_dataset, 
+        batch_size=cfg['test_batch_size'],
+        shuffle=False,
+        num_workers=cfg['test_num_workers'],
+        drop_last=False
+    )
     
-    return train_loader, test_loader
+    target_loader = DataLoader(
+        target_dataset, 
+        batch_size=cfg['test_batch_size'],
+        shuffle=False,
+        num_workers=cfg['test_num_workers'],
+        drop_last=False
+    )
+    return source_loader, target_loader
+
 
 def compute_metrics_dict(data_batch):
     return {
@@ -68,21 +105,29 @@ def compute_metrics_dict(data_batch):
         "Thres3": [Thres_metric(data_batch['src_pred_disp_s'][0], data_batch['src_disparity'], data_batch['mask'], 3.0)]
     }
 
-def process_batch(data_batch):
-    for key in data_batch:
-        if isinstance(data_batch[key], torch.Tensor):
-            data_batch[key] = data_batch[key].cuda()
+def process_batch(data_batch, source_batch, target_batch):
+    for key in source_batch:
+        if isinstance(source_batch[key], torch.Tensor):
+            data_batch['src_' + key] = source_batch[key].cuda()
+        else:
+            data_batch['src_' + key] = source_batch[key]
+    for key in target_batch:
+        if isinstance(target_batch[key], torch.Tensor):
+            data_batch['tgt_' + key] = target_batch[key].cuda()
+        else:
+            data_batch['tgt_' + key] = target_batch[key]
     return data_batch
 
-def train_epoch(model, train_loader, optimizer, threshold_manager, epoch, cfg, args):
+def train_epoch(model, source_loader, target_loader, optimizer, threshold_manager, epoch, cfg, args):
     model.train()
     adjust_learning_rate(optimizer, epoch, cfg['lr'], cfg['adjust_lr'])
     
     true_ratios, train_losses, train_pseudo_losses, reconstruction_losses = [], [], [], []
     average_threshold = []
-    for batch_idx, data_batch in enumerate(train_loader):
-        data_batch = process_batch(data_batch)
-        image_ids = data_batch['target_left_filename']
+    for batch_idx, (source_batch, target_batch) in enumerate(zip(source_loader, target_loader)):
+        data_batch = {}
+        data_batch = process_batch(data_batch, source_batch, target_batch)
+        image_ids = data_batch['tgt_left_filename']
         threshold_manager.initialize_log(image_ids)
         threshold = threshold_manager.get_threshold(image_ids).float()
         average_threshold.append(threshold.mean().item())
@@ -110,13 +155,14 @@ def train_epoch(model, train_loader, optimizer, threshold_manager, epoch, cfg, a
         }
     return {'train_loss': 0, 'true_ratio_train': 0, 'train_pseudo_loss': 0, 'reconstruction_loss': 0}
 
-def validate(model, test_loader):
+def validate(model, source_loader, target_loader):
     model.eval()
     val_losses, val_pseudo_losses, true_ratios, reconstruction_losses = [], [], [], []
     
     with torch.no_grad():
-        for data_batch in test_loader:
-            data_batch = process_batch(data_batch)
+        for source_batch, target_batch in zip(source_loader, target_loader):
+            data_batch = {}
+            data_batch = process_batch(data_batch, source_batch, target_batch)
             log_vars = model.forward_test(data_batch)
             
             if not math.isnan(log_vars['loss']):
@@ -149,7 +195,7 @@ def main():
     cfg = prepare_cfg(args)
     log_dict = {'parameters': cfg}
     
-    train_loader, test_loader = setup_data_loaders(cfg)
+    source_loader, target_loader = setup_train_loaders(cfg)
     
     model = __models__['StereoDepthUDA'](cfg)
     if args.checkpoint is not None:
@@ -167,11 +213,11 @@ def main():
     threshold_manager = ThresholdManager(save_dir=save_dir)
     
     for epoch in range(cfg['epoch']):
-        train_metrics = train_epoch(model, train_loader, optimizer, threshold_manager, epoch, cfg, args)
+        train_metrics = train_epoch(model, source_loader, target_loader, optimizer, threshold_manager, epoch, cfg, args)
         print(f'Epoch [{epoch + 1}/{cfg["epoch"]}] Average Loss: {train_metrics["train_loss"]:.4f}')
         
         if (epoch + 1) % cfg['val_interval'] == 0:
-            val_metrics = validate(model, test_loader)
+            val_metrics = validate(model, source_loader, target_loader)
             print(f'Validation Loss: {val_metrics["val_loss"]:.4f}')
             
             if (epoch + 1) % cfg['save_interval'] == 0:

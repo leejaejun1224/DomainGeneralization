@@ -80,7 +80,9 @@ class KITTI2015Dataset(Dataset):
             return {"left": left_img,
                     "right": right_img,
                     "disparity": disparity,
-                    "disparity_low": disparity_low}
+                    "disparity_low": disparity_low,
+                    "left_filename" : self.left_filenames[index],
+                    "right_filename" : self.right_filenames[index]}
 
         else:
             w, h = left_img.size
