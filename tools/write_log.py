@@ -21,14 +21,16 @@ class Logger:
 
     def _setup_directories(self):
         self.att_dir = os.path.join(self.save_dir, 'att')
-        self.gt_dir = os.path.join(self.save_dir, 'save_gt') 
+        self.gt_dir_src = os.path.join(self.save_dir, 'save_gt', 'src') 
+        self.gt_dir_tgt = os.path.join(self.save_dir, 'save_gt', 'tgt') 
         self.disp_dir_src = os.path.join(self.save_dir, 'disp', 'src')
         self.disp_dir_tgt = os.path.join(self.save_dir, 'disp', 'tgt')
         self.entropy_dir = os.path.join(self.save_dir, 'entropy')
         self.metrics_dir = os.path.join(self.save_dir, 'metrics')
 
         os.makedirs(self.att_dir, exist_ok=True)
-        os.makedirs(self.gt_dir, exist_ok=True)
+        os.makedirs(self.gt_dir_src, exist_ok=True)
+        os.makedirs(self.gt_dir_tgt, exist_ok=True)
         os.makedirs(self.disp_dir_src, exist_ok=True)
         os.makedirs(self.disp_dir_tgt, exist_ok=True)
         os.makedirs(self.entropy_dir, exist_ok=True)
@@ -41,22 +43,41 @@ class Logger:
 
 
     def save_att(self, data_batch):
-        att_prob, _ = data_batch['src_pred_disp'][2].max(dim=1, keepdim=True)
+        att_prob = data_batch['src_pred_disp_s'][2]
         att_prob = att_prob.squeeze().cpu().numpy()
         filename = data_batch['source_left_filename'].split('/')[-1]
         self._save_image(att_prob, filename, self.att_dir)
 
 
     def save_gt(self, data_batch):
-        ### just for debug and eye check
+        # Add colorbar with min=0, max=255 for source disparity
         if 'src_disparity' in data_batch.keys():
             filename = data_batch['source_left_filename'].split('/')[-1]
             gt_disp = data_batch['src_disparity'].squeeze().cpu().numpy()
-            self._save_image(gt_disp, filename, self.gt_dir, cmap='jet')
+            
+            plt.figure(figsize=(12, 8))
+            img = plt.imshow(gt_disp, cmap='jet', vmin=0, vmax=255)
+            cbar = plt.colorbar(img, fraction=0.015, pad=0.04)
+            cbar.ax.tick_params(labelsize=8)
+            plt.axis('off')
+            plt.savefig(os.path.join(self.gt_dir_src, filename), bbox_inches='tight', pad_inches=0.1)
+            plt.close()
+
+        if 'tgt_disparity' in data_batch.keys():
+            filename = data_batch['target_left_filename'].split('/')[-1]
+            gt_disp = data_batch['tgt_disparity'].squeeze().cpu().numpy()
+            plt.figure(figsize=(12, 8))
+            img = plt.imshow(gt_disp, cmap='jet', vmin=0, vmax=255)
+            cbar = plt.colorbar(img, fraction=0.015, pad=0.04)
+            cbar.ax.tick_params(labelsize=8)
+            plt.axis('off')
+            plt.savefig(os.path.join(self.gt_dir_tgt, filename), bbox_inches='tight', pad_inches=0.1)
+            plt.close()
+
 
 
     def save_disparity(self, data_batch):
-        pred_src = data_batch['src_pred_disp'][0].squeeze().cpu().numpy()
+        pred_src = data_batch['src_pred_disp_s'][0].squeeze().cpu().numpy()
         src_filename = data_batch['source_left_filename'].split('/')[-1]
         self._save_image(pred_src, src_filename, self.disp_dir_src, cmap='jet')
 
