@@ -1,195 +1,165 @@
 import os
+import torch
 import random
 from torch.utils.data import Dataset, DataLoader
 from PIL import Image
 import numpy as np
 import cv2
-from datasets.data_io import get_transform, read_all_lines, pfm_imread, reshape_image, reshape_disparity
-
-
-import torchvision.transforms as transforms
-import torch
-import matplotlib.pyplot as plt
+from transformers import SegformerImageProcessor
+from datasets.data_io import read_all_lines, reshape_image, reshape_disparity, get_transform
 
 
 class PrepareDataset(Dataset):
     def __init__(self, source_datapath, target_datapath, sourcefile_list, targetfile_list, training):
         self.source_datapath = source_datapath
         self.target_datapath = target_datapath
-        self.source_left_filenames, self.source_right_filenames, self.source_disp_filenames = self.load_path(sourcefile_list)
-        self.target_left_filenames, self.target_right_filenames, self.target_disp_filenames = self.load_path(targetfile_list)
         self.training = training
-        if self.training:
-            assert self.source_disp_filenames is not None
+        
+        # Load source and target paths
+        self.source_paths = self._load_dataset_paths(sourcefile_list)
+        self.target_paths = self._load_dataset_paths(targetfile_list)
+
+        # Validate training requirements
+        if self.training and self.source_paths['disp_filenames'] is None:
+            raise AssertionError("Training requires source disparity data")
+
+    def _load_dataset_paths(self, filelist):
+        """Load and parse dataset file paths"""
+        left, right, disp = self.load_path(filelist)
+        return {
+            'left_filenames': left,
+            'right_filenames': right,
+            'disp_filenames': disp
+        }
 
     def load_path(self, list_filename):
         lines = read_all_lines(list_filename)
         splits = [line.split() for line in lines]
         left_images = [x[0] for x in splits]
         right_images = [x[1] for x in splits]
-        if len(splits[0]) == 2:  # ground truth not available
-            return left_images, right_images, None
-        else:
-            disp_images = [x[2] for x in splits]
-            return left_images, right_images, disp_images
+        disp_images = [x[2] for x in splits] if len(splits[0]) > 2 else None
+        return left_images, right_images, disp_images
 
     def load_image(self, filename):
         filename = os.path.expanduser(filename)
         return Image.open(filename).convert('RGB')
 
-    def load_image1(self, filename):
-        filename = os.path.expanduser(filename)
-        img = Image.open(filename).convert('RGB')
-        
-        # 파일 이름을 이미지에 추가하기 위해 OpenCV 형식으로 변환
-        img_cv = np.array(img)  # PIL -> NumPy 변환 (H, W, C)
-        img_cv = cv2.cvtColor(img_cv, cv2.COLOR_RGB2BGR)  # RGB -> BGR 변환 (OpenCV는 BGR 사용)
-        
-        # 텍스트 위치 및 스타일 설정
-        text = os.path.basename(filename)  # 파일 이름만 추출
-        font = cv2.FONT_HERSHEY_SIMPLEX
-        font_scale = 1
-        font_color = (0, 255, 0)  # 초록색
-        thickness = 2
-        position = (50, 50)  # 좌측 상단
-        
-        # 이미지에 텍스트 추가
-        img_cv = cv2.putText(img_cv, text, position, font, font_scale, font_color, thickness, cv2.LINE_AA)
-
-        # 저장할 경로 설정 (예제: "debug_images/" 디렉토리에 저장)
-        save_dir = "debug_images"
-        os.makedirs(save_dir, exist_ok=True)
-        save_path = os.path.join(save_dir, os.path.basename(filename))
-        cv2.imwrite(save_path, img_cv)  # 이미지 저장
-
-        print(f"Saved image with filename text: {save_path}")  # 디버깅용 출력
-        
-        return img  # 원본 PIL 이미지 반환
-
     def load_disp(self, filename):
         filename = os.path.expanduser(filename)
         data = Image.open(filename)
-        data = np.array(data, dtype=np.float32) / 256.
-        return data
+        return np.array(data, dtype=np.float32) / 256.0
 
     def __len__(self):
-        # 이 함수가 필요한 이유 : dataloader 클래스에서 이 길이의 안쪽에 있는 dataset의 인덱스를 가져옴
-        # 고로 하나가 더 커버리면 반대쪽에서 가져올 인덱스가 없어서 에러가 남. 
-        # 이러면 작은 놈을 따라갈 수 밖에 없음,
-        return min(len(self.source_left_filenames), len(self.target_left_filenames))
+        return min(len(self.source_paths['left_filenames']), 
+                  len(self.target_paths['left_filenames']))
+
+    def _load_stereo_pair(self, datapath, left_file, right_file, disp_file=None):
+        left_img = self.load_image(os.path.join(datapath, left_file))
+        right_img = self.load_image(os.path.join(datapath, right_file))
+        disparity = None
+        if disp_file:
+            disparity = self.load_disp(os.path.join(datapath, disp_file))
+        return left_img, right_img, disparity
+
+    def _random_crop(self, left_img, right_img, disparity=None, crop_size=(512, 256)):
+        w, h = left_img.size
+        crop_w, crop_h = crop_size
+        
+        x1 = random.randint(0, w - crop_w)
+        y1 = random.randint(int(0.3 * h), h - crop_h) if random.randint(0, 10) < 8 else random.randint(0, h - crop_h)
+
+        # Crop images
+        left_img = left_img.crop((x1, y1, x1 + crop_w, y1 + crop_h))
+        right_img = right_img.crop((x1, y1, x1 + crop_w, y1 + crop_h))
+
+        # Crop and downsample disparity if available
+        disp_crop = None
+        disp_low = None
+        if disparity is not None:
+            disp_crop = disparity[y1:y1 + crop_h, x1:x1 + crop_w]
+            disp_low = cv2.resize(disp_crop, (crop_w // 4, crop_h // 4), interpolation=cv2.INTER_NEAREST)
+
+        return left_img, right_img, disp_crop, disp_low
+
+    ### 차라리 training이란 testing을 따로 분리를 하자.
+    def _prepare_training_sample(self, index):
+        
+        src_left, src_right, src_disp = self._load_stereo_pair(
+            self.source_datapath,
+            self.source_paths['left_filenames'][index],
+            self.source_paths['right_filenames'][index],
+            self.source_paths['disp_filenames'][index]
+        )
+
+        tgt_left, tgt_right, tgt_disp = self._load_stereo_pair(
+            self.target_datapath,
+            self.target_paths['left_filenames'][index],
+            self.target_paths['right_filenames'][index],
+            self.target_paths['disp_filenames'][index] if self.target_paths['disp_filenames'] else None
+        )
+
+        src_left, src_right, src_disp, src_disp_low = self._random_crop(src_left, src_right, src_disp)
+        tgt_left, tgt_right, tgt_disp, tgt_disp_low = self._random_crop(tgt_left, tgt_right, tgt_disp)
+
+        transform = get_transform()
+        return {
+            "src_left": transform(src_left),
+            "src_right": transform(src_right),
+            "src_disparity": src_disp,
+            "src_disparity_low": src_disp_low,
+            "tgt_left": transform(tgt_left),
+            "tgt_right": transform(tgt_right),
+            "tgt_disparity": tgt_disp,
+            "tgt_disparity_low": tgt_disp_low,
+            "source_left_filename": self.source_paths['left_filenames'][index],
+            "source_right_filename": self.source_paths['right_filenames'][index],
+            "target_left_filename": self.target_paths['left_filenames'][index],
+            "target_right_filename": self.target_paths['right_filenames'][index]
+        }
+
+    def _prepare_test_sample(self, index):
+
+        ### kitti의 경우 test set에 대해서는 disparity 데이터가 없다.
+        src_left, src_right, src_disp = self._load_stereo_pair(
+            self.source_datapath,
+            self.source_paths['left_filenames'][index],
+            self.source_paths['right_filenames'][index],
+            self.source_paths['disp_filenames'][index] if self.source_paths['disp_filenames'] else None
+        )
+
+        tgt_left, tgt_right, tgt_disp = self._load_stereo_pair(
+            self.target_datapath,
+            self.target_paths['left_filenames'][index],
+            self.target_paths['right_filenames'][index],
+            self.target_paths['disp_filenames'][index] if self.target_paths['disp_filenames'] else None
+        )
+
+        src_left = torch.from_numpy(reshape_image(src_left)).float()
+        src_right = torch.from_numpy(reshape_image(src_right)).float()
+        src_disp = torch.from_numpy(reshape_disparity(src_disp)).float() if src_disp is not None else None
+
+        tgt_left = torch.from_numpy(reshape_image(tgt_left)).float()
+        tgt_right = torch.from_numpy(reshape_image(tgt_right)).float()
+        tgt_disp = torch.from_numpy(reshape_disparity(tgt_disp)).float() if tgt_disp is not None else None
+
+        result = {
+            "src_left": src_left,
+            "src_right": src_right,
+            "tgt_left": tgt_left,
+            "tgt_right": tgt_right,
+            "source_left_filename": self.source_paths['left_filenames'][index],
+            "source_right_filename": self.source_paths['right_filenames'][index],
+            "target_left_filename": self.target_paths['left_filenames'][index],
+            "target_right_filename": self.target_paths['right_filenames'][index]
+        }
+
+        if src_disp is not None:
+            result["src_disparity"] = src_disp
+        if tgt_disp is not None:
+            result["tgt_disparity"] = tgt_disp
+        return result
 
     def __getitem__(self, index):
-        src_index = index
-        tgt_index = index
-        src_left_img = self.load_image(os.path.join(self.source_datapath, self.source_left_filenames[src_index]))        
-        src_right_img = self.load_image(os.path.join(self.source_datapath, self.source_right_filenames[src_index]))
-        src_disparity = self.load_disp(os.path.join(self.source_datapath, self.source_disp_filenames[src_index]))
-
-        tgt_left_img = self.load_image(os.path.join(self.target_datapath, self.target_left_filenames[tgt_index]))
-        tgt_right_img = self.load_image(os.path.join(self.target_datapath, self.target_right_filenames[tgt_index]))
-
-        if self.target_disp_filenames:   # target 이미지에 대해 disparity 참값이 있는 경우
-            tgt_disparity = self.load_disp(os.path.join(self.target_datapath, self.target_disp_filenames[tgt_index]))
-        else:
-            tgt_disparity = None
-
-        # 이미지 및 disparity 크기가 (width > 2000, height > 1000) 인 경우, 1242x375로 리사이즈
-        # if src_left_img.size[0] > 2000 and src_left_img.size[1] > 1000:
-        #     src_left_img = src_left_img.resize((1242, 375), resample=Image.LANCZOS)
-        #     src_right_img = src_right_img.resize((1242, 375), resample=Image.LANCZOS)
-        #     src_disparity = cv2.resize(src_disparity, (1242, 375), interpolation=cv2.INTER_LANCZOS4)
-        # if tgt_left_img.size[0] > 2000 and tgt_left_img.size[1] > 1000:
-        #     tgt_left_img = tgt_left_img.resize((1242, 375), resample=Image.LANCZOS)
-        #     tgt_right_img = tgt_right_img.resize((1242, 375), resample=Image.LANCZOS)
-        #     if tgt_disparity is not None:
-        #         tgt_disparity = cv2.resize(tgt_disparity, (1242, 375), interpolation=cv2.INTER_LANCZOS4)
-
         if self.training:
-
-            w, h = src_left_img.size
-            crop_w, crop_h = 512, 256
-
-            x1 = random.randint(0, w - crop_w)
-            if random.randint(0, 10) >= 8:
-                y1 = random.randint(0, h - crop_h)
-            else:
-                y1 = random.randint(int(0.3 * h), h - crop_h)
-
-            target_w, target_h = tgt_left_img.size
-            target_x1 = random.randint(0, target_w - crop_w)
-            if random.randint(0, 10) >= 8:
-                target_y1 = random.randint(0, target_h - crop_h)
-            else:
-                target_y1 = random.randint(int(0.3 * target_h), target_h - crop_h)
-
-            # source 이미지 및 disparity random crop
-            src_left_img = src_left_img.crop((x1, y1, x1 + crop_w, y1 + crop_h))
-            src_right_img = src_right_img.crop((x1, y1, x1 + crop_w, y1 + crop_h))
-            src_disparity = src_disparity[y1:y1 + crop_h, x1:x1 + crop_w]
-            src_disparity_low = cv2.resize(src_disparity, (crop_w // 4, crop_h // 4), interpolation=cv2.INTER_NEAREST)
-
-            # target 이미지 및 disparity random crop
-            tgt_left_img = tgt_left_img.crop((target_x1, target_y1, target_x1 + crop_w, target_y1 + crop_h))
-            tgt_right_img = tgt_right_img.crop((target_x1, target_y1, target_x1 + crop_w, target_y1 + crop_h))
-            if tgt_disparity is not None:
-                tgt_disparity = tgt_disparity[target_y1:target_y1 + crop_h, target_x1:target_x1 + crop_w]
-                tgt_disparity_low = cv2.resize(tgt_disparity, (crop_w // 4, crop_h // 4), interpolation=cv2.INTER_NEAREST)
-
-            # to tensor, normalize
-            processed = get_transform()
-            src_left_img = processed(src_left_img)
-            src_right_img = processed(src_right_img)
-            tgt_left_img = processed(tgt_left_img)
-            tgt_right_img = processed(tgt_right_img)
-
-            return {"src_left": src_left_img,
-                    "src_right": src_right_img,
-                    "src_disparity": src_disparity,
-                    "src_disparity_low": src_disparity_low,
-                    "tgt_left": tgt_left_img,
-                    "tgt_right": tgt_right_img,
-                    "tgt_disparity": tgt_disparity,
-                    "tgt_disparity_low": tgt_disparity_low}
-        else:
-            w, h = src_left_img.size
-            src_left_img = reshape_image(src_left_img)
-            src_right_img = reshape_image(src_right_img)
-            src_disparity = reshape_disparity(src_disparity)
-            tgt_left_img = reshape_image(tgt_left_img)
-            tgt_right_img = reshape_image(tgt_right_img)
-
-            if tgt_disparity is not None:
-                tgt_disparity = reshape_disparity(tgt_disparity)
-
-            if tgt_disparity is not None:
-                return {"src_left": src_left_img,
-                        "src_right": src_right_img,
-                        "src_disparity": src_disparity,
-                        "tgt_left": tgt_left_img,
-                        "tgt_right": tgt_right_img,
-                        "tgt_disparity": tgt_disparity,
-                        "source_left_filename": self.source_left_filenames[src_index],
-                        "source_right_filename": self.source_right_filenames[src_index],
-                        "target_left_filename": self.target_left_filenames[tgt_index],
-                        "target_right_filename": self.target_right_filenames[tgt_index]}
-            else:
-                return {"src_left": src_left_img,
-                        "src_right": src_right_img,
-                        "tgt_left": tgt_left_img,
-                        "tgt_right": tgt_right_img,
-                        "source_left_filename": self.source_left_filenames[src_index],
-                        "source_right_filename": self.source_right_filenames[src_index],
-                        "target_left_filename": self.target_left_filenames[tgt_index],
-                        "target_right_filename": self.target_right_filenames[tgt_index]}
-
-
-# if __name__ == "__main__":
-#     source_datapath = '/home/jaejun/dataset/kitti'
-#     target_datapath = '/home/jaejun/dataset/cityscapes'
-#     sourcefile_list = './filenames/source/kitti_2015_train.txt'
-#     targetfile_list = './filenames/target/cityscapes_train.txt'
-#     dataset = PrepareDataset(source_datapath, target_datapath, sourcefile_list, targetfile_list, training=True)
-#     dataloader = DataLoader(dataset, batch_size=1, shuffle=True, num_workers=1)
-#     for i, data in enumerate(dataloader):
-#         print(i, " :", data['src_left'].shape)
-#         print(i, " :", data['tgt_left'].shape)
+            return self._prepare_training_sample(index)
+        return self._prepare_test_sample(index)

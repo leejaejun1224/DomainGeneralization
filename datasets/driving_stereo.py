@@ -10,7 +10,7 @@ import torch
 import matplotlib.pyplot as plt
 
 
-class KITTI2015Dataset(Dataset):
+class DrivingStereoDataset(Dataset):
     def __init__(self, datapath, list_filename, training, max_len=None):
         self.datapath = datapath
         self.left_filenames, self.right_filenames, self.disp_filenames = self.load_path(list_filename)
@@ -45,7 +45,7 @@ class KITTI2015Dataset(Dataset):
         return self.max_len if self.max_len is not None else self.data_len
 
     def __getitem__(self, index):
-        idx = index if index < self.data_len else random.randint(0, self.data_len - 1)
+        idx = index if index < self.data_len else random.randint(0, self.data_len - 1)        
 
 
         left_img = self.load_image(os.path.join(self.datapath, self.left_filenames[idx]))
@@ -82,8 +82,8 @@ class KITTI2015Dataset(Dataset):
                     "right": right_img,
                     "disparity": disparity,
                     "disparity_low": disparity_low,
-                    "left_filename" : self.left_filenames[idx],
-                    "right_filename" : self.right_filenames[idx]}
+                    "left_filename": self.left_filenames[idx],
+                    "right_filename": self.right_filenames[idx]}
 
         else:
             w, h = left_img.size
@@ -93,18 +93,25 @@ class KITTI2015Dataset(Dataset):
             left_img = processed(left_img).numpy()
             right_img = processed(right_img).numpy()
 
-            # pad to size 1248x384
-            top_pad = 384 - h
-            right_pad = 1248 - w
-            assert top_pad > 0 and right_pad > 0
-            # pad images
-            left_img = np.lib.pad(left_img, ((0, 0), (top_pad, 0), (0, right_pad)), mode='constant', constant_values=0)
-            right_img = np.lib.pad(right_img, ((0, 0), (top_pad, 0), (0, right_pad)), mode='constant',
-                                   constant_values=0)
-            # pad disparity gt
+            # crop to size 881x400 -> 880x400
+            # top_pad = 400 - h
+            # right_pad = 884 - w
+            # assert top_pad >= 0 and right_pad >= 0
+            # # pad images
+            # left_img = np.lib.pad(left_img, ((0, 0), (top_pad, 0), (0, right_pad)), mode='constant', constant_values=0)
+            # right_img = np.lib.pad(right_img, ((0, 0), (top_pad, 0), (0, right_pad)), mode='constant',
+            #                        constant_values=0)
+            # # pad disparity gt
+            # if disparity is not None:
+            #     assert len(disparity.shape) == 2
+            #     disparity = np.lib.pad(disparity, ((top_pad, 0), (0, right_pad)), mode='constant', constant_values=0)
+
+            left_img = left_img[:, 16:, 0:832]
+            right_img = right_img[:, 16:, 0:832]
             if disparity is not None:
-                assert len(disparity.shape) == 2
-                disparity = np.lib.pad(disparity, ((top_pad, 0), (0, right_pad)), mode='constant', constant_values=0)
+                disparity = disparity[16:, 0:832]
+
+            # pad images
 
             if disparity is not None:
                 return {"left": left_img,

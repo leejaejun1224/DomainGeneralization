@@ -34,6 +34,10 @@ def reshape_image(image):
         image = processed(image).numpy()
     return image
 
+def crop_image(image):
+    w, h = image.size
+    return image.crop((0, 0, w - 1, h))
+
 def reshape_disparity(disparity):
     w, h = disparity.shape[1], disparity.shape[0]
     if w <= 1248 and h <= 384:

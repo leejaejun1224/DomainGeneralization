@@ -1,37 +1,28 @@
-# read dataset folder structure and write filename.txt
 import os
 
+# 폴더 경로와 출력 텍스트 파일 경로 설정
+folder_path = "/home/cvlab/dataset/driving_stereo/testing/image_2"  # 여기를 실제 폴더 경로로 바꿔줘
+output_file = "/home/cvlab/DomainGeneralization/filenames/source/driving_stereo_test.txt"           # 출력할 텍스트 파일 이름
 
-modes = ['train', 'val', 'test']
-for mode in modes:
-    left_dir = '/home/jaejun/dataset/cityscapes/leftImg8bit_trainvaltest/leftImg8bit/' + mode
-    right_dir = '/home/jaejun/dataset/cityscapes/rightImg8bit_trainvaltest/rightImg8bit/' + mode
-    disparity_dir = '/home/jaejun/dataset/cityscapes/disparity_trainvaltest/disparity/' + mode
+# 폴더에서 .jpg 파일 목록 가져오기
+img_files = [f for f in os.listdir(folder_path) if f.endswith('.png')]
 
-    left = '/'.join(left_dir.split('/')[-3:])
-    right = '/'.join(right_dir.split('/')[-3:])
-    disparity = '/'.join(disparity_dir.split('/')[-3:])
+# 파일 이름을 알파벳순으로 정렬
+img_files.sort()
 
-    test_left_list = []
-    for city in os.listdir(left_dir):
-        for file in os.listdir(os.path.join(left_dir, city)):
-            file_name = os.path.join(left, city, file)
-            test_left_list.append(file_name)
+# 텍스트 파일에 쓰기
+i=0
+with open(output_file, 'w') as f:
+    for img_file in img_files:
+        if i == 700:
+            break
+        # 파일 이름에서 확장자 제거 (선택 사항)
+        left = 'testing/image_2/' + img_file
+        right = 'testing/image_3/' + img_file
+        disparity = 'testing/disp_occ_0/' + img_file
+        # 같은 이름을 띄어쓰기로 구분해 3번 반복
+        line = f"{left} {right} {disparity}\n"
+        f.write(line)
+        i+=1
 
-    test_right_list = []
-    for city in os.listdir(right_dir):
-        for file in os.listdir(os.path.join(right_dir, city)):
-            file_name = os.path.join(right, city, file)
-            test_right_list.append(file_name)
-
-    test_disparity_list = []
-    for city in os.listdir(disparity_dir):
-        for file in os.listdir(os.path.join(disparity_dir, city)):
-            file_name = os.path.join(disparity, city, file)
-            test_disparity_list.append(file_name)
-
-    with open('./filenames/target/cityscapes_' + mode + '.txt', 'w') as f:
-        for i in range(len(test_left_list)):
-            f.write(test_left_list[i] + ' ' + test_right_list[i] + ' ' + test_disparity_list[i] + '\n')
-
-
+print(f"작업 완료! 결과가 {output_file}에 저장되었습니다.")

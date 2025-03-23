@@ -9,7 +9,8 @@ depth_model = dict(
 )
 
 uda = dict(
-    threshold = 0.65,
+    train_threshold = 0.65,
+    val_threshold = 0.4,
     alpha = 0.99,
     train_source_only = True
 )
@@ -31,12 +32,12 @@ data = dict(
         num_workers = 2,
         shuffle = True,
         pin_memory = True,
-        val_interval = 50,
+        val_interval = 25,
         save_interval = 50
     ),
     test = dict(
-        batch_size = 1,
-        num_workers = 0,
+        batch_size = 2,
+        num_workers = 2,
         shuffle = False,
         pin_memory = True
     )
