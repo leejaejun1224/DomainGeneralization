@@ -122,11 +122,11 @@ class Logger:
     def compute_metrics(self, data_batch):
         if 'src_disparity' in data_batch.keys():
             scalar_outputs = {}
-            scalar_outputs["EPE"] = [EPE_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], self.max_disp)]
-            scalar_outputs["D1"] = [D1_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], self.max_disp)]
-            scalar_outputs["Thres1"] = [Thres_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], self.max_disp, 1.0)]
-            scalar_outputs["Thres2"] = [Thres_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], self.max_disp, 2.0)]
-            scalar_outputs["Thres3"] = [Thres_metric(data_batch['src_pred_disp'][0], data_batch['src_disparity'], self.max_disp, 3.0)]
+            scalar_outputs["EPE"] = [EPE_metric(data_batch['src_pred_disp_s'][0], data_batch['src_disparity'], self.max_disp)]
+            scalar_outputs["D1"] = [D1_metric(data_batch['src_pred_disp_s'][0], data_batch['src_disparity'], self.max_disp)]
+            scalar_outputs["Thres1"] = [Thres_metric(data_batch['src_pred_disp_s'][0], data_batch['src_disparity'], self.max_disp, 1.0)]
+            scalar_outputs["Thres2"] = [Thres_metric(data_batch['src_pred_disp_s'][0], data_batch['src_disparity'], self.max_disp, 2.0)]
+            scalar_outputs["Thres3"] = [Thres_metric(data_batch['src_pred_disp_s'][0], data_batch['src_disparity'], self.max_disp, 3.0)]
             self.metrics_dict['source'][data_batch['src_left_filename']] = tensor2float(scalar_outputs)
 
         if 'tgt_disparity' in data_batch.keys():
