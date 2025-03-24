@@ -56,7 +56,7 @@ def D1_metric(D_est, D_gt, max_disp):
     D_est, D_gt = D_est[valid_mask], D_gt[valid_mask]
     E = torch.abs(D_gt - D_est)
     err_mask = (E > 3) & (E / D_gt.abs() > 0.05)
-    return torch.mean(err_mask.float())
+    return torch.mean(err_mask.float())*100
 
 @make_nograd_func
 @compute_metric_for_each_image
@@ -66,7 +66,7 @@ def Thres_metric(D_est, D_gt, max_disp, thres):
     D_est, D_gt = D_est[valid_mask], D_gt[valid_mask]
     E = torch.abs(D_gt - D_est)
     err_mask = E > thres
-    return torch.mean(err_mask.float())
+    return torch.mean(err_mask.float())*100
 
 def make_iterative_func(func):
     def wrapper(vars):
