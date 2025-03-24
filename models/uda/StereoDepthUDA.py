@@ -71,10 +71,12 @@ class StereoDepthUDA(StereoDepthUDAInference):
         
         src_pred, map = self.student_forward(data_batch['src_left'], data_batch['src_right'])
         data_batch['src_pred_disp_s'] = src_pred
+        data_batch['src_confidence_map_s'] = map[0]
         
         tgt_pred, map = self.student_forward(data_batch['tgt_left'], data_batch['tgt_right'])  
         data_batch['tgt_pred_disp_s'] = tgt_pred
-        
+        data_batch['tgt_confidence_map_s'] = map[0]
+
         
         with torch.no_grad():
             pseudo_disp, map = self.teacher_forward(
@@ -109,10 +111,12 @@ class StereoDepthUDA(StereoDepthUDAInference):
     def forward_test(self, data_batch):
         start = time.time()
         data_batch['src_pred_disp_s'], map = self.student_forward(data_batch['src_left'], data_batch['src_right'])
+        data_batch['src_confidence_map_s'] = map[0]
         end = time.time()
         print(f"forward time: {end - start}")
         data_batch['tgt_pred_disp_s'], map = self.student_forward(data_batch['tgt_left'], data_batch['tgt_right'])
-        
+        data_batch['tgt_confidence_map_s'] = map[0]
+
         data_batch['src_shape_map'] = map[1]
         data_batch['soft_label'] = map[2]
         
@@ -138,8 +142,8 @@ class StereoDepthUDA(StereoDepthUDAInference):
         reconstruction_loss = calc_reconstruction_loss(data_batch, model='s')
 
         # total_loss = supervised_loss + true_ratio * pseudo_loss  + (1-true_ratio)*reconstruction_loss
-        # total_loss = supervised_loss + true_ratio * pseudo_loss 
-        total_loss = supervised_loss 
+        total_loss = supervised_loss + true_ratio * pseudo_loss 
+        # total_loss = supervised_loss 
 
         log_vars = {
             'loss': total_loss.item(),

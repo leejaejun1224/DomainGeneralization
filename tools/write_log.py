@@ -43,10 +43,21 @@ class Logger:
 
 
     def save_att(self, data_batch):
-        att_prob = data_batch['src_pred_disp_s'][2]
+        att_prob = data_batch['src_confidence_map_s']
+        att_prob = F.interpolate(att_prob.unsqueeze(0), 
+                        scale_factor=4, 
+                        mode='bilinear', 
+                        align_corners=False).squeeze(0)
         att_prob = att_prob.squeeze().cpu().numpy()
         filename = data_batch['src_left_filename'].split('/')[-1]
-        self._save_image(att_prob, filename, self.att_dir)
+        
+        plt.figure(figsize=(12, 8))
+        img = plt.imshow(att_prob, cmap='gray', vmin=0.0, vmax=1.0)
+        cbar = plt.colorbar(img, fraction=0.015, pad=0.04)
+        cbar.ax.tick_params(labelsize=8)
+        plt.axis('off')
+        plt.savefig(os.path.join(self.att_dir, filename), bbox_inches='tight', pad_inches=0.1)
+        plt.close()
 
 
     def save_gt(self, data_batch):

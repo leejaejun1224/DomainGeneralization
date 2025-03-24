@@ -237,8 +237,8 @@ def cost_volume_entropy(cost_volume, dim=2):
     # log_p = torch.log(topk_values + 1e-8)          # 로그 확률
     # entropy = -(topk_values * log_p).sum(dim=dim, keepdim=True)  # 엔트로피 계산
     # return topk_indices
-    # return entropy_norm
-    return disparity_regress
+    return entropy_norm
+    # return disparity_regress
 
 def compute_disparity_from_cost(cost_volume, dim=2, multiplier=4, top_k=1):
     B, C, D, H, W = cost_volume.shape
