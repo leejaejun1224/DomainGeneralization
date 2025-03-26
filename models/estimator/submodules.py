@@ -193,52 +193,72 @@ def SpatialTransformer_grid(x, y, disp_range_samples):
 
     return y_warped, x_warped
 
-def cost_volume_entropy(cost_volume, dim=2):
-    # print('cost volume shape : ', cost_volume.shape)
-    # cost_volume shape : (B, 12, D, H, W)
+
+
+def volume_entropy_softmax(volume, k=12, temperature=0.5, eps=1e-6):
+    """
+    volume: [B, 1, D, H, W]
+    return: [B, H, W]
+    """
+    vol = volume.squeeze(1)  # [B, D, H, W]
     
-    ### in the case of Fast acv plus with just norm correlation volume (not group wise)
-    ### cost volume shape(training) : (B, 1, max_disp//4, 64, 128)
-
-    ### variance method
-    # prob = F.softmax(cost_volume, dim=dim)
-    # log_p = torch.log(prob + 1e-8)
-    # entropy = -(prob*log_p).sum(dim=dim, keepdim=True)
-
-    # variance = prob.var(dim=dim, keepdim=True)
-    # entropy = entropy * (1 + variance)
-
-    ### k = cost_volume.shape[dim]
-    k = 12
-    ### top k method (before softmax)
-    width = cost_volume.shape[-1]
-    cost_volume_cropped = cost_volume[..., 30:]
+    # 1) Top-K
+    topk_vals, _ = torch.topk(vol, k=k, dim=1)  # [B, K, H, W]
+    top_one, top_one_idx = torch.topk(vol, k=1, dim=1)  # [B, 1, H, W]
+    # 2) temperature-scaling
+    scaled_topk_vals = topk_vals / temperature
     
-    # topk_values, topk_indices = torch.topk(cost_volume, k, dim=dim)
-    topk_values, topk_indices = torch.topk(cost_volume, k, dim=dim)
-    topk_prob = F.softmax(topk_values, dim=dim)
-    topk_prob_max, _ = torch.max(topk_prob, dim=dim, keepdim=True)
+    # 3) softmax를 직접 구현 (topk 결과에 대해)
+    #    sum(exp(...)) = partition function
+    exp_vals = torch.exp(scaled_topk_vals)
+    sum_exp = exp_vals.sum(dim=1, keepdim=True) + eps
+    
+    p = exp_vals / sum_exp  # [B, K, H, W]
+    p = torch.clamp(p, eps, 1.0)
+    
+    # 4) 엔트로피
+    H = -(p * p.log()).sum(dim=1) - 2.484  # [B, H, W]
+    H = H.unsqueeze(1)
+    mask = H < 0.00089
+    H = H * mask
+    top_one_idx = top_one_idx*mask
+    top_one_idx = top_one_idx.unsqueeze(1)
+    H = H.unsqueeze(1).unsqueeze(1)
+    return top_one_idx
 
-    log_p = torch.log(topk_prob + 1e-8)
-    entropy = -(topk_prob * log_p).sum(dim=dim, keepdim=True)
 
-    max_entropy = math.log(k + 1e-8)
-    entropy_norm = torch.clamp(entropy / (max_entropy + 1e-8), 0.0, 1.0)
 
-    # For disparity regression, we should use the probabilities to weight the indices
-    # Current: disparity_regress = topk_indices*topk_prob_max 
-    # This only uses the max probability and ignores other probabilities
-    # Correct way: weighted sum of indices with all probabilities
-    disparity_regress = (topk_indices * topk_prob).sum(dim=dim, keepdim=True)
+def peak_confidence_from_volume(volume):
+    """
+    volume shape: [B, 1, D, H, W]
+    return shape: [B, H, W], 각 픽셀에서 'peak - second_peak' 값을 리턴
+    """
+    # volume: [B, 1, D, H, W] -> [B, D, H, W] 로 squeeze
+    vol = volume.squeeze(1)  # shape: [B, D, H, W]
+    
+    # D 차원(disparity 축)에 대해 최대값 및 argmax 구하기
+    max_val, max_idx = vol.max(dim=1)  # shape: [B, H, W]
+    
+    # 두 번째 최댓값을 찾기 위해, 일단 최대값 위치에 매우 작은 값(-∞나 -1e9) 설정
+    # 복사본을 만든 뒤 해당 위치만 -1e9로 세팅
+    vol_clone = vol.clone()
+    
+    b_idxs = torch.arange(vol.shape[0])[:, None, None]     # shape: [B, 1, 1]
+    h_idxs = torch.arange(vol.shape[2])[None, :, None]     # shape: [1, H, 1]
+    w_idxs = torch.arange(vol.shape[3])[None, None, :]     # shape: [1, 1, W]
+    # vol_clone[b, max_idx, h, w] 위치를 아주 작은 값으로 만들어버림
+    vol_clone[b_idxs, max_idx, h_idxs, w_idxs] = -1e9
+    
+    # 이제 두 번째 최댓값을 구한다.
+    second_max_val, _ = vol_clone.max(dim=1)  # shape: [B, H, W]
+    
+    # 최댓값과 두 번째 최댓값의 차이를 confidence로 사용
+    peak_confidence = max_val - second_max_val  # shape: [B, H, W]
+    mask = peak_confidence < 0.015
+    peak_confidence = peak_confidence * mask
+    peak_confidence = peak_confidence.unsqueeze(1).unsqueeze(1)
+    return peak_confidence
 
-    ### top k method (after softmax)
-    # prob = F.softmax(cost_volume, dim=dim)  # 확률 분포
-    # topk_values, _ = torch.topk(prob, k, dim=dim)
-    # log_p = torch.log(topk_values + 1e-8)          # 로그 확률
-    # entropy = -(topk_values * log_p).sum(dim=dim, keepdim=True)  # 엔트로피 계산
-    # return topk_indices
-    return entropy_norm
-    # return disparity_regress
 
 def compute_disparity_from_cost(cost_volume, dim=2, multiplier=4, top_k=1):
     B, C, D, H, W = cost_volume.shape
@@ -258,6 +278,7 @@ def compute_disparity_from_cost(cost_volume, dim=2, multiplier=4, top_k=1):
     max_disp = torch.max(disp_map)
 
     return disp_map
+
 
 
 
