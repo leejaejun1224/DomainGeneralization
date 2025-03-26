@@ -82,29 +82,33 @@ def calc_pseudo_soft_loss(data_batch, threshold, model='s'):
 
 
 def calc_reconstruction_loss(data_batch, model='s', alpha=0.85):
-    bs, _, height, width = data_batch['tgt_left'].shape
+    mask = data_batch['pseudo_mask'] > 0
+    left_masked = data_batch['tgt_left'] * mask.expand(-1, 3, -1, -1)
+    B, C, H, W = data_batch['tgt_left'].shape
+
+    y_base, x_base = torch.meshgrid(
+        torch.arange(H, device=data_batch['tgt_left'].device),
+        torch.arange(W, device=data_batch['tgt_left'].device),
+        indexing='ij'
+    )
+    x_base = x_base.unsqueeze(0).expand(B, -1, -1)  # (B,H,W)
+    y_base = y_base.unsqueeze(0).expand(B, -1, -1)  # (B,H,W)
+
+    x_warped = x_base + data_batch['pseudo_disp'][0].squeeze(1)
+
+    x_norm = 2.0 * x_warped / (W-1) - 1.0
+    y_norm = 2.0 * y_base / (H-1) - 1.0
     
+    grid = torch.stack((x_norm, y_norm), dim=-1)  # (B,H,W,2)
 
-    x_base = torch.linspace(0, width-1, width).repeat(bs, height, 1).type_as(data_batch['tgt_left'])
-    y_base = torch.linspace(0, height-1, height).repeat(bs, width, 1).transpose(1, 2).type_as(data_batch['tgt_left'])
-
-    x_warped = x_base - data_batch['pseudo_disp'][0].squeeze(1)
-
-    x_norm = 2.0 * x_warped / (width-1) - 1.0   
-    y_norm = 2.0 * y_base / (height-1) - 1.0
-
-    flow_field = torch.stack((x_norm, y_norm), dim=1).permute(0, 2, 3, 1)
-
-    ### [B, C, H, W]
-    img_right_reconstructed = F.grid_sample(data_batch['tgt_left'], flow_field, mode='bilinear', padding_mode='zeros', align_corners=True)
-
-    ssim = compute_ssim(data_batch['tgt_right'], img_right_reconstructed)
-    ssim_loss = (1 - ssim)/2
-
-    l1_loss = F.l1_loss(data_batch['tgt_right'], img_right_reconstructed, reduction='none').mean(dim=(1,2,3))
-
-    # reconstruction_loss = alpha * ssim_loss + (1 - alpha) * l1_loss
-    reconstruction_loss = (1 - alpha) * l1_loss
+    left_warped = F.grid_sample(
+        left_masked, grid, 
+        mode='bilinear', 
+        padding_mode='border', 
+        align_corners=True
+    )
+    mask = left_warped > 0
+    reconstruction_loss = F.smooth_l1_loss(left_warped, data_batch['tgt_right']*mask, reduction='none')
     return reconstruction_loss.mean()
 
 

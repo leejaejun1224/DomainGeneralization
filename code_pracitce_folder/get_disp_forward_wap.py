@@ -1,3 +1,4 @@
+import time
 import torch
 import torch.nn.functional as F
 import numpy as np
@@ -109,36 +110,63 @@ def warp_mask_left_to_right(mask, disparity):
     )
     return mask_warped
 
+def photometric_loss(left, right, disparity):
+    left_warped_t, left_masked = warp_left_to_right(left, disparity)
+    valid_mask_t = (disparity > 0).float()
+    mask_warped_t = warp_mask_left_to_right(valid_mask_t, disparity)
+    left_warped_masked_t = left_warped_t * mask_warped_t
+    diff_t = torch.abs(left_warped_t - right)
+    diff_masked = diff_t * mask_warped_t
+    sum_diff = diff_masked.sum()
+    sum_mask = mask_warped_t.sum() * diff_t.shape[1]
+    loss = sum_diff / (sum_mask + 1e-8)
+    return loss
+
+
+
+
+
 ###################################################
 # 4) 전체 시연 + 시각화
 ###################################################
 def main():
     # 예시 경로 (직접 수정하세요)
-    left_path = "/home/jaejun/dataset/kitti_2015/training/image_2/000000_10.png"
-    right_path = "/home/jaejun/dataset/kitti_2015/training/image_3/000000_10.png"
-    disp_path = "/home/jaejun/dataset/kitti_2015/training/disp_occ_0/000000_10.png"
+    image = "000000_10.png"
+    left_path = "/home/jaejun/dataset/kitti_2015/training/image_2/" + image
+    right_path = "/home/jaejun/dataset/kitti_2015/training/image_3/" + image
+    disp_path = "/home/jaejun/dataset/kitti_2015/training/disp_occ_0/" + image
 
     # 1) 로드
     left_t = load_image_as_tensor(left_path)    # (1,3,H,W)
     right_t = load_image_as_tensor(right_path)  # (1,3,H,W)
     disp_t = load_disparity_as_tensor(disp_path, scale=1.0/256.0)  # (1,1,H,W)
 
+    # loss = photometric_loss(left_t, right_t, disp_t)
+    # print(f"Photometric loss = {loss.item():.4f}")
+
+
     # 2) 왼쪽이미지 Warp
+    start = time.time()
     left_warped_t, left_masked = warp_left_to_right(left_t, disp_t)  # (1,3,H,W)
 
     # 3) 마스크도 Warp (nearest)
     #    예) "disparity>0"인 지점만 유효하다고 가정
-    valid_mask_t = (disp_t >= 0).float()  # (1,1,H,W)
+    valid_mask_t = (disp_t > 0).float()  # (1,1,H,W)
     mask_warped_t = warp_mask_left_to_right(valid_mask_t, disp_t)  # (1,1,H,W)
+    end = time.time()
+    print(f"Time taken: {end - start:.2f} seconds")
 
     # 4) "warp된 부분만" 보고 싶다면 곱하기
     #    (B,3,H,W) x (B,1,H,W) -> broadcast
-    left_warped_masked_t = left_warped_t * mask_warped_t
+    left_warped_masked_t = left_warped_t
+    mask  = left_warped_t > 0
+    # left_warped_masked_t = left_warped_t * mask_warped_t
 
     # 5) photometric diff (마스크 영역만)
     diff_t = torch.abs(left_warped_t - right_t)
     # 채널(C=3) 고려 시, mask_warped_t를 브로드캐스팅
-    diff_masked = diff_t * mask_warped_t
+    # diff_masked = diff_t 
+    diff_masked = diff_t * mask
     sum_diff = diff_masked.sum()
     sum_mask = mask_warped_t.sum() * diff_t.shape[1]  # 채널 수만큼 곱
     loss = sum_diff / (sum_mask + 1e-8)
