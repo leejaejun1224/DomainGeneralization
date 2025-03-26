@@ -54,6 +54,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
     def val_step(self, data_batch):
         pass
     
+
     "args : optimizer, data_batchhhhh"
     def train_step(self, data_batch, optimizer, iter, threshold):
         
@@ -86,13 +87,13 @@ class StereoDepthUDA(StereoDepthUDAInference):
 
         supervised_loss = calc_supervised_train_loss(data_batch, model='s')
         pseudo_loss, true_ratio = calc_pseudo_loss(data_batch, threshold, model='s')
-        reconstruction_loss = calc_reconstruction_loss(data_batch, model='s')
+        reconstruction_loss = calc_reconstruction_loss(data_batch, domain='src', model='s')
 
         # 만약에 pseudo loss가 nan이 나오면 그냥 total loss로만 backward를 하면 되나
 
         # total_loss = supervised_loss + pseudo_loss*true_ratio + (1-true_ratio)*reconstruction_loss
         # total_loss = supervised_loss + true_ratio * pseudo_loss
-        total_loss = supervised_loss 
+        total_loss = supervised_loss + 0.1 * reconstruction_loss
 
         log_vars = {
             'loss': total_loss.item(),
@@ -139,11 +140,11 @@ class StereoDepthUDA(StereoDepthUDAInference):
         else:
             supervised_loss = torch.tensor(0.0)
         
-        reconstruction_loss = calc_reconstruction_loss(data_batch, model='s')
+        reconstruction_loss = calc_reconstruction_loss(data_batch, domain='src', model='s')
 
         # total_loss = supervised_loss + true_ratio * pseudo_loss  + (1-true_ratio)*reconstruction_loss
-        total_loss = supervised_loss + true_ratio * pseudo_loss 
-        # total_loss = supervised_loss 
+        # total_loss = supervised_loss + true_ratio * pseudo_loss 
+        total_loss = supervised_loss 
 
         log_vars = {
             'loss': total_loss.item(),

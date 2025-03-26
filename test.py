@@ -133,7 +133,7 @@ def main():
             log_vars = model.forward_test(data_batch)
             for i in range(cfg['test_batch_size']):
                 batch = split_batch(data_batch, i)
-                logger.log(batch)
+                logger.log(batch, log_vars)
 
     logger.save_metrics()
     return 0

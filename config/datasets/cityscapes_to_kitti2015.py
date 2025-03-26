@@ -12,13 +12,13 @@ cityscapes_pipeline = [
     dict(type='Resize', img_scale=(1248, 384))
 ]
 
-source_dataset = 'kitti_2015'
+# source_dataset = 'kitti_2015'
 # source_dataset = 'cityscapes'
-# source_dataset = 'driving_stereo'
+source_dataset = 'driving_stereo'
 
 # target_dataset = 'kitti_2015'
-target_dataset = 'kitti_2015'
-# target_dataset = 'driving_stereo'
+# target_dataset = 'kitti_2015'
+target_dataset = 'driving_stereo'
 
 source_train = {}
 source_train['type'] = f'{source_dataset}'

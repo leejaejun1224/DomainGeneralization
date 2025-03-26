@@ -81,41 +81,48 @@ def calc_pseudo_soft_loss(data_batch, threshold, model='s'):
     return pseudo_soft_loss
 
 
-def calc_reconstruction_loss(data_batch, model='s', alpha=0.85):
-    assert data_batch['pseudo_mask'].shape[0] == data_batch['tgt_left'].shape[0] and \
-           data_batch['pseudo_mask'].shape[2] == data_batch['tgt_left'].shape[2] and \
-           data_batch['pseudo_mask'].shape[3] == data_batch['tgt_left'].shape[3]
-    mask = data_batch['pseudo_mask'] > 0
-    left_masked = data_batch['tgt_left'] * mask.expand(-1, 3, -1, -1)
-    B, C, H, W = data_batch['tgt_left'].shape
+def calc_reconstruction_loss(data_batch, domain='tgt', model='s', alpha=0.85):
 
+    disp_key = f'{domain}_pred_disp_{model}' if domain == 'src' else 'pseudo_disp'
+    left_key = f'{domain}_left'
+    right_key = f'{domain}_right'
+
+    mask = data_batch[disp_key][2] > 0
+    left_masked = data_batch[left_key] * mask.unsqueeze(1)
+    B, C, H, W = data_batch[left_key].shape
+
+    # Create base coordinate grids
     y_base, x_base = torch.meshgrid(
-        torch.arange(H, device=data_batch['tgt_left'].device),
-        torch.arange(W, device=data_batch['tgt_left'].device),
+        torch.arange(H, device=data_batch[left_key].device),
+        torch.arange(W, device=data_batch[left_key].device),
         indexing='ij'
     )
     x_base = x_base.unsqueeze(0).expand(B, -1, -1)  # (B,H,W)
     y_base = y_base.unsqueeze(0).expand(B, -1, -1)  # (B,H,W)
 
-    x_warped = x_base + data_batch['pseudo_disp'][0].squeeze(1)
+    # Warp coordinates using disparity
+    x_warped = x_base + data_batch[disp_key][0].squeeze(1)
 
+    # Normalize coordinates to [-1,1] range for grid_sample
     x_norm = 2.0 * x_warped / (W-1) - 1.0
     y_norm = 2.0 * y_base / (H-1) - 1.0
     
     grid = torch.stack((x_norm, y_norm), dim=-1)  # (B,H,W,2)
 
+    # Warp left image to right view
     left_warped = F.grid_sample(
-        left_masked, grid, 
-        mode='bilinear', 
-        padding_mode='border', 
+        left_masked, grid,
+        mode='bilinear',
+        padding_mode='border',
         align_corners=True
     )
 
+    # Calculate reconstruction loss
     mask = left_warped > 0
-    data_batch["left_right_difference"] = torch.abs(left_warped - data_batch['tgt_right']*mask)
-    reconstruction_loss = F.smooth_l1_loss(left_warped, data_batch['tgt_right']*mask, reduction='none')
+    data_batch[f"{domain}_left_right_difference"] = torch.abs(left_warped - data_batch[right_key]*mask)
+    reconstruction_loss = F.smooth_l1_loss(left_warped, data_batch[right_key]*mask, reduction='mean')
     
-    return reconstruction_loss.mean()
+    return reconstruction_loss
 
 
 def compute_ssim(img1, img2, window_size=3, channel=3):

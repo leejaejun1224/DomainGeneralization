@@ -87,7 +87,7 @@ class Logger:
 
 
 
-    def save_disparity(self, data_batch):
+    def save_disparity(self, data_batch, log_vars):
         pred_src = data_batch['src_pred_disp_s'][0].squeeze().cpu().numpy()
         src_filename = data_batch['src_left_filename'].split('/')[-1]
         # Create figure with colorbar for source disparity
@@ -106,6 +106,17 @@ class Logger:
         cbar = plt.colorbar(img, fraction=0.015, pad=0.04)
         cbar.ax.tick_params(labelsize=8)
         plt.axis('off')
+        
+        # Add reconstruction loss text in upper right
+        recon_loss = log_vars['reconstruction_loss']
+        plt.text(0.98, 0.98, f'Recon Loss: {recon_loss:.4f}', 
+                horizontalalignment='right',
+                verticalalignment='top',
+                transform=plt.gca().transAxes,
+                color='white',
+                fontsize=10,
+                bbox=dict(facecolor='black', alpha=0.5))
+                
         plt.savefig(os.path.join(self.disp_dir_tgt, tgt_filename), bbox_inches='tight', pad_inches=0.1)
         plt.close()
 
@@ -180,9 +191,9 @@ class Logger:
             json.dump(metrics_with_averages, f, indent=4)
 
 
-    def log(self, data_batch):
+    def log(self, data_batch, log_vars):
         self.save_entropy(data_batch)
         self.save_gt(data_batch)
         self.save_att(data_batch)
-        self.save_disparity(data_batch)
+        self.save_disparity(data_batch, log_vars)
         self.compute_metrics(data_batch)
