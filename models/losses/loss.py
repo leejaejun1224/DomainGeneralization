@@ -82,6 +82,9 @@ def calc_pseudo_soft_loss(data_batch, threshold, model='s'):
 
 
 def calc_reconstruction_loss(data_batch, model='s', alpha=0.85):
+    assert data_batch['pseudo_mask'].shape[0] == data_batch['tgt_left'].shape[0] and \
+           data_batch['pseudo_mask'].shape[2] == data_batch['tgt_left'].shape[2] and \
+           data_batch['pseudo_mask'].shape[3] == data_batch['tgt_left'].shape[3]
     mask = data_batch['pseudo_mask'] > 0
     left_masked = data_batch['tgt_left'] * mask.expand(-1, 3, -1, -1)
     B, C, H, W = data_batch['tgt_left'].shape
@@ -107,8 +110,11 @@ def calc_reconstruction_loss(data_batch, model='s', alpha=0.85):
         padding_mode='border', 
         align_corners=True
     )
+
     mask = left_warped > 0
+    data_batch["left_right_difference"] = torch.abs(left_warped - data_batch['tgt_right']*mask)
     reconstruction_loss = F.smooth_l1_loss(left_warped, data_batch['tgt_right']*mask, reduction='none')
+    
     return reconstruction_loss.mean()
 
 
@@ -131,4 +137,5 @@ def compute_ssim(img1, img2, window_size=3, channel=3):
     C2 = 1e-5
 
     ssim_map = ((2*mean1*mean2 + C1)*(2*sigma12 + C2)) / ((mean1_sq + mean2_sq + C1)*(sigma1_sq + sigma2_sq + C2))
+    
     return ssim_map.mean(dim=(1,2,3))
