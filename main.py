@@ -131,7 +131,7 @@ def process_batch(data_batch, source_batch, target_batch):
 
 def train_epoch(model, source_loader, target_loader, optimizer, threshold_manager, epoch, cfg, args):
     model.train()
-    adjust_learning_rate(optimizer, epoch, cfg['lr'], cfg['adjust_lr'])
+    current_lr = adjust_learning_rate(optimizer, epoch, cfg['lr'], cfg['adjust_lr'])
     
     true_ratios, train_losses, train_pseudo_losses, reconstruction_losses = [], [], [], []
     average_threshold = []
@@ -162,9 +162,10 @@ def train_epoch(model, source_loader, target_loader, optimizer, threshold_manage
             'true_ratio_train': sum(true_ratios) / len(true_ratios),
             'train_pseudo_loss': sum(train_pseudo_losses) / len(train_pseudo_losses),
             'average_threshold': sum(average_threshold)/len(average_threshold),
-            'reconstruction_loss': sum(reconstruction_losses)/len(reconstruction_losses)
+            'reconstruction_loss': sum(reconstruction_losses)/len(reconstruction_losses),
+            'learning_rate': current_lr
         }
-    return {'train_loss': 0, 'true_ratio_train': 0, 'train_pseudo_loss': 0, 'reconstruction_loss': 0}
+    return {'train_loss': 0, 'true_ratio_train': 0, 'train_pseudo_loss': 0, 'reconstruction_loss': 0, 'learning_rate': current_lr}
 
 def validate(model, source_loader, target_loader):
     model.eval()
@@ -190,14 +191,15 @@ def validate(model, source_loader, target_loader):
         }
     return {'val_loss': 0, 'true_ratio_val': 0, 'val_pseudo_loss': 0, 'reconstruction_loss': 0}
 
-def save_checkpoint(model, optimizer, epoch, save_dir):
+def save_checkpoint(model, optimizer, epoch, save_dir, current_lr):
     checkpoint = {
         'epoch': epoch,
         'student_state_dict': model.student_state_dict(),
         'teacher_state_dict': model.teacher_state_dict(),
-        'optimizer_state_dict': optimizer.state_dict()
+        'optimizer_state_dict': optimizer.state_dict(),
+        'learning_rate': current_lr
     }
-    torch.save(checkpoint, os.path.join(save_dir, f'checkpoint_epoch{epoch+1}.pth'))
+    torch.save(checkpoint, os.path.join(save_dir, f'checkpoint_epoch_{epoch+1}.pth'))
 
 def main():
     args = parse_args()
@@ -210,30 +212,39 @@ def main():
     test_source_loader, test_target_loader = setup_test_loaders(cfg)
     
     model = __models__['StereoDepthUDA'](cfg)
+    start_epoch = 0
     if args.checkpoint is not None:
-        ### 여기까지의 epoch이 뭔지를 알면 좋을 것 같은데.
+        print("checkpoint", args.checkpoint)
         checkpoint = torch.load(args.checkpoint)
         model.student_model.load_state_dict(checkpoint['student_state_dict'])
         model.teacher_model.load_state_dict(checkpoint['teacher_state_dict'])
+        start_epoch = int(args.checkpoint.split('_')[-1].split('.')[0])
+        print("start_epoch", start_epoch)
+        log_dict['ckpt'] = args.checkpoint
+        log_dict['ckpt_epoch'] = start_epoch
+
     model.to('cuda:0')
     model.init_ema()
-    
+
     optimizer = torch.optim.Adam(model.parameters(), lr=cfg['lr'])
+    if args.checkpoint is not None:
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        
     log_dict['student_params'] = sum(p.numel() for p in model.student_model.parameters())
     log_dict['teacher_params'] = sum(p.numel() for p in model.teacher_model.parameters())
     
     threshold_manager = ThresholdManager(save_dir=save_dir)
     
-    for epoch in range(cfg['epoch']):
+    for epoch in range(start_epoch, start_epoch + cfg['epoch']):
         train_metrics = train_epoch(model, train_source_loader, train_target_loader, optimizer, threshold_manager, epoch, cfg, args)
-        print(f'Epoch [{epoch + 1}/{cfg["epoch"]}] Average Loss: {train_metrics["train_loss"]:.4f}')
+        print(f'Epoch [{epoch + 1}/{start_epoch + cfg["epoch"]}] Average Loss: {train_metrics["train_loss"]:.4f}')
         
         if (epoch + 1) % cfg['val_interval'] == 0:
             val_metrics = validate(model, test_source_loader, test_target_loader)
             print(f'Validation Loss: {val_metrics["val_loss"]:.4f}')
             
             if (epoch + 1) % cfg['save_interval'] == 0:
-                save_checkpoint(model, optimizer, epoch, save_dir)
+                save_checkpoint(model, optimizer, epoch, save_dir, train_metrics['learning_rate'])
             
             log_dict[f'epoch_{epoch+1}'] = {**train_metrics, **val_metrics}
     
