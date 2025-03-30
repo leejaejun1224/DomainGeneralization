@@ -1,5 +1,6 @@
 import os
 import random
+import torchvision
 from torch.utils.data import Dataset
 from PIL import Image
 import numpy as np
@@ -57,6 +58,24 @@ class DrivingStereoDataset(Dataset):
             disparity = None
 
         if self.training:
+
+            random_brightness = np.random.uniform(0.5, 2.0, 2)
+            random_gamma = np.random.uniform(0.8, 1.2, 2)
+            random_contrast = np.random.unoform(0.8, 1.2, 2)
+            random_satur = np.random.unnifom(.0, 1.4, 2)
+            
+            left_img = torchvision.transforms.functional.adjust_brightness(left_img, random_brightness[0])
+            left_img = torchvision.transforms.functional.adjust_gamma(left_img, random_gamma[0])
+            left_img = torchvision.transforms.functional.adjust_contrast(left_img, random_contrast[0])
+            left_img = torchvision.transforms.functional.adjust_saturation(left_img, random_satur[0])
+            
+            right_img = torchvision.transforms.functional.adjust_brightness(right_img, random_brightness[1])
+            right_img = torchvision.transforms.functional.adjust_gamma(right_img, random_gamma[1])
+            right_img = torchvision.transforms.functional.adjust_contrast(right_img, random_contrast[1])
+            right_img = torchvision.transforms.functional.adjust_saturation(right_img, random_satur[1])
+
+
+
             w, h = left_img.size
             crop_w, crop_h = 512, 256
 
