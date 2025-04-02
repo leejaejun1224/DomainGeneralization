@@ -3,6 +3,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
+
+
 def get_loss(disp_ests, disp_gts, img_masks, weights):
     all_losses = []
 
@@ -68,23 +70,25 @@ def calc_pseudo_loss(data_batch, threshold, model='s'):
     pseudo_label_loss = get_loss(pred_disp, pseudo_disp, mask, weights)
     return pseudo_label_loss, true_ratio
 
-def calc_pseudo_entropy_loss(data_batch, threshold, model='s'):
-    key = 'tgt_pred_disp_' + model
-    pred_disp, pseudo_disp, entropy_map = data_batch[key], data_batch['pseudo_disp'][1], data_batch['tgt_entropy_map_t']
 
-    pred_disp = pred_disp[1]
 
-    mask = (pseudo_disp > 0) & (pseudo_disp < 256) & (entropy_map >= threshold.unsqueeze(1).unsqueeze(2).cuda())
-    data_batch['pseudo_mask'] = mask
-    mask = mask.tolist()
-    weights = [1.0]
-    entropy_mask = entropy_map >= threshold.unsqueeze(1).unsqueeze(2).cuda()
-    true_count = entropy_mask.sum(dim=(0,1,2)) 
+def calc_pseudo_entropy_loss(data_batch, shift=0.00001, model='s'):
+
+    entropy_map = data_batch['tgt_entropy_map_' + model]
+    print("entropy_map requires_grad:", entropy_map.requires_grad)
+    target_entropy = torch.clamp(entropy_map - shift, min=0)
+    entropy_loss = nn.L1Loss(reduction='sum')(entropy_map, target_entropy)
+
+    entropy_mask = entropy_map > 0
+
+    true_count = entropy_mask.sum() 
     total_pixels = entropy_mask.numel()
     true_ratio = true_count.float() / total_pixels
 
-    pseudo_label_loss = get_loss(pred_disp, pseudo_disp, mask, weights)
-    return pseudo_label_loss, true_ratio
+    # 디버깅 출력
+    print(f"Valid entropy pixels: {true_count.item()}, Entropy loss: {entropy_loss}")
+    print("loss requires_grad:", entropy_loss.requires_grad)
+    return entropy_loss, true_ratio
 
 
 

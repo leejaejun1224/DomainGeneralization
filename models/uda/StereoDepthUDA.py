@@ -10,8 +10,8 @@ from models.uda.decorator import StereoDepthUDAInference
 
 from models.losses.loss import calc_supervised_train_loss
 from models.losses.loss import calc_supervised_val_loss
-from models.losses.loss import calc_pseudo_entropy_loss, calc_pseudo_soft_loss, calc_pseudo_loss
-from models.losses.loss import calc_reconstruction_loss
+from models.losses.loss import calc_pseudo_loss, calc_pseudo_soft_loss
+from models.losses.loss import calc_reconstruction_loss, calc_pseudo_entropy_loss
 import time
 
 
@@ -74,7 +74,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
         data_batch['src_pred_disp_s'] = src_pred
         data_batch['src_confidence_map_s'] = map[0]
         data_batch['src_entropy_map_s'] = map[1]
-        
+
         tgt_pred, map = self.student_forward(data_batch['tgt_left'], data_batch['tgt_right'])  
         data_batch['tgt_pred_disp_s'] = tgt_pred
         data_batch['tgt_confidence_map_s'] = map[0]
@@ -88,24 +88,16 @@ class StereoDepthUDA(StereoDepthUDAInference):
             data_batch['tgt_entropy_map_t'] = map[1]
 
         supervised_loss = calc_supervised_train_loss(data_batch, model='s')
-
-
-        ############ choose one of them #############
-        ## 1. pseudo loss with confidence map
         # pseudo_loss, true_ratio = calc_pseudo_loss(data_batch, threshold, model='s')
-
-        ## 2. pseudo loss with entropy map
-        pseudo_loss = calc_pseudo_entropy_loss(data_batch, threshold, model='t')
-        ############ 
-
-
+        pseudo_loss, true_ratio = calc_pseudo_entropy_loss(data_batch, shift=0.00001, model='s')    
         reconstruction_loss = calc_reconstruction_loss(data_batch, domain='src', model='s')
 
         # 만약에 pseudo loss가 nan이 나오면 그냥 total loss로만 backward를 하면 되나
 
         # total_loss = supervised_loss + pseudo_loss*true_ratio + (1-true_ratio)*reconstruction_loss
         # total_loss = supervised_loss + true_ratio * pseudo_loss
-        total_loss = supervised_loss +  reconstruction_loss
+        # total_loss = supervised_loss +  reconstruction_loss
+        total_loss = supervised_loss + pseudo_loss
 
         log_vars = {
             'loss': total_loss.item(),

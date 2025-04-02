@@ -289,10 +289,10 @@ class Fast_ACVNet_plus(nn.Module):
         match_left = self.desc(self.conv(features_left[0]))
         match_right = self.desc(self.conv(features_right[0]))
 
-        corr_volume = build_norm_correlation_volume(match_left, match_right, self.maxdisp//4)
-        entropy_map = volume_entropy_softmax(corr_volume)
-        peak_confidence = peak_confidence_from_volume(corr_volume)
-        corr_volume = self.corr_stem(corr_volume)
+        corr_volume_1 = build_norm_correlation_volume(match_left, match_right, self.maxdisp//4)
+        top_one, entropy_map = volume_entropy_softmax(corr_volume_1)
+        peak_confidence = peak_confidence_from_volume(corr_volume_1)
+        corr_volume = self.corr_stem(corr_volume_1)
 
         cost_att = self.corr_feature_att_4(corr_volume, features_left[0])
         att_weights = self.hourglass_att(cost_att, features_left)

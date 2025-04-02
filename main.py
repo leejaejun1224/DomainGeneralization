@@ -15,7 +15,7 @@ from datasets.dataloader import PrepareDataset
 from experiment import prepare_cfg, adjust_learning_rate
 from tools.plot_loss import plot_loss_graph, plot_true_ratio, plot_threshold, plot_reconstruction_loss
 from tools.metrics import EPE_metric, D1_metric, Thres_metric
-from models.tools.threshold_manager import ThresholdManager
+from models.tools.threshold_manager import EntropyThresholdManager, ThresholdManager
 
 cudnn.benchmark = True
 os.environ['CUDA_VISIBLE_DEVICES'] = '0, 1'
@@ -44,6 +44,7 @@ def setup_train_loaders(cfg):
         list_filename=cfg['dataset']['src_filelist'],
         training=True
     )
+    
     target_dataset = __datasets__[cfg['dataset']['tgt_type']](
         datapath=cfg['dataset']['tgt_root'],
         list_filename=cfg['dataset']['tgt_filelist'],
@@ -233,7 +234,7 @@ def main():
     log_dict['student_params'] = sum(p.numel() for p in model.student_model.parameters())
     log_dict['teacher_params'] = sum(p.numel() for p in model.teacher_model.parameters())
     
-    threshold_manager = ThresholdManager(save_dir=save_dir)
+    threshold_manager = EntropyThresholdManager(save_dir=save_dir)
     
     for epoch in range(start_epoch, start_epoch + cfg['epoch']):
         train_metrics = train_epoch(model, train_source_loader, train_target_loader, optimizer, threshold_manager, epoch, cfg, args)

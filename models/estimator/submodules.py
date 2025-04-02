@@ -196,12 +196,7 @@ def SpatialTransformer_grid(x, y, disp_range_samples):
 
 
 def volume_entropy_softmax(volume, k=12, temperature=0.5, eps=1e-6):
-    """
-    volume: [B, 1, D, H, W]
-    return: [B, H, W]
-    """
     vol = volume.squeeze(1)  # [B, D, H, W]
-    
     # 1) Top-K
     topk_vals, _ = torch.topk(vol, k=k, dim=1)  # [B, K, H, W]
     top_one, top_one_idx = torch.topk(vol, k=1, dim=1)  # [B, 1, H, W]
@@ -218,11 +213,12 @@ def volume_entropy_softmax(volume, k=12, temperature=0.5, eps=1e-6):
     H = -(p * p.log()).sum(dim=1) - 2.484  # [B, H, W]
     H = H.unsqueeze(1)
     mask = H < 0.00089
-    H = H * mask
+    # H = H * mask
     top_one_idx = top_one_idx*mask
     top_one_idx = top_one_idx.unsqueeze(1)
-    H = H.unsqueeze(1).unsqueeze(1)
-    return top_one_idx
+    print(H.shape, "H shape")
+    # H = H.unsqueeze(1).unsqueeze(1)
+    return top_one_idx, H
 
 
 
