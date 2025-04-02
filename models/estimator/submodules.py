@@ -205,18 +205,16 @@ def volume_entropy_softmax(volume, k=12, temperature=0.5, eps=1e-6):
     # 1) Top-K
     topk_vals, _ = torch.topk(vol, k=k, dim=1)  # [B, K, H, W]
     top_one, top_one_idx = torch.topk(vol, k=1, dim=1)  # [B, 1, H, W]
-    # 2) temperature-scaling
     scaled_topk_vals = topk_vals / temperature
     
-    # 3) softmax를 직접 구현 (topk 결과에 대해)
-    #    sum(exp(...)) = partition function
+
     exp_vals = torch.exp(scaled_topk_vals)
     sum_exp = exp_vals.sum(dim=1, keepdim=True) + eps
     
     p = exp_vals / sum_exp  # [B, K, H, W]
     p = torch.clamp(p, eps, 1.0)
     
-    # 4) 엔트로피
+    # 4) 엔트로피 ㄱㄱ
     H = -(p * p.log()).sum(dim=1) - 2.484  # [B, H, W]
     H = H.unsqueeze(1)
     mask = H < 0.00089

@@ -68,6 +68,25 @@ def calc_pseudo_loss(data_batch, threshold, model='s'):
     pseudo_label_loss = get_loss(pred_disp, pseudo_disp, mask, weights)
     return pseudo_label_loss, true_ratio
 
+def calc_pseudo_entropy_loss(data_batch, threshold, model='s'):
+    key = 'tgt_pred_disp_' + model
+    pred_disp, pseudo_disp, entropy_map = data_batch[key], data_batch['pseudo_disp'][1], data_batch['tgt_entropy_map_t']
+
+    pred_disp = pred_disp[1]
+
+    mask = (pseudo_disp > 0) & (pseudo_disp < 256) & (entropy_map >= threshold.unsqueeze(1).unsqueeze(2).cuda())
+    data_batch['pseudo_mask'] = mask
+    mask = mask.tolist()
+    weights = [1.0]
+    entropy_mask = entropy_map >= threshold.unsqueeze(1).unsqueeze(2).cuda()
+    true_count = entropy_mask.sum(dim=(0,1,2)) 
+    total_pixels = entropy_mask.numel()
+    true_ratio = true_count.float() / total_pixels
+
+    pseudo_label_loss = get_loss(pred_disp, pseudo_disp, mask, weights)
+    return pseudo_label_loss, true_ratio
+
+
 
 def calc_pseudo_soft_loss(data_batch, threshold, model='s'):
     key = 'tgt_pred_disp_' + model
