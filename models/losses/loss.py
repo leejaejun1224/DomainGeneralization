@@ -75,7 +75,6 @@ def calc_pseudo_loss(data_batch, threshold, model='s'):
 def calc_pseudo_entropy_loss(data_batch, shift=0.00001, model='s'):
 
     entropy_map = data_batch['tgt_entropy_map_' + model]
-    print("entropy_map requires_grad:", entropy_map.requires_grad)
     target_entropy = torch.clamp(entropy_map - shift, min=0)
     entropy_loss = nn.L1Loss(reduction='sum')(entropy_map, target_entropy)
 
@@ -86,8 +85,6 @@ def calc_pseudo_entropy_loss(data_batch, shift=0.00001, model='s'):
     true_ratio = true_count.float() / total_pixels
 
     # 디버깅 출력
-    print(f"Valid entropy pixels: {true_count.item()}, Entropy loss: {entropy_loss}")
-    print("loss requires_grad:", entropy_loss.requires_grad)
     return entropy_loss, true_ratio
 
 

@@ -61,8 +61,8 @@ class DrivingStereoDataset(Dataset):
 
             random_brightness = np.random.uniform(0.5, 2.0, 2)
             random_gamma = np.random.uniform(0.8, 1.2, 2)
-            random_contrast = np.random.unoform(0.8, 1.2, 2)
-            random_satur = np.random.unnifom(.0, 1.4, 2)
+            random_contrast = np.random.uniform(0.8, 1.2, 2)
+            random_satur = np.random.uniform(.0, 1.4, 2)
             
             left_img = torchvision.transforms.functional.adjust_brightness(left_img, random_brightness[0])
             left_img = torchvision.transforms.functional.adjust_gamma(left_img, random_gamma[0])
