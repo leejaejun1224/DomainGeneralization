@@ -108,7 +108,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
         }
 
         total_loss.backward()
-    
+
         return log_vars
 
     # automatically make model's training member variable False
