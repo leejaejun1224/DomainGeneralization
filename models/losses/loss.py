@@ -72,6 +72,22 @@ def calc_pseudo_loss(data_batch, threshold, model='s'):
 
 
 
+def calc_pseudo_entropy_top1_loss(data_batch, model='s'):
+
+    entropy_mask = data_batch['tgt_entropy_map_' + model] > 0
+    true_count = entropy_mask.sum() 
+    total_pixels = entropy_mask.numel()
+    true_ratio = true_count.float() / total_pixels
+
+    weights = [1.0]
+    pseudo_label_loss = get_loss(data_batch['tgt_pred_disp_' + model], 
+                                 data_batch['tgt_entropy_map_idx_' + model], 
+                                 entropy_mask, 
+                                 weights)
+
+    return pseudo_label_loss, true_ratio
+
+
 def calc_pseudo_entropy_loss(data_batch, min_ent=0.00088, model='s'):
 
     entropy_map = data_batch['tgt_entropy_map_' + model]

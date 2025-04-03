@@ -10,6 +10,8 @@ def plot_loss_graph(loss_dict, output_image_path):
     val_losses = []
     train_pseudo_losses = []
     val_pseudo_losses = []
+    train_supervised_losses = []
+    val_supervised_losses = []
 
     epoch_keys = [k for k in loss_dict.keys() if k.startswith("epoch")]
     sorted_keys = sorted(epoch_keys, key=lambda k: int(k.split('_')[1]))
@@ -25,7 +27,9 @@ def plot_loss_graph(loss_dict, output_image_path):
         train_loss = epoch_data.get("train_loss")
         val_loss = epoch_data.get("val_loss")
         train_pseudo_loss = epoch_data.get("train_pseudo_loss")
+        train_supervised_loss = epoch_data.get("train_supervised_loss")
         val_pseudo_loss = epoch_data.get("val_pseudo_loss")
+        val_supervised_loss = epoch_data.get("val_supervised_loss")
 
         # 문자열 "NaN"으로 저장된 경우 처리 (대소문자 구분 없이)
         if isinstance(train_loss, str) and train_loss.lower() == "nan":
@@ -34,14 +38,20 @@ def plot_loss_graph(loss_dict, output_image_path):
             val_loss = float('nan')
         if isinstance(train_pseudo_loss, str) and train_pseudo_loss.lower() == "nan":
             train_pseudo_loss = float('nan')
+        if isinstance(train_supervised_loss, str) and train_supervised_loss.lower() == "nan":
+            train_supervised_loss = float('nan')
         if isinstance(val_pseudo_loss, str) and val_pseudo_loss.lower() == "nan":
             val_pseudo_loss = float('nan')
+        if isinstance(val_supervised_loss, str) and val_supervised_loss.lower() == "nan":
+            val_supervised_loss = float('nan')
 
         # 혹시 float('nan')이 이미 들어있는 경우 math.isnan()로 처리 가능 (여기서는 그냥 그대로 추가)
         train_losses.append(train_loss)
         val_losses.append(val_loss)
         train_pseudo_losses.append(train_pseudo_loss)
         val_pseudo_losses.append(val_pseudo_loss)
+        train_supervised_losses.append(train_supervised_loss)
+        val_supervised_losses.append(val_supervised_loss)
 
     # 그래프 그리기
     plt.figure(figsize=(20, 10))
@@ -49,6 +59,8 @@ def plot_loss_graph(loss_dict, output_image_path):
     plt.plot(epochs, val_losses, label='Validation Loss', marker='s', linestyle='-')
     plt.plot(epochs, train_pseudo_losses, label='Train Pseudo Loss', marker='^', linestyle='-')
     plt.plot(epochs, val_pseudo_losses, label='Validation Pseudo Loss', marker='^', linestyle='-')
+    plt.plot(epochs, train_supervised_losses, label='Train Supervised Loss', marker='^', linestyle='-')
+    plt.plot(epochs, val_supervised_losses, label='Validation Supervised Loss', marker='^', linestyle='-')
     plt.xlabel('Epoch')
     plt.ylabel('Loss')
     plt.title('Loss vs Epoch')

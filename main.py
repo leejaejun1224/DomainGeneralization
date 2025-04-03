@@ -134,7 +134,7 @@ def train_epoch(model, source_loader, target_loader, optimizer, threshold_manage
     model.train()
     current_lr = adjust_learning_rate(optimizer, epoch, cfg['lr'], cfg['adjust_lr'])
     
-    true_ratios, train_losses, train_pseudo_losses, reconstruction_losses = [], [], [], []
+    true_ratios, train_losses, train_supervised_losses, train_pseudo_losses, reconstruction_losses = [], [], [], [], []
     average_threshold = []
     for batch_idx, (source_batch, target_batch) in enumerate(zip(source_loader, target_loader)):
         data_batch = {}
@@ -147,6 +147,7 @@ def train_epoch(model, source_loader, target_loader, optimizer, threshold_manage
         
         if not math.isnan(log_vars['loss']):
             train_losses.append(log_vars['loss'])
+            train_supervised_losses.append(log_vars['supervised_loss'])
             train_pseudo_losses.append(log_vars['unsupervised_loss'])
             true_ratios.append(log_vars['true_ratio'])
             reconstruction_losses.append(log_vars['reconstruction_loss'])
@@ -160,6 +161,7 @@ def train_epoch(model, source_loader, target_loader, optimizer, threshold_manage
     if train_losses:
         return {
             'train_loss': sum(train_losses) / len(train_losses),
+            'train_supervised_loss': sum(train_supervised_losses) / len(train_supervised_losses),
             'true_ratio_train': sum(true_ratios) / len(true_ratios),
             'train_pseudo_loss': sum(train_pseudo_losses) / len(train_pseudo_losses),
             'average_threshold': sum(average_threshold)/len(average_threshold),
@@ -170,7 +172,7 @@ def train_epoch(model, source_loader, target_loader, optimizer, threshold_manage
 
 def validate(model, source_loader, target_loader):
     model.eval()
-    val_losses, val_pseudo_losses, true_ratios, reconstruction_losses = [], [], [], []
+    val_losses, val_supervised_losses, val_pseudo_losses, true_ratios, reconstruction_losses = [], [], [], [], []
     
     with torch.no_grad():
         for source_batch, target_batch in zip(source_loader, target_loader):
@@ -181,12 +183,14 @@ def validate(model, source_loader, target_loader):
             if not math.isnan(log_vars['loss']):
                 val_losses.append(log_vars['loss'])
                 true_ratios.append(log_vars['true_ratio'])
+                val_supervised_losses.append(log_vars['supervised_loss'])
                 val_pseudo_losses.append(log_vars['unsupervised_loss'])
                 reconstruction_losses.append(log_vars['reconstruction_loss'])
     if val_losses:
         return {
             'val_loss': sum(val_losses) / len(val_losses),
             'true_ratio_val': sum(true_ratios) / len(true_ratios),
+            'val_supervised_loss': sum(val_supervised_losses) / len(val_supervised_losses),
             'val_pseudo_loss': sum(val_pseudo_losses) / len(val_pseudo_losses),
             'reconstruction_loss': sum(reconstruction_losses)/len(reconstruction_losses)
         }

@@ -59,20 +59,20 @@ class DrivingStereoDataset(Dataset):
 
         if self.training:
 
-            # random_brightness = np.random.uniform(0.5, 2.0, 2)
-            # random_gamma = np.random.uniform(0.8, 1.2, 2)
-            # random_contrast = np.random.uniform(0.8, 1.2, 2)
-            # random_satur = np.random.uniform(.0, 1.4, 2)
+            random_brightness = np.random.uniform(0.5, 2.0, 2)
+            random_gamma = np.random.uniform(0.8, 1.2, 2)
+            random_contrast = np.random.uniform(0.8, 1.2, 2)
+            random_satur = np.random.uniform(.0, 1.4, 2)
             
-            # left_img = torchvision.transforms.functional.adjust_brightness(left_img, random_brightness[0])
-            # left_img = torchvision.transforms.functional.adjust_gamma(left_img, random_gamma[0])
-            # left_img = torchvision.transforms.functional.adjust_contrast(left_img, random_contrast[0])
-            # left_img = torchvision.transforms.functional.adjust_saturation(left_img, random_satur[0])
+            left_img = torchvision.transforms.functional.adjust_brightness(left_img, random_brightness[0])
+            left_img = torchvision.transforms.functional.adjust_gamma(left_img, random_gamma[0])
+            left_img = torchvision.transforms.functional.adjust_contrast(left_img, random_contrast[0])
+            left_img = torchvision.transforms.functional.adjust_saturation(left_img, random_satur[0])
             
-            # right_img = torchvision.transforms.functional.adjust_brightness(right_img, random_brightness[1])
-            # right_img = torchvision.transforms.functional.adjust_gamma(right_img, random_gamma[1])
-            # right_img = torchvision.transforms.functional.adjust_contrast(right_img, random_contrast[1])
-            # right_img = torchvision.transforms.functional.adjust_saturation(right_img, random_satur[1])
+            right_img = torchvision.transforms.functional.adjust_brightness(right_img, random_brightness[1])
+            right_img = torchvision.transforms.functional.adjust_gamma(right_img, random_gamma[1])
+            right_img = torchvision.transforms.functional.adjust_contrast(right_img, random_contrast[1])
+            right_img = torchvision.transforms.functional.adjust_saturation(right_img, random_satur[1])
 
 
 
@@ -111,6 +111,19 @@ class DrivingStereoDataset(Dataset):
             processed = get_transform()
             left_img = processed(left_img).numpy()
             right_img = processed(right_img).numpy()
+
+            # crop to size 881x400 -> 880x400
+            # top_pad = 400 - h
+            # right_pad = 884 - w
+            # assert top_pad >= 0 and right_pad >= 0
+            # # pad images
+            # left_img = np.lib.pad(left_img, ((0, 0), (top_pad, 0), (0, right_pad)), mode='constant', constant_values=0)
+            # right_img = np.lib.pad(right_img, ((0, 0), (top_pad, 0), (0, right_pad)), mode='constant',
+            #                        constant_values=0)
+            # # pad disparity gt
+            # if disparity is not None:
+            #     assert len(disparity.shape) == 2
+            #     disparity = np.lib.pad(disparity, ((top_pad, 0), (0, right_pad)), mode='constant', constant_values=0)
 
             left_img = left_img[:, 16:, 0:832]
             right_img = right_img[:, 16:, 0:832]

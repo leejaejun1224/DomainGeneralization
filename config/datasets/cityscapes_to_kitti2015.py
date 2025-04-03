@@ -69,7 +69,7 @@ dataset = dict(
     ),
     test = dict(
         type='UDAdataset',
-        source=source_train,
-        target=target_train
+        source=source_test,
+        target=target_test
         )
     )
