@@ -91,7 +91,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
         supervised_loss = calc_supervised_train_loss(data_batch, model='s')
         # pseudo_loss, true_ratio = calc_pseudo_loss(data_batch, threshold, model='s')
         calc_entropy(data_batch, threshold, model='s')
-        pseudo_loss, true_ratio = calc_pseudo_entropy_loss(data_batch, shift=0.00001, model='s')    
+        pseudo_loss, true_ratio = calc_pseudo_entropy_loss(data_batch, min_ent=0.00088, model='s')    
         reconstruction_loss = calc_reconstruction_loss(data_batch, domain='src', model='s')
 
         # 만약에 pseudo loss가 nan이 나오면 그냥 total loss로만 backward를 하면 되나
@@ -99,7 +99,8 @@ class StereoDepthUDA(StereoDepthUDAInference):
         # total_loss = supervised_loss + pseudo_loss*true_ratio + (1-true_ratio)*reconstruction_loss
         # total_loss = supervised_loss + true_ratio * pseudo_loss
         # total_loss = supervised_loss +  reconstruction_loss
-        total_loss = supervised_loss + pseudo_loss
+        # total_loss = supervised_loss + pseudo_loss
+        total_loss = pseudo_loss
 
         log_vars = {
             'loss': total_loss.item(),
@@ -147,12 +148,13 @@ class StereoDepthUDA(StereoDepthUDAInference):
         else:
             supervised_loss = torch.tensor(0.0)
         calc_entropy(data_batch, threshold=0.00089, model='s')
-        pseudo_loss, true_ratio = calc_pseudo_entropy_loss(data_batch, shift=0.00001, model='s')
+        pseudo_loss, true_ratio = calc_pseudo_entropy_loss(data_batch, min_ent=0.00088, model='s')
         reconstruction_loss = calc_reconstruction_loss(data_batch, domain='src', model='s')
 
         # total_loss = supervised_loss + true_ratio * pseudo_loss  + (1-true_ratio)*reconstruction_loss
         # total_loss = supervised_loss + true_ratio * pseudo_loss 
-        total_loss = supervised_loss +  pseudo_loss
+        # total_loss = supervised_loss +  pseudo_loss
+        total_loss = pseudo_loss
 
         log_vars = {
             'loss': total_loss.item(),

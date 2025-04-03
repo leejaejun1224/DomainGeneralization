@@ -59,7 +59,7 @@ class ThresholdManager:
 
 
 class EntropyThresholdManager:
-    def __init__(self, initial_threshold=0.00089, max_threshold=0.00095, stagnation_epochs=10, save_dir=None, lookback_distance=15):
+    def __init__(self, initial_threshold=0.00089, max_threshold=0.00095, stagnation_epochs=50, save_dir=None, lookback_distance=15):
         self.image_log = {}
         self.initial_threshold = initial_threshold
         self.max_threshold = max_threshold
@@ -95,10 +95,10 @@ class EntropyThresholdManager:
                 error_change = np.average(np.diff(recent_unsupervised_loss))
 
                 # 정체 조건을 일단 이렇게 판단을 해봄.
-                if ratio_change < 0.01 and error_change < 0.05:
-                    self.image_log[img_id]['stagnation_count'] += 1
-                else:
-                    self.image_log[img_id]['stagnation_count'] = 0
+                # if ratio_change < 0.01 and error_change < 0.05:
+                self.image_log[img_id]['stagnation_count'] += 1
+                # else:
+                #     self.image_log[img_id]['stagnation_count'] = 0
 
                 if self.image_log[img_id]['stagnation_count'] >= self.stagnation_epochs:
                     current_threshold = self.image_log[img_id]['threshold']

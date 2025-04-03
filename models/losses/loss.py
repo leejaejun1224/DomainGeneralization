@@ -72,13 +72,13 @@ def calc_pseudo_loss(data_batch, threshold, model='s'):
 
 
 
-def calc_pseudo_entropy_loss(data_batch, shift=0.00001, model='s'):
+def calc_pseudo_entropy_loss(data_batch, min_ent=0.00088, model='s'):
 
     entropy_map = data_batch['tgt_entropy_map_' + model]
-    target_entropy = torch.clamp(entropy_map - shift, min=0)
+    target_entropy = torch.clamp(entropy_map - min_ent, min=0)
     entropy_loss = nn.L1Loss(reduction='sum')(entropy_map, target_entropy)
 
-    entropy_mask = entropy_map > 0
+    entropy_mask = entropy_map < 0.00089
 
     true_count = entropy_mask.sum() 
     total_pixels = entropy_mask.numel()
