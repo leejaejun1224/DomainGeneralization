@@ -32,7 +32,7 @@ def calc_entropy(data_batch, threshold=0.00089, model='t', k=12, temperature=0.5
         
     H = H * mask
     top_one_idx = top_one_idx * mask
-    top_one_idx = top_one_idx.unsqueeze(1)
+    # top_one_idx = top_one_idx.unsqueeze(1)
     
     data_batch['tgt_entropy_map_' + model] = H
     data_batch['tgt_entropy_map_idx_' + model] = top_one_idx

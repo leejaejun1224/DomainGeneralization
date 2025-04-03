@@ -6,6 +6,7 @@ import torch.nn.functional as F
 
 
 def get_loss(disp_ests, disp_gts, img_masks, weights):
+
     all_losses = []
 
     for disp_est, disp_gt, img_mask, weight in zip(disp_ests, disp_gts, img_masks, weights):
@@ -75,13 +76,17 @@ def calc_pseudo_loss(data_batch, threshold, model='s'):
 def calc_pseudo_entropy_top1_loss(data_batch, model='s'):
 
     entropy_mask = data_batch['tgt_entropy_map_' + model] > 0
+    
     true_count = entropy_mask.sum() 
     total_pixels = entropy_mask.numel()
     true_ratio = true_count.float() / total_pixels
 
     weights = [1.0]
-    pseudo_label_loss = get_loss(data_batch['tgt_pred_disp_' + model], 
-                                 data_batch['tgt_entropy_map_idx_' + model], 
+    entropy_mask = [entropy_mask]
+
+
+    pseudo_label_loss = get_loss([data_batch['tgt_pred_disp_' + model][1].unsqueeze(1)], 
+                                 [data_batch['tgt_entropy_map_idx_' + model]], 
                                  entropy_mask, 
                                  weights)
 

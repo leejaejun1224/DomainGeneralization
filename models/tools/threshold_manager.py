@@ -59,7 +59,7 @@ class ThresholdManager:
 
 
 class EntropyThresholdManager:
-    def __init__(self, initial_threshold=0.00089, max_threshold=0.00095, stagnation_epochs=50, save_dir=None, lookback_distance=15):
+    def __init__(self, initial_threshold=0.00089, max_threshold=0.00093, stagnation_epochs=75, save_dir=None, lookback_distance=15):
         self.image_log = {}
         self.initial_threshold = initial_threshold
         self.max_threshold = max_threshold
