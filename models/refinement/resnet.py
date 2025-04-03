@@ -6,6 +6,7 @@ import torch.nn as nn
 
 """
 개 처 무식한 resnet ㅋㅋ
+stride랑 padding 다시 계산
 """
 class Resnet(nn.Module):
     def __init__(self, num_block):
