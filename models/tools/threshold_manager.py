@@ -50,7 +50,7 @@ class ThresholdManager:
                     new_threshold = max(self.min_threshold, current_threshold - 0.1*(1 - true_ratio))
                     self.image_log[img_id]['threshold'] = new_threshold
                     self.image_log[img_id]['stagnation_count'] = 0
-                    print(f"Epoch {epoch+1}: Adjusted threshold for {img_id} from {current_threshold:.2f} to {new_threshold:.2f}")
+                    print(f"Epoch {epoch+1}: Adjusted threshold for {img_id} from {current_threshold} to {new_threshold}")
     
     def save_log(self):
         if self.save_dir:

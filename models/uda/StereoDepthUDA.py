@@ -140,14 +140,13 @@ class StereoDepthUDA(StereoDepthUDAInference):
     
 
         ## pseudo loss를 계산을 할 때 threshold를 두는 게 맞아?
-        threshold = torch.tensor([self.cfg['uda']['val_threshold']])
-        pseudo_loss, true_ratio = calc_pseudo_loss(data_batch, threshold)
+        # pseudo_loss, true_ratio = calc_pseudo_loss(data_batch, threshold)
 
         if "src_disparity" in data_batch.keys():
             supervised_loss = calc_supervised_val_loss(data_batch, model='s')
         else:
             supervised_loss = torch.tensor(0.0)
-        calc_entropy(data_batch, threshold, model='s')
+        calc_entropy(data_batch, threshold=0.00089, model='s')
         pseudo_loss, true_ratio = calc_pseudo_entropy_loss(data_batch, shift=0.00001, model='s')
         reconstruction_loss = calc_reconstruction_loss(data_batch, domain='src', model='s')
 
