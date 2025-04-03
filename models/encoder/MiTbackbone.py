@@ -429,6 +429,9 @@ class MixVisionTransformer(nn.Module):
                 m.bias.data.zero_()
         
 
+    ## patch embed제대로 안된거면 시작도 하지 말것
+    ## stage마다 in/out 차원 확인해야함
+
 
     def forward_feature(self, x):
         B = x.shape[0]
