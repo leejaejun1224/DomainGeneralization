@@ -15,7 +15,6 @@ model.state_dict().update(state_dict)
 """
 input : left image [B, 3, N, W], initial disparity map [B, 1, H, W] (option : left attention map) 
 output : refined disparity map [B, 1, H, W]
-
 """
 
 class Refine(nn.Module):

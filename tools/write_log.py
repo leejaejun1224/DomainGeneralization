@@ -123,7 +123,7 @@ class Logger:
 
 
     def save_entropy(self, data_batch):
-        shape_map = data_batch['tgt_entropy_map_idx_s'].squeeze(0)
+        shape_map = data_batch['tgt_entropy_map_idx_s']
         shape_map_resized = F.interpolate(shape_map.float(), scale_factor=4, mode="nearest")
         shape_map_resized = shape_map_resized.squeeze(0).squeeze(0).cpu().numpy()
         

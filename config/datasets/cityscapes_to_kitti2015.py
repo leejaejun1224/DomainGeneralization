@@ -16,9 +16,9 @@ cityscapes_pipeline = [
 # source_dataset = 'cityscapes'
 source_dataset = 'driving_stereo'
 
-target_dataset = 'kitti_2015'
+# target_dataset = 'kitti_2015'
 # target_dataset = 'cityscapes'
-# target_dataset = 'driving_stereo'
+target_dataset = 'driving_stereo'
 
 source_train = {}
 source_train['type'] = f'{source_dataset}'
