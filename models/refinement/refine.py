@@ -11,7 +11,6 @@ url = "dino_deitsmall16_pretrain/dino_deitsmall16_pretrain.pth"
 state_dict = torch.hub.load_state_dict_from_url(url="https://dl.fbaipublicfiles.com/dino/" + url, map_location="cpu")
 model.state_dict().update(state_dict)
 
-
 """
 input : left image [B, 3, N, W], initial disparity map [B, 1, H, W] (option : left attention map) 
 output : refined disparity map [B, 1, H, W]
