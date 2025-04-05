@@ -132,7 +132,7 @@ class Logger:
 
         # Create figure with colorbar
         plt.figure(figsize=(12, 8))
-        img = plt.imshow(shape_map_resized, cmap='jet')
+        img = plt.imshow(shape_map_resized, cmap='jet', vmin=0, vmax=192)
         cbar = plt.colorbar(img, fraction=0.015, pad=0.04)
         cbar.ax.tick_params(labelsize=8)
         plt.axis('off')
