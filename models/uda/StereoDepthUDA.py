@@ -90,7 +90,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
 
         supervised_loss = calc_supervised_train_loss(data_batch, model='s')
         # pseudo_loss, true_ratio = calc_pseudo_loss(data_batch, threshold, model='s')
-        calc_entropy(data_batch, threshold=0.0009, model='s')
+        calc_entropy(data_batch, threshold=0.0009, model='t')
         pseudo_loss, true_ratio = calc_pseudo_entropy_top1_loss(data_batch, model='s')    
         reconstruction_loss = calc_reconstruction_loss(data_batch, domain='src', model='s')
 
@@ -147,7 +147,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
             supervised_loss = calc_supervised_val_loss(data_batch, model='s')
         else:
             supervised_loss = torch.tensor(0.0)
-        calc_entropy(data_batch, threshold=0.00090, model='s')
+        calc_entropy(data_batch, threshold=0.0009, model='t')
 
         pseudo_loss, true_ratio = calc_pseudo_entropy_top1_loss(data_batch, model='s')    
         reconstruction_loss = calc_reconstruction_loss(data_batch, domain='src', model='s')

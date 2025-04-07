@@ -7,8 +7,11 @@ import matplotlib.pyplot as plt
 import torch.nn.functional as F
 from skimage import exposure
 from .metrics import EPE_metric, D1_metric, Thres_metric, tensor2float
+
+
+
+
 class Logger:
-    
     def __init__(self, save_dir, max_disp=256):
         self.save_dir = save_dir
         self.metrics_dict = {
@@ -26,6 +29,7 @@ class Logger:
         self.disp_dir_src = os.path.join(self.save_dir, 'disp', 'src')
         self.disp_dir_tgt = os.path.join(self.save_dir, 'disp', 'tgt')
         self.entropy_dir = os.path.join(self.save_dir, 'entropy')
+        self.top_one_dir = os.path.join(self.save_dir, 'top_one')
         self.metrics_dir = os.path.join(self.save_dir, 'metrics')
 
         os.makedirs(self.att_dir, exist_ok=True)
@@ -35,7 +39,7 @@ class Logger:
         os.makedirs(self.disp_dir_tgt, exist_ok=True)
         os.makedirs(self.entropy_dir, exist_ok=True)
         os.makedirs(self.metrics_dir, exist_ok=True)
-
+        os.makedirs(self.top_one_dir, exist_ok=True)
 
 
     def _save_image(self, data, filename, directory, cmap='gray'):
@@ -123,16 +127,28 @@ class Logger:
 
 
     def save_entropy(self, data_batch):
-        shape_map = data_batch['tgt_entropy_map_idx_s']
-        shape_map_resized = F.interpolate(shape_map.float(), scale_factor=4, mode="nearest")
-        shape_map_resized = shape_map_resized.squeeze(0).squeeze(0).cpu().numpy()
         
+        top_one_map = data_batch['tgt_entropy_map_idx_t'] * 4
+        top_one_map_resized = F.interpolate(top_one_map.float(), scale_factor=4, mode="nearest")
+        top_one_map_resized = top_one_map_resized.squeeze(0).squeeze(0).cpu().numpy()
+        filename = data_batch['tgt_left_filename'].split('/')[-1]
+        save_path = os.path.join(self.top_one_dir, filename)
+        plt.figure(figsize=(12, 8))
+        img = plt.imshow(top_one_map_resized, cmap='jet', vmin=0, vmax=192)
+        cbar = plt.colorbar(img, fraction=0.015, pad=0.04)
+        cbar.ax.tick_params(labelsize=8)
+        plt.axis('off')
+        plt.savefig(save_path, bbox_inches='tight', pad_inches=0.1)
+        plt.close()
+
+
+        entropy_map = data_batch['tgt_entropy_map_t']
+        entropy_map_resized = F.interpolate(entropy_map.float(), scale_factor=4, mode="nearest")
+        entropy_map_resized = entropy_map_resized.squeeze(0).squeeze(0).cpu().numpy()       
         filename = data_batch['tgt_left_filename'].split('/')[-1]
         save_path = os.path.join(self.entropy_dir, filename)
-
-        # Create figure with colorbar
         plt.figure(figsize=(12, 8))
-        img = plt.imshow(shape_map_resized, cmap='jet', vmin=0, vmax=192)
+        img = plt.imshow(entropy_map_resized, cmap='jet')
         cbar = plt.colorbar(img, fraction=0.015, pad=0.04)
         cbar.ax.tick_params(labelsize=8)
         plt.axis('off')
