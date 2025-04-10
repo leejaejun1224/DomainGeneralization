@@ -127,7 +127,6 @@ class Logger:
 
 
     def save_entropy(self, data_batch):
-        
         top_one_map = data_batch['tgt_entropy_map_idx_t'] * 4
         top_one_map_resized = F.interpolate(top_one_map.float(), scale_factor=4, mode="nearest")
         top_one_map_resized = top_one_map_resized.squeeze(0).squeeze(0).cpu().numpy()
@@ -156,6 +155,8 @@ class Logger:
         plt.close()
 
     
+    
+
 
     def compute_metrics(self, data_batch):
         if 'src_disparity' in data_batch.keys():
