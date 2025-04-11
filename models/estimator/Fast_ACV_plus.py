@@ -84,26 +84,29 @@ class Feature(SubModule):
 class FeatUp(SubModule):
     def __init__(self):
         super(FeatUp, self).__init__()
-        chans = [32, 64, 160, 256]  # Segformer-B0 출력 채널
-        self.deconv32_16 = Conv2x(chans[3], chans[2], deconv=True, concat=True)  # 256 -> 160
-        self.deconv16_8 = Conv2x(chans[2]*2, chans[1], deconv=True, concat=True)  # 320 -> 64
-        self.deconv8_4 = Conv2x(chans[1]*2, chans[0], deconv=True, concat=True)  # 128 -> 32
-        self.conv4 = BasicConv(chans[0]*2, chans[0], kernel_size=3, stride=1, padding=1)  # 64 -> 32
+        chans = [16, 24, 32, 96, 160]
+        self.deconv32_16 = Conv2x(chans[4], chans[3], deconv=True, concat=True)
+        self.deconv16_8 = Conv2x(chans[3]*2, chans[2], deconv=True, concat=True)
+        self.deconv8_4 = Conv2x(chans[2]*2, chans[1], deconv=True, concat=True)
+        self.conv4 = BasicConv(chans[1]*2, chans[1]*2, kernel_size=3, stride=1, padding=1)
+
         self.weight_init()
 
     def forward(self, featL, featR=None):
         x4, x8, x16, x32 = featL
-        y4, y8, y16, y32 = featR
-        x16 = self.deconv32_16(x32, x16)  # [256, H/16, W/16] + [160, H/16, W/16] -> [320, H/8, W/8]
-        y16 = self.deconv32_16(y32, y16)
-        x8 = self.deconv16_8(x16, x8)     # [320, H/8, W/8] + [64, H/8, W/8] -> [128, H/4, W/4]
-        y8 = self.deconv16_8(y16, y8)
-        x4 = self.deconv8_4(x8, x4)       # [128, H/4, W/4] + [32, H/4, W/4] -> [64, H/2, W/2]
-        y4 = self.deconv8_4(y8, y4)
-        x4 = self.conv4(x4)               # [64, H/2, W/2] -> [32, H/2, W/2]
-        y4 = self.conv4(y4)
-        return [x4, x8, x16, x32], [y4, y8, y16, y32]
 
+        y4, y8, y16, y32 = featR
+        x16 = self.deconv32_16(x32, x16)
+        y16 = self.deconv32_16(y32, y16)        
+        x8 = self.deconv16_8(x16, x8)
+        y8 = self.deconv16_8(y16, y8)
+        x4 = self.deconv8_4(x8, x4)
+        y4 = self.deconv8_4(y8, y4)
+        x4 = self.conv4(x4)
+        y4 = self.conv4(y4)
+
+        return [x4, x8, x16, x32], [y4, y8, y16, y32]
+    
 
 class channelAtt(SubModule):
     def __init__(self, cv_chan, im_chan):
@@ -138,17 +141,17 @@ class hourglass(nn.Module):
 
         self.conv2_up = BasicConv(in_channels*4, in_channels*2, deconv=True, is_3d=True, bn=True,
                                   relu=True, kernel_size=(4, 4, 4), padding=(1, 1, 1), stride=(2, 2, 2))
+
         self.conv1_up = BasicConv(in_channels*2, 1, deconv=True, is_3d=True, bn=False,
                                   relu=False, kernel_size=(4, 4, 4), padding=(1, 1, 1), stride=(2, 2, 2))
 
         self.agg = nn.Sequential(BasicConv(in_channels*4, in_channels*2, is_3d=True, kernel_size=1, padding=0, stride=1),
-                                 BasicConv(in_channels*2, in_channels*2, is_3d=True, kernel_size=3, padding=1, stride=1),
-                                 BasicConv(in_channels*2, in_channels*2, is_3d=True, kernel_size=3, padding=1, stride=1))
+                                   BasicConv(in_channels*2, in_channels*2, is_3d=True, kernel_size=3, padding=1, stride=1),
+                                   BasicConv(in_channels*2, in_channels*2, is_3d=True, kernel_size=3, padding=1, stride=1),)
 
-        # 채널 수 조정: features_left[1]=128, features_left[2]=320
-        self.feature_att_8 = channelAtt(in_channels*2, 128)    # 32 -> 128 (imgs[1])
-        self.feature_att_16 = channelAtt(in_channels*4, 320)   # 64 -> 320 (imgs[2])
-        self.feature_att_up_8 = channelAtt(in_channels*2, 128)  # 32 -> 128 (imgs[1])
+        self.feature_att_8 = channelAtt(in_channels*2, 64)
+        self.feature_att_16 = channelAtt(in_channels*4, 192)
+        self.feature_att_up_8 = channelAtt(in_channels*2, 64)
 
     def forward(self, x, imgs):
         conv1 = self.conv1(x)
@@ -163,8 +166,8 @@ class hourglass(nn.Module):
         conv1 = self.feature_att_up_8(conv1, imgs[1])
 
         conv = self.conv1_up(conv1)
+
         return conv
-    
 
 
 class hourglass_att(nn.Module):
@@ -188,24 +191,27 @@ class hourglass_att(nn.Module):
 
         self.conv3_up = BasicConv(in_channels*6, in_channels*4, deconv=True, is_3d=True, bn=True,
                                   relu=True, kernel_size=(4, 4, 4), padding=(1, 1, 1), stride=(2, 2, 2))
+
         self.conv2_up = BasicConv(in_channels*4, in_channels*2, deconv=True, is_3d=True, bn=True,
                                   relu=True, kernel_size=(4, 4, 4), padding=(1, 1, 1), stride=(2, 2, 2))
+
         self.conv1_up = BasicConv(in_channels*2, 1, deconv=True, is_3d=True, bn=False,
                                   relu=False, kernel_size=(4, 4, 4), padding=(1, 1, 1), stride=(2, 2, 2))
 
+
         self.agg_0 = nn.Sequential(BasicConv(in_channels*8, in_channels*4, is_3d=True, kernel_size=1, padding=0, stride=1),
                                    BasicConv(in_channels*4, in_channels*4, is_3d=True, kernel_size=3, padding=1, stride=1),
-                                   BasicConv(in_channels*4, in_channels*4, is_3d=True, kernel_size=3, padding=1, stride=1))
+                                   BasicConv(in_channels*4, in_channels*4, is_3d=True, kernel_size=3, padding=1, stride=1),)
+
         self.agg_1 = nn.Sequential(BasicConv(in_channels*4, in_channels*2, is_3d=True, kernel_size=1, padding=0, stride=1),
                                    BasicConv(in_channels*2, in_channels*2, is_3d=True, kernel_size=3, padding=1, stride=1),
-                                   BasicConv(in_channels*2, in_channels*2, is_3d=True, kernel_size=3, padding=1, stride=1))
+                                   BasicConv(in_channels*2, in_channels*2, is_3d=True, kernel_size=3, padding=1, stride=1),)
 
-        # 채널 수 조정: features_left[1]=128, features_left[2]=320, features_left[3]=256
-        self.feature_att_8 = channelAtt(in_channels*2, 128)    # imgs[1] 채널 128
-        self.feature_att_16 = channelAtt(in_channels*4, 320)   # imgs[2] 채널 320
-        self.feature_att_32 = channelAtt(in_channels*6, 256)   # imgs[3] 채널 256
-        self.feature_att_up_16 = channelAtt(in_channels*4, 320)  # imgs[2] 채널 320
-        self.feature_att_up_8 = channelAtt(in_channels*2, 128)   # imgs[1] 채널 128
+        self.feature_att_8 = channelAtt(in_channels*2, 64)
+        self.feature_att_16 = channelAtt(in_channels*4, 192)
+        self.feature_att_32 = channelAtt(in_channels*6, 160)
+        self.feature_att_up_16 = channelAtt(in_channels*4, 192)
+        self.feature_att_up_8 = channelAtt(in_channels*2, 64)
 
     def forward(self, x, imgs):
         conv1 = self.conv1(x)
@@ -218,52 +224,54 @@ class hourglass_att(nn.Module):
         conv3 = self.feature_att_32(conv3, imgs[3])
 
         conv3_up = self.conv3_up(conv3)
+
         conv2 = torch.cat((conv3_up, conv2), dim=1)
         conv2 = self.agg_0(conv2)
         conv2 = self.feature_att_up_16(conv2, imgs[2])
 
         conv2_up = self.conv2_up(conv2)
+
         conv1 = torch.cat((conv2_up, conv1), dim=1)
         conv1 = self.agg_1(conv1)
         conv1 = self.feature_att_up_8(conv1, imgs[1])
 
         conv = self.conv1_up(conv1)
+
         return conv
-    
     
 class Fast_ACVNet_plus(nn.Module):
     def __init__(self, maxdisp, att_weights_only):
         super(Fast_ACVNet_plus, self).__init__()
         self.maxdisp = maxdisp
         self.att_weights_only = att_weights_only
-        self.feature = FeatureMiT()
+        self.feature = Feature()
         self.feature_up = FeatUp()
-        chans = [32, 64, 160, 256]
 
         self.stem_2 = nn.Sequential(
-            BasicConv(3, 32, kernel_size=3, stride=2, padding=1),
-            nn.Conv2d(32, 32, 3, 1, 1, bias=False),
-            nn.BatchNorm2d(32), nn.ReLU())
+                      BasicConv(3, 32, kernel_size=3, stride=2, padding=1),
+                      nn.Conv2d(32, 32, 3, 1, 1, bias=False),
+                      nn.BatchNorm2d(32), nn.ReLU())
         self.stem_4 = nn.Sequential(
-            BasicConv(32, 48, kernel_size=3, stride=2, padding=1),
-            nn.Conv2d(48, 48, 3, 1, 1, bias=False),
-            nn.BatchNorm2d(48), nn.ReLU())
-        self.spx = nn.Sequential(nn.ConvTranspose2d(2*32, 9, kernel_size=4, stride=2, padding=1))
-        self.spx_2 = Conv2x(64, 32, True)
+                      BasicConv(32, 48, kernel_size=3, stride=2, padding=1),
+                      nn.Conv2d(48, 48, 3, 1, 1, bias=False),
+                      nn.BatchNorm2d(48), nn.ReLU())
+        self.spx = nn.Sequential(nn.ConvTranspose2d(2*32, 9, kernel_size=4, stride=2, padding=1),)
+        self.spx_2 = Conv2x(24, 32, True)
         self.spx_4 = nn.Sequential(
-            BasicConv(80, 64, kernel_size=3, stride=1, padding=1),
-            nn.Conv2d(64, 64, 3, 1, 1, bias=False),
-            nn.BatchNorm2d(64), nn.ReLU())
-        self.conv = BasicConv(80, 48, kernel_size=3, padding=1, stride=1)
+                     BasicConv(96, 24, kernel_size=3, stride=1, padding=1),
+                     nn.Conv2d(24, 24, 3, 1, 1, bias=False),
+                     nn.BatchNorm2d(24), nn.ReLU())
+        self.conv = BasicConv(96, 48, kernel_size=3, padding=1, stride=1)
         self.desc = nn.Conv2d(48, 48, kernel_size=1, padding=0, stride=1)
         self.corr_stem = BasicConv(1, 8, is_3d=True, kernel_size=3, stride=1, padding=1)
-        self.corr_feature_att_4 = channelAtt(8, 80)
+        self.corr_feature_att_4 = channelAtt(8, 96)
         self.hourglass_att = hourglass_att(8)
+    
         self.concat_feature = nn.Sequential(
-            BasicConv(80, 32, kernel_size=3, stride=1, padding=1),
-            nn.Conv2d(32, 16, 3, 1, 1, bias=False))
+                              BasicConv(96, 32, kernel_size=3, stride=1, padding=1),
+                              nn.Conv2d(32, 16, 3, 1, 1, bias=False))
         self.concat_stem = BasicConv(32, 16, is_3d=True, kernel_size=3, stride=1, padding=1)
-        self.concat_feature_att_4 = channelAtt(16, 80)
+        self.concat_feature_att_4 = channelAtt(16, 96)
         self.hourglass = hourglass(16)
 
 
