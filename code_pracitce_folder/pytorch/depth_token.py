@@ -3,22 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class GeometricMLP(nn.Module):
-    """
-    입력: (B, D, H, W)
-     - B: batch size
-     - D: disparity(또는 cost-volume) 채널 수
-     - H, W: 이미지 높이/너비
-
-    각 픽셀의 (x, y) 좌표와 D-채널 값을 MLP로 보내
-    최종적으로 (B, out_dim, H, W) 형태의 "기하학 임베딩"을 출력.
-    """
     def __init__(self, disparity_dim=32, hidden_dim=64, out_dim=16):
-        """
-        Args:
-            disparity_dim: 입력으로 들어오는 disparity(혹은 cost volume) 채널 수 (D)
-            hidden_dim   : MLP의 은닉층 크기
-            out_dim      : 최종 출력 임베딩(기하 정보)의 채널 크기
-        """
         super(GeometricMLP, self).__init__()
         
         # (x, y) 좌표 2차원 + disparity_dim
