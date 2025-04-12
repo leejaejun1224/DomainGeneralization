@@ -229,7 +229,7 @@ def main():
         log_dict['ckpt_epoch'] = start_epoch
 
     model.to('cuda:0')
-    model.init_ema()
+    # model.init_ema()
 
     optimizer = torch.optim.Adam(model.parameters(), lr=cfg['lr'])
     if args.checkpoint is not None:

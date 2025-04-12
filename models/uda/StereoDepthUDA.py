@@ -61,7 +61,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
         optimizer.zero_grad()
         log_vars = self.forward_train(data_batch, threshold)
         optimizer.step()
-        self.update_ema(iter, alpha=0.99)
+        # self.update_ema(iter, alpha=0.99)
         
         return log_vars
     
@@ -99,7 +99,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
         # total_loss = supervised_loss + pseudo_loss*true_ratio + (1-true_ratio)*reconstruction_loss
         # total_loss = supervised_loss + true_ratio * pseudo_loss
         # total_loss = supervised_loss +  reconstruction_loss
-        total_loss = supervised_loss + 0.2 * pseudo_loss + 0.5 * reconstruction_loss
+        total_loss = supervised_loss
         # total_loss = pseudo_loss
 
         log_vars = {
@@ -155,7 +155,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
         # total_loss = supervised_loss + true_ratio * pseudo_loss  + (1-true_ratio)*reconstruction_loss
         # total_loss = supervised_loss + true_ratio * pseudo_loss 
         # total_loss = supervised_loss + 0.1 * pseudo_loss
-        total_loss = supervised_loss + 0.2 * pseudo_loss + 0.5 * reconstruction_loss
+        total_loss = supervised_loss 
 
         # total_loss = pseudo_loss
 

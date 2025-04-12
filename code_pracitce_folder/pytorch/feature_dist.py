@@ -6,8 +6,8 @@ model = SegformerModel.from_pretrained("nvidia/segformer-b0-finetuned-ade-512-51
 model.eval()
 
 # 두 이미지 입력
-image1 = torch.randn(1, 3, 224, 224)  # 예시 입력
-image2 = torch.randn(1, 3, 224, 224)
+image1 = torch.randn(1, 3, 512, 512)  # 예시 입력
+image2 = torch.randn(1, 3, 512, 512)
 
 # 특징 추출
 with torch.no_grad():
