@@ -12,7 +12,7 @@ image = Image.open(img_path).convert("RGB")
 
 image_processor = AutoImageProcessor.from_pretrained("facebook/dpt-dinov2-base-kitti")
 model = DPTForDepthEstimation.from_pretrained("facebook/dpt-dinov2-base-kitti")
-
+encoder = model.encoder
 # prepare image for the model
 inputs = image_processor(images=image, return_tensors="pt")
 
@@ -34,4 +34,3 @@ formatted = (output * 255 / np.max(output)).astype("uint8")
 depth = Image.fromarray(formatted)
 
 depth.save("depth.png")
-    
