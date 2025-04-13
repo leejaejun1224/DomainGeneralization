@@ -7,16 +7,18 @@ import cv2
 from datasets.data_io import get_transform, read_all_lines, pfm_imread
 import torchvision.transforms as transforms
 import torch
+import torchvision
 import matplotlib.pyplot as plt
 
 
 class KITTI2015Dataset(Dataset):
-    def __init__(self, datapath, list_filename, training, max_len=None):
+    def __init__(self, datapath, list_filename, training, max_len=None, aug=False):
         self.datapath = datapath
         self.left_filenames, self.right_filenames, self.disp_filenames = self.load_path(list_filename)
         self.training = training
         self.data_len = len(self.left_filenames)
         self.max_len = max_len
+        self.aug = aug
         if self.training:
             assert self.disp_filenames is not None
 
@@ -57,6 +59,25 @@ class KITTI2015Dataset(Dataset):
             disparity = None
 
         if self.training:
+            
+            if self.aug:
+                random_brightness = np.random.uniform(0.5, 2.0, 2)
+                random_gamma = np.random.uniform(0.8, 1.2, 2)
+                random_contrast = np.random.uniform(0.8, 1.2, 2)
+                random_satur = np.random.uniform(.0, 1.4, 2)
+
+                left_img = torchvision.transforms.functional.adjust_brightness(left_img, random_brightness[0])
+                left_img = torchvision.transforms.functional.adjust_gamma(left_img, random_gamma[0])
+                left_img = torchvision.transforms.functional.adjust_contrast(left_img, random_contrast[0])
+                left_img = torchvision.transforms.functional.adjust_saturation(left_img, random_satur[0])
+                
+                right_img = torchvision.transforms.functional.adjust_brightness(right_img, random_brightness[1])
+                right_img = torchvision.transforms.functional.adjust_gamma(right_img, random_gamma[1])
+                right_img = torchvision.transforms.functional.adjust_contrast(right_img, random_contrast[1])
+                right_img = torchvision.transforms.functional.adjust_saturation(right_img, random_satur[1])
+
+
+
             w, h = left_img.size
             crop_w, crop_h = 512, 256
 

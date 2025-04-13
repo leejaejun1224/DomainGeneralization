@@ -42,13 +42,15 @@ def setup_train_loaders(cfg):
     source_dataset = __datasets__[cfg['dataset']['src_type']](
         datapath=cfg['dataset']['src_root'],
         list_filename=cfg['dataset']['src_filelist'],
-        training=True
+        training=True, 
+        aug=True
     )
     
     target_dataset = __datasets__[cfg['dataset']['tgt_type']](
         datapath=cfg['dataset']['tgt_root'],
         list_filename=cfg['dataset']['tgt_filelist'],
-        training=True
+        training=True,
+        aug=False
     )
 
     max_len = max(len(source_dataset), len(target_dataset))
