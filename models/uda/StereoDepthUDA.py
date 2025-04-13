@@ -69,7 +69,6 @@ class StereoDepthUDA(StereoDepthUDAInference):
     "back propagation"
     "forward propagation"
     def forward_train(self, data_batch, threshold, temperature=0.5):
-        
         src_pred, map = self.student_forward(data_batch['src_left'], data_batch['src_right'])
         data_batch['src_pred_disp_s'] = src_pred
         data_batch['src_confidence_map_s'] = map[0]
@@ -124,7 +123,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
         data_batch['src_confidence_map_s'] = map[0]
         data_batch['src_corr_volume_s'] = map[1]
         end = time.time()
-        print(f"forward time: {end - start}")
+        # print(f"forward time: {end - start}")
         data_batch['tgt_pred_disp_s'], map = self.student_forward(data_batch['tgt_left'], data_batch['tgt_right'])
         data_batch['tgt_confidence_map_s'] = map[0]
         data_batch['tgt_corr_volume_s'] = map[1]
