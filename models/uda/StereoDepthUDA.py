@@ -56,10 +56,10 @@ class StereoDepthUDA(StereoDepthUDAInference):
     
 
     "args : optimizer, data_batchhhhh"
-    def train_step(self, data_batch, optimizer, iter, threshold):
+    def train_step(self, data_batch, optimizer, iter, threshold, temperature=1.0):
         
         optimizer.zero_grad()
-        log_vars = self.forward_train(data_batch, threshold)
+        log_vars = self.forward_train(data_batch, threshold, temperature)
         optimizer.step()
         self.update_ema(iter, alpha=0.99)
         
@@ -68,7 +68,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
 
     "back propagation"
     "forward propagation"
-    def forward_train(self, data_batch, threshold):
+    def forward_train(self, data_batch, threshold, temperature=0.5):
         
         src_pred, map = self.student_forward(data_batch['src_left'], data_batch['src_right'])
         data_batch['src_pred_disp_s'] = src_pred
@@ -90,7 +90,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
 
         supervised_loss = calc_supervised_train_loss(data_batch, model='s')
         # pseudo_loss, true_ratio = calc_pseudo_loss(data_batch, threshold, model='s')
-        calc_entropy(data_batch, threshold=0.0009, model='t')
+        calc_entropy(data_batch, temperature=temperature, threshold=0.0009, model='t')
         pseudo_loss, true_ratio = calc_pseudo_entropy_top1_loss(data_batch, model='s')    
         reconstruction_loss = calc_reconstruction_loss(data_batch, domain='src', model='s')
 
