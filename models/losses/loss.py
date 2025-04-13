@@ -3,6 +3,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
+def calc_entropy_loss(source_entropy, target_entropy, mask):
+    entropy_loss = F.smooth_l1_loss(source_entropy[mask], target_entropy[mask], size_average=True)
+    return entropy_loss
+
+
 
 
 def get_loss(disp_ests, disp_gts, img_masks, weights):

@@ -11,7 +11,7 @@ from models.uda.utils import calc_entropy
 from models.losses.loss import calc_supervised_train_loss
 from models.losses.loss import calc_supervised_val_loss
 from models.losses.loss import calc_pseudo_loss, calc_pseudo_soft_loss, calc_pseudo_entropy_top1_loss
-from models.losses.loss import calc_reconstruction_loss, calc_pseudo_entropy_loss
+from models.losses.loss import calc_reconstruction_loss, calc_pseudo_entropy_loss, calc_entropy_loss
 import time
 
 
@@ -94,13 +94,14 @@ class StereoDepthUDA(StereoDepthUDAInference):
         pseudo_loss, true_ratio = calc_pseudo_entropy_top1_loss(data_batch, model='s')    
         reconstruction_loss = calc_reconstruction_loss(data_batch, domain='src', model='s')
 
+        entropy_loss = calc_entropy_loss(data_batch['tgt_entropy_map_s'], data_batch['tgt_entropy_map_t'], data_batch['tgt_entropy_mask_t'])
         # 만약에 pseudo loss가 nan이 나오면 그냥 total loss로만 backward를 하면 되나
 
         # total_loss = supervised_loss + pseudo_loss*true_ratio + (1-true_ratio)*reconstruction_loss
         # total_loss = supervised_loss + true_ratio * pseudo_loss
         # total_loss = supervised_loss +  reconstruction_loss
         # total_loss = supervised_loss + 0.2 * pseudo_loss + 0.5 * reconstruction_loss
-        total_loss = pseudo_loss
+        total_loss = pseudo_loss + 0.8 * entropy_loss
         # total_loss = pseudo_loss
 
         log_vars = {
@@ -153,12 +154,13 @@ class StereoDepthUDA(StereoDepthUDAInference):
 
         pseudo_loss, true_ratio = calc_pseudo_entropy_top1_loss(data_batch, model='s')    
         reconstruction_loss = calc_reconstruction_loss(data_batch, domain='src', model='s')
+        entropy_loss = calc_entropy_loss(data_batch['tgt_entropy_map_s'], data_batch['tgt_entropy_map_t'], data_batch['tgt_entropy_mask_t'])
 
         # total_loss = supervised_loss + true_ratio * pseudo_loss  + (1-true_ratio)*reconstruction_loss
         # total_loss = supervised_loss + true_ratio * pseudo_loss
         # total_loss = supervised_loss + 0.1 * pseudo_loss
         # total_loss = supervised_loss + 0.2 * pseudo_loss + 0.5 * reconstruction_loss
-        total_loss = pseudo_loss
+        total_loss = pseudo_loss + 0.5 * entropy_loss
         # total_loss = pseudo_loss
 
         log_vars = {
