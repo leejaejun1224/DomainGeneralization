@@ -45,7 +45,7 @@ def calc_entropy(data_batch, threshold=0.00089, k=12, temperature=0.5, eps=1e-6)
 
 def replace_above_threshold_with_local_mean(disparity: torch.Tensor,
                                               kernel_size: int = 7,
-                                              threshold_value: float = 40.0) -> torch.Tensor:
+                                              threshold_value: float = 35.0) -> torch.Tensor:
 
     if disparity.dim() != 4 or disparity.size(1) != 1:
         raise ValueError("disparity 텐서는 (B, 1, H, W) 형태여야 합니다.")
@@ -54,15 +54,17 @@ def replace_above_threshold_with_local_mean(disparity: torch.Tensor,
     orig_dtype = disparity.dtype
     # 계산을 위해 float32 타입으로 변환
     disparity_f = disparity.to(torch.float32)
-    patches = F.unfold(disparity_f, kernel_size=kernel_size, padding=kernel_size // 2)
-    patches_reshaped = patches.view(B, C, kernel_size * kernel_size, H * W)
-    valid_mask = patches_reshaped != 0  # bool tensor, shape: (B, 1, 49, H*W)
-    count_valid = valid_mask.sum(dim=2, keepdim=True).float()
-    sum_valid = (patches_reshaped * valid_mask.float()).sum(dim=2, keepdim=True)
-    local_mean = sum_valid / (count_valid + 1e-6)  # (B, 1, 1, H*W)
-    local_mean_map = local_mean.view(B, C, H, W)
+    
+    # Check which values are above threshold
     condition = disparity_f > threshold_value
-    disparity_cleaned = torch.where(condition, local_mean_map, disparity_f)
+    
+    # Count the number of pixels above threshold
+    num_above_threshold = condition.sum().item()
+    
+    # Count per batch
+    batch_counts = condition.view(B, -1).sum(dim=1)  # Shape: [B]
+    
+    # Simply set values above threshold to zero
+    disparity_cleaned = torch.where(condition, torch.zeros_like(disparity_f), disparity_f)
     
     return disparity_cleaned.to(orig_dtype)
-
