@@ -12,7 +12,7 @@ ImageFile.LOAD_TRUNCATED_IMAGES = True
 import matplotlib.pyplot as plt
 import torchvision
 
-class SceneFlowDatset(Dataset):
+class FlyingThingDataset(Dataset):
     def __init__(self, datapath, list_filename, training, max_len=None, aug=False):
         self.datapath = datapath
         self.left_filenames, self.right_filenames, self.disp_filenames = self.load_path(list_filename)
@@ -95,6 +95,8 @@ class SceneFlowDatset(Dataset):
             right_img = processed(right_img)
             gradient_map = torch.from_numpy(gradient_map)
 
+
+            
             return {"left": left_img,
                     "right": right_img,
                     "disparity": disparity,

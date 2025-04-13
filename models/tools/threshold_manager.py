@@ -105,7 +105,7 @@ class EntropyThresholdManager:
                     new_threshold = min(self.max_threshold, current_threshold + 0.00001)
                     self.image_log[img_id]['threshold'] = new_threshold
                     self.image_log[img_id]['stagnation_count'] = 0
-                    print(f"Epoch {epoch+1}: Adjusted threshold for {img_id} from {current_threshold:.2f} to {new_threshold:.2f}")
+                    # print(f"Epoch {epoch+1}: Adjusted threshold for {img_id} from {current_threshold:.2f} to {new_threshold:.2f}")
     
     def save_log(self):
         if self.save_dir:

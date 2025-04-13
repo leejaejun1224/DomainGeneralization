@@ -1,7 +1,7 @@
 import torch
 import torch.nn.functional as F
 
-def calc_entropy(data_batch, threshold=0.00089, k=12, temperature=0.5, eps=1e-6):
+def calc_entropy(data_batch, threshold, k=12, temperature=0.5, eps=1e-6):
     for model in ['s', 't']:
         if model == 's':
             temperature = 1.0
@@ -10,6 +10,12 @@ def calc_entropy(data_batch, threshold=0.00089, k=12, temperature=0.5, eps=1e-6)
         B = vol.shape[0]
         topk_vals, _ = torch.topk(vol, k=k, dim=1)
         top_one, top_one_idx = torch.topk(vol, k=1, dim=1)
+        # Calculate the max value of the top one pixels
+        top_one_max = top_one.max().item()
+        top_one_min = top_one.min().item()
+        top_one_mean = top_one.mean().item()
+        
+
         scaled_topk_vals = topk_vals / temperature
 
         exp_vals = torch.exp(scaled_topk_vals)
@@ -18,7 +24,8 @@ def calc_entropy(data_batch, threshold=0.00089, k=12, temperature=0.5, eps=1e-6)
         p = exp_vals / sum_exp
         p = torch.clamp(p, eps, 1.0)
 
-        H = -(p * p.log()).sum(dim=1) - 2.484
+        # H = -(p * p.log()).sum(dim=1) - 2.484
+        H = -(p * p.log()).sum(dim=1)
         H = H.unsqueeze(1)
         
         # Handle batch-specific thresholds
@@ -35,6 +42,9 @@ def calc_entropy(data_batch, threshold=0.00089, k=12, temperature=0.5, eps=1e-6)
         # H = H * mask
         top_one_idx = top_one_idx * mask
         
+        # Count the number of true pixels in mask
+        num_true_pixels = mask.sum().item()
+
         disparity_cleaned = replace_above_threshold_with_local_mean(top_one_idx)
 
         data_batch['tgt_entropy_mask_' + model] = mask

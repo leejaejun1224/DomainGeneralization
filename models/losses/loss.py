@@ -4,7 +4,9 @@ import torch.nn.functional as F
 
 
 def calc_entropy_loss(source_entropy, target_entropy, mask):
-    entropy_loss = F.smooth_l1_loss(source_entropy[mask], target_entropy[mask], size_average=True)
+    # entropy_loss = F.smooth_l1_loss(source_entropy[mask], target_entropy[mask], size_average=True)
+    target = torch.zeros_like(source_entropy)
+    entropy_loss = F.smooth_l1_loss(source_entropy[mask], target[mask], size_average=True) * 100
     return entropy_loss
 
 

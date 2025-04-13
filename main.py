@@ -159,7 +159,7 @@ def train_epoch(model, source_loader, target_loader, optimizer, threshold_manage
             if args.compute_metrics:
                 scalar_outputs = compute_metrics_dict(data_batch)
 
-    print("average_threshold", sum(average_threshold)/len(average_threshold))
+    # print("average_threshold", sum(average_threshold)/len(average_threshold))
 
     if train_losses:
         return {
@@ -246,7 +246,6 @@ def main():
     for epoch in range(start_epoch, start_epoch + cfg['epoch']):
         train_metrics = train_epoch(model, train_source_loader, train_target_loader, optimizer, threshold_manager, epoch, cfg, args)
         print(f'Epoch [{epoch + 1}/{start_epoch + cfg["epoch"]}] Average Loss: {train_metrics["train_loss"]:.4f}')
-        print(f'Epoch [{epoch + 1}/{start_epoch + cfg["epoch"]}] Average supervised Loss: {train_metrics["train_supervised_loss"]:.4f}')
         
         if (epoch + 1) % cfg['val_interval'] == 0:
             val_metrics = validate(model, test_source_loader, test_target_loader)
