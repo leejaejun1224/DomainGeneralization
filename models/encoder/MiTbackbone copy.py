@@ -119,6 +119,88 @@ class EfficientSelfAttention(nn.Module):
         return x, attn_weights
     
 
+class EfficientSelfAttentionWithRelPos(nn.Module):
+    def __init__(self, dim, num_heads, qkv_bias=True, qk_scale=None,
+                 attn_drop=0., proj_drop=0., sr_ratio=1, H=16, W=16):
+        super().__init__()
+        assert dim % num_heads == 0, "dim must be divisible by num_heads."
+        self.dim = dim
+        self.num_heads = num_heads
+        head_dim = dim // num_heads
+        self.scale = qk_scale or head_dim ** -0.5
+
+        self.q = nn.Linear(dim, dim, bias=qkv_bias)
+        self.kv = nn.Linear(dim, dim * 2, bias=qkv_bias)
+
+        self.attn_drop = nn.Dropout(attn_drop)
+        self.proj = nn.Linear(dim, dim)
+        self.proj_drop = nn.Dropout(proj_drop)
+
+        self.sr_ratio = sr_ratio
+        if sr_ratio > 1:
+            self.sr = nn.Conv2d(dim, dim, kernel_size=sr_ratio, stride=sr_ratio)
+            self.norm = nn.LayerNorm(dim)
+
+        # 상대적 위치 바이어스 테이블: (2*H-1) * (2*W-1)개의 위치에 대해 num_heads 차원의 bias
+        num_relative_positions = (2 * H - 1) * (2 * W - 1)
+        self.relative_position_bias_table = nn.Parameter(
+            torch.zeros(num_relative_positions, num_heads)
+        )
+
+        # 상대적 위치 인덱스 미리 계산 (H*W 패치 기준)
+        coords_h = torch.arange(H)
+        coords_w = torch.arange(W)
+        coords = torch.stack(torch.meshgrid(coords_h, coords_w, indexing='ij'))  # [2, H, W]
+        coords_flatten = coords.flatten(1)  # [2, H*W]
+        relative_coords = coords_flatten[:, :, None] - coords_flatten[:, None, :]  # [2, H*W, H*W]
+        relative_coords = relative_coords.permute(1, 2, 0).contiguous()  # [H*W, H*W, 2]
+        relative_coords[:, :, 0] += H - 1  # shift to start from 0
+        relative_coords[:, :, 1] += W - 1
+        relative_coords[:, :, 0] *= 2 * W - 1
+        relative_position_index = relative_coords.sum(-1)  # [H*W, H*W]
+        self.register_buffer("relative_position_index", relative_position_index)
+
+        trunc_normal_(self.relative_position_bias_table, std=0.02)
+
+    def forward(self, x, H, W):
+        """
+        x: [B, N, C] 토큰 시퀀스 (N=H*W)
+        H, W: 현재 입력의 height, width (patch 개수 기준)
+        """
+        B, N, C = x.shape
+
+        q = self.q(x).reshape(B, N, self.num_heads, C // self.num_heads).permute(0, 2, 1, 3)
+
+        if self.sr_ratio > 1:
+            # sr_ratio가 있는 경우 feature map으로 복원 후 downsample
+            x_ = x.transpose(1, 2).reshape(B, C, H, W)
+            x_ = self.sr(x_).reshape(B, C, -1).transpose(1, 2)
+            x_ = self.norm(x_)
+            kv = self.kv(x_).reshape(B, -1, 2, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
+        else:
+            kv = self.kv(x).reshape(B, -1, 2, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
+
+        k, v = kv[0], kv[1]  # k, v: [B, num_heads, N', C//num_heads]
+
+        # Attention score 계산 (q @ k^T)
+        attn = (q @ k.transpose(-2, -1)) * self.scale  # [B, num_heads, N, N']
+
+        # 상대적 위치 바이어스 추가 (H, W가 초기 설정과 같을 때)
+        if H * W == self.relative_position_index.shape[0]:
+            # relative_position_index: [N, N]로 펼쳐서 bias table에서 인덱싱
+            relative_position_bias = self.relative_position_bias_table[
+                self.relative_position_index.view(-1)
+            ].view(H * W, H * W, -1).permute(2, 0, 1)  # [num_heads, N, N]
+            attn = attn + relative_position_bias.unsqueeze(0)  # [B, num_heads, N, N]
+
+        attn = attn.softmax(dim=-1)
+        attn = self.attn_drop(attn)
+
+        x = (attn @ v).transpose(1, 2).reshape(B, N, C)
+        x = self.proj(x)
+        x = self.proj_drop(x)
+        return x, attn
+
 # torch.flatten(n, m) n차원부터 시작해서 m차원까지 포함해서 flatten하라는 뜻(m의 기본값은 -1) 
 class DWConv(nn.Module):
     def __init__(self, dim):
@@ -222,17 +304,22 @@ input : image, kernal, stride, padding
 class OverlapPatchEmbedding(nn.Module):
     def __init__(self, img_size, patch_size, stride, in_chans, embed_dim):
         super().__init__()
-        self.proj = nn.Conv2d(in_chans, embed_dim, kernel_size=patch_size, stride=stride,
+
+
+        self.proj = nn.Conv2d(in_chans, embed_dim, kernel_size=patch_size,stride=stride,
                               padding=(patch_size // 2, patch_size // 2))
-        # positional encoding을 추가합니다.
-        self.pos_embedding = PositionalEncoding(embed_dim, img_size[0] // stride, img_size[1] // stride)
+
+        # positional encoding
+        # self.pos_embedding = PositionalEncoding(embed_dim, img_size[0] // stride, img_size[1] // stride)
+
+
         self.norm = nn.LayerNorm(embed_dim)
         self.apply(self._init_weights)
 
     def _init_weights(self, m):
         if isinstance(m, nn.Linear):
-            trunc_normal_(m.weight, std=0.02)
-            if m.bias is not None:
+            trunc_normal_(m.weight, std=.02)
+            if isinstance(m, nn.Linear) and m.bias is not None:
                 nn.init.constant_(m.bias, 0)
         elif isinstance(m, nn.LayerNorm):
             nn.init.constant_(m.bias, 0)
@@ -245,114 +332,20 @@ class OverlapPatchEmbedding(nn.Module):
                 m.bias.data.zero_()
         
     def forward(self, x):
-        # x: [B, in_chans, H_img, W_img]
-        x = self.proj(x)  # [B, embed_dim, H, W]
-        B, C, H, W = x.shape
-        # pos_embedding.pos_embedding는 [1, embed_dim, H0, W0]로 저장되어 있으므로, H, W가 다를 경우 보간 적용
-        x = self.pos_embedding(x)
-    # 이후 feature map을 flatten 및 norm 처리
-        x = x.flatten(2).transpose(1, 2)
+
+        x = self.proj(x)
+        _, _, H, W = x.shape
+        ## positional encoding
+        # x = self.pos_embedding(x)
+        # B, N(H*W), C(embed_dim)
+        x = x.flatten(2).transpose(1,2)
         x = self.norm(x)
-        # pos 정보는 별도 활용을 위해 보관 (원래는 pos_embedding에 대한 보간 연산이 내부에 포함되어 있음)
-        pos = self.pos_embedding.pos_embedding
-        if H != pos.shape[2] or W != pos.shape[3]:
-            pos = F.interpolate(pos, size=(H, W), mode='bilinear', align_corners=False)
-        return x, pos, H, W
 
-class DecoderBlock(nn.Module):
-    def __init__(self, in_channels, out_channels):
-        """
-        in_channels: upsample 후 skip connection과 결합된 채널 수.
-        out_channels: 해당 Block의 출력 채널 수.
-        """
-        super().__init__()
-        self.upsample = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
-        self.conv = nn.Sequential(
-            nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1),
-            nn.BatchNorm2d(out_channels),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
-            nn.BatchNorm2d(out_channels),
-            nn.ReLU(inplace=True)
-        )
+        return x, H, W
     
-    def forward(self, x):
-        x = self.upsample(x)
-        x = self.conv(x)
-        return x
 
-#############################################
-# Fusion Block: Skip connection 융합용 (upsample 없이)
-#############################################
-class FusionBlock(nn.Module):
-    def __init__(self, in_channels, out_channels):
-        """
-        in_channels: concat 후 채널 수 (예, 64+64=128)
-        out_channels: fusion 후 출력 채널 (예, 64)
-        """
-        super().__init__()
-        self.conv = nn.Sequential(
-            nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1),
-            nn.BatchNorm2d(out_channels),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
-            nn.BatchNorm2d(out_channels),
-            nn.ReLU(inplace=True)
-        )
-    
-    def forward(self, x):
-        return self.conv(x)
 
-#############################################
-# MonoDepth Decoder (최종 해상도: 원본의 1/4)
-#############################################
-class MonoDepthDecoder(nn.Module):
-    def __init__(self,
-                 encoder_channels=[32, 64, 160, 256],
-                 decoder_channels=[160, 64, 32],
-                 final_channels=32):
-        """
-        encoder_channels: encoder에서 각 단계별 feature map의 채널 수  
-          (예: stage1=64, stage2=128, stage3=256, stage4=512)
-        decoder_channels: 각 upsampling 단계에서 출력할 채널 수  
-          (예: [256, 128, 64])
-        final_channels: fusion block 후의 중간 채널 수 (예: 64)
-        """
-        super().__init__()
-        # Block 1: Stage4 (8×8,512) → upsample → 16×16, 채널=256
-        self.decoder4 = DecoderBlock(encoder_channels[3], decoder_channels[0])
-        # Block 2: Concatenate (decoder4 output + stage3) → (256+256=512) → upsample → 32×32, 채널=128
-        self.decoder3 = DecoderBlock(decoder_channels[0] + encoder_channels[2], decoder_channels[1])
-        # Block 3: Concatenate (decoder3 output + stage2) → (128+128=256) → upsample → 64×64, 채널=64
-        self.decoder2 = DecoderBlock(decoder_channels[1] + encoder_channels[1], decoder_channels[2])
-        # Fusion: Concatenate (decoder2 output + stage1) → (64+64=128) → fusion conv → final_channels
-        self.fusion = FusionBlock(decoder_channels[2] + encoder_channels[0], final_channels)
-        # 최종적으로 1채널의 depth map 산출
-        self.out_conv = nn.Conv2d(final_channels, 1, kernel_size=3, padding=1)
-    
-    def forward(self, features, pos_encodings):
-        """
-        features: encoder로부터 얻은 feature map 리스트 (길이 4)
-        pos_encodings: 각 stage별 positional encoding (길이 4)
-        
-        (각 stage에서 feature map과 pos encoding은 element‑wise하게 더해집니다.)
-        """
-        # 각 단계에서 feature와 positional encoding을 결합
-        feat1 = features[0] + pos_encodings[0]  # stage1: e.g., 64×64, 64채널
-        feat2 = features[1] + pos_encodings[1]  # stage2: e.g., 32×32, 128채널
-        feat3 = features[2] + pos_encodings[2]  # stage3: e.g., 16×16, 256채널
-        feat4 = features[3] + pos_encodings[3]  # stage4: e.g., 8×8, 512채널
-        
-        # Decoder 진행
-        x = self.decoder4(feat4)   # 8×8 → 16×16, 채널 256
-        x = torch.cat([x, feat3], dim=1)  # 16×16, 채널: 256 + 256 = 512
-        x = self.decoder3(x)       # 16×16 → 32×32, 채널 128
-        x = torch.cat([x, feat2], dim=1)  # 32×32, 채널: 128 + 128 = 256
-        x = self.decoder2(x)       # 32×32 → 64×64, 채널 64
-        x = torch.cat([x, feat1], dim=1)  # 64×64, 채널: 64 + 64 = 128
-        x = self.fusion(x)         # Fusion block (64×64, 채널: final_channels=64)
-        depth = self.out_conv(x)   # 최종 1채널 monodepth map (64×64)
-        return depth
+
 
 
 
@@ -379,51 +372,51 @@ class MixVisionTransformer(nn.Module):
             Block(dim=embed_dim[0], num_heads=num_heads[0], qkv_bias=qkv_bias, 
                   qk_scale=qk_scale, attn_drop=attn_drop[0], proj_drop=proj_drop[0], sr_ratio=sr_ratio[0], 
                   drop_path=dpr[cur + i], 
-                  norm_layer=nn.LayerNorm, mlp_ratio=4., drop=0., 
+                  norm_layer = nn.LayerNorm, mlp_ratio=4., drop=0., 
                   act_layer=nn.GELU)
-            for i in range(depth[0])
-        ])
+        for i in range(depth[0])])
         self.norm1 = norm_layer(embed_dim[0])
-        cur += depth[0]
 
+        cur += depth[0]
         self.block2 = nn.ModuleList([
             Block(dim=embed_dim[1], num_heads=num_heads[1], qkv_bias=qkv_bias, 
                   qk_scale=qk_scale, attn_drop=attn_drop[1], proj_drop=proj_drop[1], sr_ratio=sr_ratio[1], 
                   drop_path=dpr[cur + i], 
-                  norm_layer=nn.LayerNorm, mlp_ratio=4., drop=0., 
+                  norm_layer = nn.LayerNorm, mlp_ratio=4., drop=0., 
                   act_layer=nn.GELU)
-            for i in range(depth[1])
-        ])
+        for i in range(depth[1])])
         self.norm2 = norm_layer(embed_dim[1])
-        cur += depth[1]
 
+
+        cur += depth[1]
         self.block3 = nn.ModuleList([
             Block(dim=embed_dim[2], num_heads=num_heads[2], qkv_bias=qkv_bias, 
                   qk_scale=qk_scale, attn_drop=attn_drop[2], proj_drop=proj_drop[2], sr_ratio=sr_ratio[2], 
                   drop_path=dpr[cur + i], 
-                  norm_layer=nn.LayerNorm, mlp_ratio=4., drop=0., 
+                  norm_layer = nn.LayerNorm, mlp_ratio=4., drop=0., 
                   act_layer=nn.GELU)
-            for i in range(depth[2])
-        ])
+        for i in range(depth[2])])
         self.norm3 = norm_layer(embed_dim[2])
-        cur += depth[2]
 
+
+        cur += depth[2]
         self.block4 = nn.ModuleList([
             Block(dim=embed_dim[3], num_heads=num_heads[3], qkv_bias=qkv_bias, 
                   qk_scale=qk_scale, attn_drop=attn_drop[3], proj_drop=proj_drop[3], sr_ratio=sr_ratio[3], 
                   drop_path=dpr[cur + i], 
-                  norm_layer=nn.LayerNorm, mlp_ratio=4., drop=0., 
+                  norm_layer = nn.LayerNorm, mlp_ratio=4., drop=0., 
                   act_layer=nn.GELU)
-            for i in range(depth[3])
-        ])
+        for i in range(depth[3])])
         self.norm4 = norm_layer(embed_dim[3])
 
         self.apply(self._init_weights)
 
+
+
     def _init_weights(self, m):
         if isinstance(m, nn.Linear):
-            trunc_normal_(m.weight, std=0.02)
-            if m.bias is not None:
+            trunc_normal_(m.weight, std=.02)
+            if isinstance(m, nn.Linear) and m.bias is not None:
                 nn.init.constant_(m.bias, 0)
         elif isinstance(m, nn.LayerNorm):
             nn.init.constant_(m.bias, 0)
@@ -435,81 +428,96 @@ class MixVisionTransformer(nn.Module):
             if m.bias is not None:
                 m.bias.data.zero_()
         
+
+    ## patch embed제대로 안된거면 시작도 하지 말것
+    ## stage마다 in/out 차원 확인해야함
+
+
     def forward_feature(self, x):
         B = x.shape[0]
-        outputs = []
-        attn_weights_list = []
-        pos_encodings = []
+        output = []
+        attn_weights = []
 
-        # Stage 1
-        x, pos, H, W = self.patch_embed1(x)
-        for blk in self.block1:
+        # stage 1
+        x, H, W = self.patch_embed1(x)
+        
+        # output size 
+        # x.shape : [B, 8192, 24]
+        # H, W : 64, 128
+
+
+        for i, blk in enumerate(self.block1):
             x, attn_weight = blk(x, H, W)
+            
+        # x : [B, N, C]
+        # attn_weight : [B, num_heads, C, C/num_heads]
+
         x = self.norm1(x)
         x = x.reshape(B, H, W, -1).permute(0, 3, 1, 2).contiguous()
-        outputs.append(x)
-        attn_weights_list.append(attn_weight)
-        pos_encodings.append(pos)
+        output.append(x)
+        attn_weights.append(attn_weight)
 
-        # Stage 2
-        x, pos, H, W = self.patch_embed2(x)
-        for blk in self.block2:
+
+        # stage 2
+        x, H, W = self.patch_embed2(x)
+        for i, blk in enumerate(self.block2):
             x, attn_weight = blk(x, H, W)
+        # x : [B, N, C]
+
         x = self.norm2(x)
         x = x.reshape(B, H, W, -1).permute(0, 3, 1, 2).contiguous()
-        outputs.append(x)
-        attn_weights_list.append(attn_weight)
-        pos_encodings.append(pos)
+        output.append(x)
+        attn_weights.append(attn_weight)
 
-        # Stage 3
-        x, pos, H, W = self.patch_embed3(x)
-        for blk in self.block3:
+        # stage 3
+        x, H, W = self.patch_embed3(x)
+        for i, blk in enumerate(self.block3):
             x, attn_weight = blk(x, H, W)
+
+        
+        # x : [B, N, C]
         x = self.norm3(x)
         x = x.reshape(B, H, W, -1).permute(0, 3, 1, 2).contiguous()
-        outputs.append(x)
-        attn_weights_list.append(attn_weight)
-        pos_encodings.append(pos)
+        output.append(x)
+        attn_weights.append(attn_weight)        
 
-        # Stage 4
-        x, pos, H, W = self.patch_embed4(x)
-        for blk in self.block4:
-            x, attn_weight = blk(x, H, W)
+        # stage 4
+        x, H, W = self.patch_embed4(x)
+        for i, blk in enumerate(self.block4):
+            x, attn_weight = blk(x, H, W)    
+        
+
+
+        # x : [B, N, C]
+        # attn_weight : [B, num_heads, N, C/num_heads]
         x = self.norm4(x)
         x = x.reshape(B, H, W, -1).permute(0, 3, 1, 2).contiguous()
-        outputs.append(x)
-        attn_weights_list.append(attn_weight)
-        pos_encodings.append(pos)
 
-        return outputs, attn_weights_list, pos_encodings
+        
+        output.append(x)
+        attn_weights.append(attn_weight)
+
+        return output, attn_weights
     
+
     def forward_head(self, x):
         return x
 
+
     def forward(self, x):
-        features, attn_weights, pos_encodings = self.forward_feature(x)
-        # 필요에 따라 head를 추가할 수 있습니다.
-        return features, attn_weights, pos_encodings
+        x, attn_weights = self.forward_feature(x)
+        # x = self.forward_head(x)
+        return x, attn_weights
 
 
 # if __name__=="__main__":
-#     mitbackbone = MixVisionTransformer(img_size=[256, 512], in_chans=3, embed_dim=[32, 64, 160, 256],
+#     mitbackbone = MixVisionTransformer(img_size=256, in_chans=3, embed_dim=[64, 128, 256, 512],
 #                                       depth=[2, 2, 2, 2], num_heads=[1, 2, 4, 8], qkv_bias=True,
 #                                       qk_scale=1.0, sr_ratio=[8, 4, 2, 1], proj_drop=[0.0, 0.0, 0.0, 0.0], attn_drop=[0.0, 0.0, 0.0, 0.0],
 #                                       drop_path_rate=0.1)
     
-#     x = torch.randn(1, 3, 256, 512)
-#     features, attn_weights, pos_encodings = mitbackbone(x)
-#     features = [features[0], features[1], features[2], features[3]]
-#     print(features[0].shape, pos_encodings[0].shape)
-#     print(features[1].shape, pos_encodings[1].shape)
-#     print(features[2].shape, pos_encodings[2].shape)
-#     print(features[3].shape, pos_encodings[3].shape)
-
-#     pos_encodings = [pos_encodings[0], pos_encodings[1], pos_encodings[2], pos_encodings[3]]
-    
-#     decoder = MonoDepthDecoder()
-#     depth_map = decoder(features, pos_encodings)
-#     print("Depth map shape:", depth_map.shape) 
+#     x = torch.randn(1, 3, 256, 256)
+#     output = mitbackbone(x)
+#     # print(output)
 
     

@@ -45,12 +45,14 @@ class FeatureMiTPtr(SubModule):
 class FeatureMiT(SubModule):
     def __init__(self):
         super(FeatureMiT, self).__init__()
-        self.model = SegformerModel.from_pretrained('nvidia/segformer-b0-finetuned-ade-512-512')
-        self.encoder = self.model.encoder
+        self.model = MixVisionTransformer(img_size=[256, 512], in_chans=3, embed_dim=[32, 64, 160, 256],
+                                      depth=[2, 2, 2, 2], num_heads=[1, 2, 4, 8], qkv_bias=True,
+                                      qk_scale=1.0, sr_ratio=[8, 4, 2, 1], proj_drop=[0.0, 0.0, 0.0, 0.0], attn_drop=[0.0, 0.0, 0.0, 0.0],
+                                      drop_path_rate=0.1)
 
     def forward(self, x):
-        outputs = self.encoder(x, output_hidden_states=True)
-        return outputs.hidden_states  # [stage1, stage2, stage3, stage4]
+        features, attn_weights, pos_encodings = self.model(x)
+        return features, attn_weights, pos_encodings  # [stage1, stage2, stage3, stage4]
 
 
 class Feature(SubModule):
@@ -274,9 +276,9 @@ class Fast_ACVNet_plus(nn.Module):
         return concat_volume
     # forward는 그대로 유지 (디버깅 print 문은 유지)
     def forward(self, left, right):
-        features_left = self.feature(left)
-        features_right = self.feature(right)
-        features_left, features_right = self.feature_up(features_left, features_right)
+        feature_left, attn_weights_left, pos_encodings_left = self.feature(left)
+        feature_right, attn_weights_right, pos_encodings_right = self.feature(right)
+        features_left, features_right = self.feature_up(feature_left, feature_right)
 
         stem_2x = self.stem_2(left)
         stem_4x = self.stem_4(stem_2x)
@@ -318,26 +320,8 @@ class Fast_ACVNet_plus(nn.Module):
         spx_pred = self.spx(xspx)
         spx_pred = F.softmax(spx_pred, 1)
 
-        ## do i have to do this?
-        # if self.training:
-        #     att_prob = torch.gather(att_weights, 2, ind_k).squeeze(1)
-        #     att_prob = F.softmax(att_prob, dim=1)
-        #     pred_att = torch.sum(att_prob * disparity_sample_topk, dim=1)
-        #     pred_att_up = context_upsample(pred_att.unsqueeze(1), spx_pred)
-        #     if self.att_weights_only:
-        #         return [pred_att_up * 4, pred_att * 4]
-        #     else:
-        #         pred = regression_topk(cost.squeeze(1), disparity_sample_topk, 2)
-        #         pred_up = context_upsample(pred, spx_pred)
-        #         confidence_map, _ = att_prob.max(dim=1, keepdim=True)
-        #         return [pred_up * 4, pred.squeeze(1) * 4, pred_att_up * 4, pred_att * 4], [confidence_map.squeeze(1), entropy_map]
-        # else:
         att_prob = torch.gather(att_weights, 2, ind_k).squeeze(1)
         att_prob = F.softmax(att_prob, dim=1)
-        ### att_prob.shape = [batch, 24, 64, 128]
-        ### 여기서 disparity sample top k는 top 24개의 disparity sample이다. 
-        ### 그리고 이 sample들의 확률들이 순서대로 적혀있는 것이 att_prob임. 고로 이걸 그대로 label로 쓰면
-        ### 아니지 되나?
 
         pred_att = torch.sum(att_prob * disparity_sample_topk, dim=1)
         pred_att_up = context_upsample(pred_att.unsqueeze(1), spx_pred)
@@ -348,4 +332,4 @@ class Fast_ACVNet_plus(nn.Module):
         pred = regression_topk(cost.squeeze(1), disparity_sample_topk, 2)
         pred_up = context_upsample(pred, spx_pred)
         confidence_map, _ = att_prob.max(dim=1, keepdim=True)
-        return [pred_up * 4, pred.squeeze(1) * 4, pred_att_up * 4, pred_att * 4], [confidence_map.squeeze(1), corr_volume_1, att_prob]
+        return [pred_up * 4, pred.squeeze(1) * 4, pred_att_up * 4, pred_att * 4], [confidence_map.squeeze(1), corr_volume_1, att_prob],  [feature_left, attn_weights_left, pos_encodings_left]

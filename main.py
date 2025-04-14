@@ -136,7 +136,7 @@ def train_epoch(model, source_loader, target_loader, optimizer, threshold_manage
     model.train()
     current_lr = adjust_learning_rate(optimizer, epoch, cfg['lr'], cfg['adjust_lr'])
     
-    true_ratios, train_losses, train_supervised_losses, train_pseudo_losses, reconstruction_losses = [], [], [], [], []
+    true_ratios, train_losses, train_supervised_losses, train_pseudo_losses, reconstruction_losses, depth_losses = [], [], [], [], [], []
     average_threshold = []
     for batch_idx, (source_batch, target_batch) in enumerate(zip(source_loader, target_loader)):
         data_batch = {}
@@ -154,6 +154,7 @@ def train_epoch(model, source_loader, target_loader, optimizer, threshold_manage
             train_pseudo_losses.append(log_vars['unsupervised_loss'])
             true_ratios.append(log_vars['true_ratio'])
             reconstruction_losses.append(log_vars['reconstruction_loss'])
+            depth_losses.append(log_vars['depth_loss'])
             threshold_manager.update_log(image_ids, log_vars['true_ratio'], log_vars['unsupervised_loss'], epoch)
             
             if args.compute_metrics:
@@ -169,13 +170,14 @@ def train_epoch(model, source_loader, target_loader, optimizer, threshold_manage
             'train_pseudo_loss': sum(train_pseudo_losses) / len(train_pseudo_losses),
             'average_threshold': sum(average_threshold)/len(average_threshold),
             'reconstruction_loss': sum(reconstruction_losses)/len(reconstruction_losses),
+            'depth_loss': sum(depth_losses)/len(depth_losses),
             'learning_rate': current_lr
         }
     return {'train_loss': 0, 'true_ratio_train': 0, 'train_pseudo_loss': 0, 'reconstruction_loss': 0, 'learning_rate': current_lr}
 
 def validate(model, source_loader, target_loader):
     model.eval()
-    val_losses, val_supervised_losses, val_pseudo_losses, true_ratios, reconstruction_losses = [], [], [], [], []
+    val_losses, val_supervised_losses, val_pseudo_losses, true_ratios, reconstruction_losses, depth_losses = [], [], [], [], [], []
     
     with torch.no_grad():
         for source_batch, target_batch in zip(source_loader, target_loader):
@@ -189,15 +191,17 @@ def validate(model, source_loader, target_loader):
                 val_supervised_losses.append(log_vars['supervised_loss'])
                 val_pseudo_losses.append(log_vars['unsupervised_loss'])
                 reconstruction_losses.append(log_vars['reconstruction_loss'])
+                depth_losses.append(log_vars['depth_loss'])
     if val_losses:
         return {
             'val_loss': sum(val_losses) / len(val_losses),
             'true_ratio_val': sum(true_ratios) / len(true_ratios),
             'val_supervised_loss': sum(val_supervised_losses) / len(val_supervised_losses),
             'val_pseudo_loss': sum(val_pseudo_losses) / len(val_pseudo_losses),
-            'reconstruction_loss': sum(reconstruction_losses)/len(reconstruction_losses)
+            'reconstruction_loss': sum(reconstruction_losses)/len(reconstruction_losses),
+            'depth_loss': sum(depth_losses)/len(depth_losses)
         }
-    return {'val_loss': 0, 'true_ratio_val': 0, 'val_pseudo_loss': 0, 'reconstruction_loss': 0}
+    return {'val_loss': 0, 'true_ratio_val': 0, 'val_pseudo_loss': 0, 'reconstruction_loss': 0, 'depth_loss': 0}
 
 def save_checkpoint(model, optimizer, epoch, save_dir, current_lr):
     checkpoint = {
@@ -246,11 +250,11 @@ def main():
     for epoch in range(start_epoch, start_epoch + cfg['epoch']):
         train_metrics = train_epoch(model, train_source_loader, train_target_loader, optimizer, threshold_manager, epoch, cfg, args)
         print(f'Epoch [{epoch + 1}/{start_epoch + cfg["epoch"]}] Average Loss: {train_metrics["train_loss"]:.4f}')
-        
+        print(f'Epoch [{epoch + 1}/{start_epoch + cfg["epoch"]}] Average Depth Loss: {train_metrics["depth_loss"]:.4f}')
         if (epoch + 1) % cfg['val_interval'] == 0:
             val_metrics = validate(model, test_source_loader, test_target_loader)
             print(f'Validation Loss: {val_metrics["val_loss"]:.4f}')
-            
+            print(f'Validation Depth Loss: {val_metrics["depth_loss"]:.4f}')
             if (epoch + 1) % cfg['save_interval'] == 0:
                 save_checkpoint(model, optimizer, epoch, save_dir, train_metrics['learning_rate'])
             

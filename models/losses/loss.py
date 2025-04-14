@@ -3,6 +3,16 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
+
+def calc_depth_loss(data_batch, model='s'):
+    # Create a valid mask for depth_low (non-zero values)
+    src_depth_map = data_batch['src_depth_low']
+    valid_mask = src_depth_map > 0
+    depth_map = data_batch['depth_map_' + model].squeeze(1)
+    depth_loss = F.smooth_l1_loss(depth_map[valid_mask], src_depth_map[valid_mask], size_average=True)
+    return depth_loss
+
+
 def calc_entropy_loss(source_entropy, target_entropy, mask):
     # entropy_loss = F.smooth_l1_loss(source_entropy[mask], target_entropy[mask], size_average=True)
     target = torch.zeros_like(source_entropy)

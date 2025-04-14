@@ -119,6 +119,88 @@ class EfficientSelfAttention(nn.Module):
         return x, attn_weights
     
 
+class EfficientSelfAttentionWithRelPos(nn.Module):
+    def __init__(self, dim, num_heads, qkv_bias=True, qk_scale=None,
+                 attn_drop=0., proj_drop=0., sr_ratio=1, H=16, W=16):
+        super().__init__()
+        assert dim % num_heads == 0, "dim must be divisible by num_heads."
+        self.dim = dim
+        self.num_heads = num_heads
+        head_dim = dim // num_heads
+        self.scale = qk_scale or head_dim ** -0.5
+
+        self.q = nn.Linear(dim, dim, bias=qkv_bias)
+        self.kv = nn.Linear(dim, dim * 2, bias=qkv_bias)
+
+        self.attn_drop = nn.Dropout(attn_drop)
+        self.proj = nn.Linear(dim, dim)
+        self.proj_drop = nn.Dropout(proj_drop)
+
+        self.sr_ratio = sr_ratio
+        if sr_ratio > 1:
+            self.sr = nn.Conv2d(dim, dim, kernel_size=sr_ratio, stride=sr_ratio)
+            self.norm = nn.LayerNorm(dim)
+
+        # 상대적 위치 바이어스 테이블: (2*H-1) * (2*W-1)개의 위치에 대해 num_heads 차원의 bias
+        num_relative_positions = (2 * H - 1) * (2 * W - 1)
+        self.relative_position_bias_table = nn.Parameter(
+            torch.zeros(num_relative_positions, num_heads)
+        )
+
+        # 상대적 위치 인덱스 미리 계산 (H*W 패치 기준)
+        coords_h = torch.arange(H)
+        coords_w = torch.arange(W)
+        coords = torch.stack(torch.meshgrid(coords_h, coords_w, indexing='ij'))  # [2, H, W]
+        coords_flatten = coords.flatten(1)  # [2, H*W]
+        relative_coords = coords_flatten[:, :, None] - coords_flatten[:, None, :]  # [2, H*W, H*W]
+        relative_coords = relative_coords.permute(1, 2, 0).contiguous()  # [H*W, H*W, 2]
+        relative_coords[:, :, 0] += H - 1  # shift to start from 0
+        relative_coords[:, :, 1] += W - 1
+        relative_coords[:, :, 0] *= 2 * W - 1
+        relative_position_index = relative_coords.sum(-1)  # [H*W, H*W]
+        self.register_buffer("relative_position_index", relative_position_index)
+
+        trunc_normal_(self.relative_position_bias_table, std=0.02)
+
+    def forward(self, x, H, W):
+        """
+        x: [B, N, C] 토큰 시퀀스 (N=H*W)
+        H, W: 현재 입력의 height, width (patch 개수 기준)
+        """
+        B, N, C = x.shape
+
+        q = self.q(x).reshape(B, N, self.num_heads, C // self.num_heads).permute(0, 2, 1, 3)
+
+        if self.sr_ratio > 1:
+            # sr_ratio가 있는 경우 feature map으로 복원 후 downsample
+            x_ = x.transpose(1, 2).reshape(B, C, H, W)
+            x_ = self.sr(x_).reshape(B, C, -1).transpose(1, 2)
+            x_ = self.norm(x_)
+            kv = self.kv(x_).reshape(B, -1, 2, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
+        else:
+            kv = self.kv(x).reshape(B, -1, 2, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
+
+        k, v = kv[0], kv[1]  # k, v: [B, num_heads, N', C//num_heads]
+
+        # Attention score 계산 (q @ k^T)
+        attn = (q @ k.transpose(-2, -1)) * self.scale  # [B, num_heads, N, N']
+
+        # 상대적 위치 바이어스 추가 (H, W가 초기 설정과 같을 때)
+        if H * W == self.relative_position_index.shape[0]:
+            # relative_position_index: [N, N]로 펼쳐서 bias table에서 인덱싱
+            relative_position_bias = self.relative_position_bias_table[
+                self.relative_position_index.view(-1)
+            ].view(H * W, H * W, -1).permute(2, 0, 1)  # [num_heads, N, N]
+            attn = attn + relative_position_bias.unsqueeze(0)  # [B, num_heads, N, N]
+
+        attn = attn.softmax(dim=-1)
+        attn = self.attn_drop(attn)
+
+        x = (attn @ v).transpose(1, 2).reshape(B, N, C)
+        x = self.proj(x)
+        x = self.proj_drop(x)
+        return x, attn
+
 # torch.flatten(n, m) n차원부터 시작해서 m차원까지 포함해서 flatten하라는 뜻(m의 기본값은 -1) 
 class DWConv(nn.Module):
     def __init__(self, dim):
@@ -247,16 +329,17 @@ class OverlapPatchEmbedding(nn.Module):
     def forward(self, x):
         # x: [B, in_chans, H_img, W_img]
         x = self.proj(x)  # [B, embed_dim, H, W]
-        B, C, H, W = x.shape
+        _, C, H, W = x.shape
         # pos_embedding.pos_embedding는 [1, embed_dim, H0, W0]로 저장되어 있으므로, H, W가 다를 경우 보간 적용
-        x = self.pos_embedding(x)
-    # 이후 feature map을 flatten 및 norm 처리
-        x = x.flatten(2).transpose(1, 2)
-        x = self.norm(x)
-        # pos 정보는 별도 활용을 위해 보관 (원래는 pos_embedding에 대한 보간 연산이 내부에 포함되어 있음)
         pos = self.pos_embedding.pos_embedding
         if H != pos.shape[2] or W != pos.shape[3]:
             pos = F.interpolate(pos, size=(H, W), mode='bilinear', align_corners=False)
+        # positional encoding을 feature map에 더함
+        x = x + pos
+        # flatten하여 (B, N, embed_dim)으로 변환
+        x = x.flatten(2).transpose(1, 2)
+        x = self.norm(x)
+        # pos 정보는 추후 positional encoding만을 별도로 학습/활용하기 위해 반환
         return x, pos, H, W
 
 class DecoderBlock(nn.Module):
@@ -308,9 +391,9 @@ class FusionBlock(nn.Module):
 #############################################
 class MonoDepthDecoder(nn.Module):
     def __init__(self,
-                 encoder_channels=[32, 64, 160, 256],
-                 decoder_channels=[160, 64, 32],
-                 final_channels=32):
+                 encoder_channels=[64, 128, 256, 512],
+                 decoder_channels=[256, 128, 64],
+                 final_channels=64):
         """
         encoder_channels: encoder에서 각 단계별 feature map의 채널 수  
           (예: stage1=64, stage2=128, stage3=256, stage4=512)
@@ -492,24 +575,19 @@ class MixVisionTransformer(nn.Module):
         return features, attn_weights, pos_encodings
 
 
-# if __name__=="__main__":
-#     mitbackbone = MixVisionTransformer(img_size=[256, 512], in_chans=3, embed_dim=[32, 64, 160, 256],
-#                                       depth=[2, 2, 2, 2], num_heads=[1, 2, 4, 8], qkv_bias=True,
-#                                       qk_scale=1.0, sr_ratio=[8, 4, 2, 1], proj_drop=[0.0, 0.0, 0.0, 0.0], attn_drop=[0.0, 0.0, 0.0, 0.0],
-#                                       drop_path_rate=0.1)
+if __name__=="__main__":
+    mitbackbone = MixVisionTransformer(img_size=[384, 1248], in_chans=3, embed_dim=[64, 128, 256, 512],
+                                      depth=[2, 2, 2, 2], num_heads=[1, 2, 4, 8], qkv_bias=True,
+                                      qk_scale=1.0, sr_ratio=[8, 4, 2, 1], proj_drop=[0.0, 0.0, 0.0, 0.0], attn_drop=[0.0, 0.0, 0.0, 0.0],
+                                      drop_path_rate=0.1)
     
-#     x = torch.randn(1, 3, 256, 512)
-#     features, attn_weights, pos_encodings = mitbackbone(x)
-#     features = [features[0], features[1], features[2], features[3]]
-#     print(features[0].shape, pos_encodings[0].shape)
-#     print(features[1].shape, pos_encodings[1].shape)
-#     print(features[2].shape, pos_encodings[2].shape)
-#     print(features[3].shape, pos_encodings[3].shape)
-
-#     pos_encodings = [pos_encodings[0], pos_encodings[1], pos_encodings[2], pos_encodings[3]]
+    x = torch.randn(1, 3, 384, 1248)
+    features, attn_weights, pos_encodings = mitbackbone(x)
+    features = [features[0], features[1], features[2], features[3]]
+    pos_encodings = [pos_encodings[0], pos_encodings[1], pos_encodings[2], pos_encodings[3]]
     
-#     decoder = MonoDepthDecoder()
-#     depth_map = decoder(features, pos_encodings)
-#     print("Depth map shape:", depth_map.shape) 
+    decoder = MonoDepthDecoder()
+    depth_map = decoder(features, pos_encodings)
+    print("Depth map shape:", depth_map.shape) 
 
     

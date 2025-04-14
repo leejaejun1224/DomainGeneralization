@@ -1,6 +1,9 @@
 import torch
 import torch.nn.functional as F
 
+
+
+
 def calc_entropy(data_batch, threshold, k=12, temperature=0.5, eps=1e-6):
     for model in ['s', 't']:
         if model == 's':
