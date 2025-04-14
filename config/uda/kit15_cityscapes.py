@@ -32,12 +32,12 @@ data = dict(
         num_workers = 2,
         shuffle = True,
         pin_memory = True,
-        val_interval = 1,
+        val_interval = 10,
         save_interval = 20
     ),
     test = dict(
-        batch_size = 2,
-        num_workers = 2,
+        batch_size = 1,
+        num_workers = 1,
         shuffle = False,
         pin_memory = True
     )

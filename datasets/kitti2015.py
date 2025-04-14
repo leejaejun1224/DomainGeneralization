@@ -101,7 +101,7 @@ class KITTI2015Dataset(Dataset):
                 # 유효한 값이 모두 동일하지 않을 때
                 if disp_max != disp_min:
                     depth_low = np.zeros_like(disparity_low)
-                    depth_low[valid_mask] = 1e-4 + (disparity_low[valid_mask] - disp_min) / (disp_max - disp_min) * (10 - 1e-4)
+                    depth_low[valid_mask] = 1e-4 + (disparity_low[valid_mask] - disp_min) / (disp_max - disp_min) 
                 else:
                     # 모든 유효 값이 동일하다면, 논리적으로 scaling이 어려우므로 기본값 1로 설정 (0이 아닌 부분만)
                     depth_low = np.ones_like(disparity_low)
