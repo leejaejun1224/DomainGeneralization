@@ -27,12 +27,12 @@ name_dataset = 'cityscapes_to_kitti2015'
 
 data = dict(
     train = dict(
-        epoch = 100,
+        epoch = 300,
         batch_size = 2,
         num_workers = 2,
         shuffle = True,
         pin_memory = True,
-        val_interval = 10,
+        val_interval = 30,
         save_interval = 20
     ),
     test = dict(
