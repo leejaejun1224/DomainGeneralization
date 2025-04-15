@@ -58,8 +58,8 @@ class MonoDepthDecoder(nn.Module):
         return x
 
 
-if __name__=="__main__":
-    decoder = MonoDepthDecoder()
-    pos_encodings = [torch.randn(1, 32, 32, 32), torch.randn(1, 64, 16, 16), torch.randn(1, 160, 8, 8), torch.randn(1, 256, 4, 4)]
-    depth = decoder(pos_encodings)
-    print(depth.shape)
+# if __name__=="__main__":
+#     decoder = MonoDepthDecoder()
+#     pos_encodings = [torch.randn(1, 32, 32, 32), torch.randn(1, 64, 16, 16), torch.randn(1, 160, 8, 8), torch.randn(1, 256, 4, 4)]
+#     depth = decoder(pos_encodings)
+#     print(depth.shape)

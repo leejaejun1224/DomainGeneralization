@@ -99,7 +99,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
             data_batch['attn_weights_t'] = features[1]
             data_batch['pos_encodings_t'] = features[2]
 
-        data_batch['depth_map_s'] = self.decode_forward(data_batch['features_s'], data_batch['pos_encodings_s'])
+        data_batch['depth_map_s'] = self.decode_forward(data_batch['pos_encodings_s'])
         
 
         supervised_loss = calc_supervised_train_loss(data_batch, model='s')
@@ -168,7 +168,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
             data_batch['pos_encodings_t'] = features[2]
 
 
-        data_batch['depth_map_s'] = self.decode_forward(data_batch['features_s'], data_batch['pos_encodings_s'])
+        data_batch['depth_map_s'] = self.decode_forward(data_batch['pos_encodings_s'])
         ## pseudo loss를 계산을 할 때 threshold를 두는 게 맞아?
         # pseudo_loss, true_ratio = calc_pseudo_loss(data_batch, threshold)
 
