@@ -36,13 +36,13 @@ class MonoDepthDecoder(nn.Module):
     def __init__(self,
                  encoder_channels=[32, 64, 160, 256],
                  decoder_channels=[160, 64, 32],
-                 final_channels=32):
+                 final_channels=1):
         super().__init__()
 
         self.up1 = Upsample(encoder_channels[3], decoder_channels[0])
         self.up2 = Upsample(encoder_channels[2], decoder_channels[1])
         self.up3 = Upsample(encoder_channels[1], decoder_channels[2])
-        self.out = nn.Conv2d(encoder_channels[0], 1, kernel_size=3, padding=1)
+        self.out = nn.Conv2d(encoder_channels[0], final_channels, kernel_size=3, padding=1)
         
 
     def forward(self, pos_encodings):
