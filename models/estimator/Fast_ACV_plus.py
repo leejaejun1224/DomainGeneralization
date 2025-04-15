@@ -9,7 +9,7 @@ import math
 import gc
 import time
 import timm
-from models.encoder.MiTbackbone import MixVisionTransformer
+from models.encoder.MiTbackbonedpt import MixVisionTransformer
 from transformers import SegformerModel
 
 
