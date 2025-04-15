@@ -78,7 +78,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
         data_batch['src_corr_volume_s'] = map[1]
         data_batch['features_s'] = features[0]
         data_batch['attn_weights_s'] = features[1]
-        data_batch['pos_encodings_s'] = features[2]
+        # data_batch['pos_encodings_s'] = features[2]
 
         tgt_pred, map, features = self.student_forward(data_batch['tgt_left'], data_batch['tgt_right'])  
         data_batch['tgt_pred_disp_s'] = tgt_pred
@@ -86,7 +86,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
         data_batch['tgt_corr_volume_s'] = map[1]
         data_batch['features_s'] = features[0]
         data_batch['attn_weights_s'] = features[1]
-        data_batch['pos_encodings_s'] = features[2]
+        # data_batch['pos_encodings_s'] = features[2]
 
 
         with torch.no_grad():
@@ -97,9 +97,9 @@ class StereoDepthUDA(StereoDepthUDAInference):
             data_batch['tgt_corr_volume_t'] = map[1]
             data_batch['features_t'] = features[0]
             data_batch['attn_weights_t'] = features[1]
-            data_batch['pos_encodings_t'] = features[2]
+            # data_batch['pos_encodings_t'] = features[2]
 
-        data_batch['depth_map_s'] = self.decode_forward(data_batch['pos_encodings_s'])
+        data_batch['depth_map_s'] = self.decode_forward(data_batch['features_s'])
         
 
         supervised_loss = calc_supervised_train_loss(data_batch, model='s')
@@ -143,7 +143,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
         data_batch['src_corr_volume_s'] = map[1]
         data_batch['features_s'] = features[0]
         data_batch['attn_weights_s'] = features[1]
-        data_batch['pos_encodings_s'] = features[2]
+        # data_batch['pos_encodings_s'] = features[2]
         end = time.time()
         # print(f"forward time: {end - start}")
         data_batch['tgt_pred_disp_s'], map, features = self.student_forward(data_batch['tgt_left'], data_batch['tgt_right'])
@@ -151,8 +151,8 @@ class StereoDepthUDA(StereoDepthUDAInference):
         data_batch['tgt_corr_volume_s'] = map[1]
         data_batch['features_s'] = features[0]
         data_batch['attn_weights_s'] = features[1]
-        data_batch['pos_encodings_s'] = features[2]
-        # data_batch['src_shape_map'] = map[1]
+        # data_batch['pos_encodings_s'] = features[2]
+        data_batch['src_shape_map'] = map[1]
         data_batch['soft_label'] = map[2]
         
         with torch.no_grad():
@@ -165,10 +165,10 @@ class StereoDepthUDA(StereoDepthUDAInference):
             data_batch['tgt_corr_volume_t'] = map[1]
             data_batch['features_t'] = features[0]
             data_batch['attn_weights_t'] = features[1]
-            data_batch['pos_encodings_t'] = features[2]
+            # data_batch['pos_encodings_t'] = features[2]
 
 
-        data_batch['depth_map_s'] = self.decode_forward(data_batch['pos_encodings_s'])
+        data_batch['depth_map_s'] = self.decode_forward(data_batch['features_s'])
         ## pseudo loss를 계산을 할 때 threshold를 두는 게 맞아?
         # pseudo_loss, true_ratio = calc_pseudo_loss(data_batch, threshold)
 

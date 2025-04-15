@@ -27,7 +27,7 @@ class MonoDepthDecoder(nn.Module):
         x = self.decoder2(x)
         x = torch.cat([x, feat1], dim=1)
         x = self.fusion(x)
-        depth = self.out_conv(x)
+        depth = self.out_conv(x)*10.0
         return depth
 
 #########################################
@@ -61,33 +61,6 @@ class FusionBlock(nn.Module):
         out_channels: fusion 후 출력 채널.
         """
         super().__init__()
-<<<<<<< HEAD
-
-        self.up1 = Upsample(encoder_channels[3], decoder_channels[0])
-        self.up2 = Upsample(encoder_channels[2], decoder_channels[1])
-        self.up3 = Upsample(encoder_channels[1], decoder_channels[2])
-        self.out = nn.Conv2d(encoder_channels[0], final_channels, kernel_size=3, padding=1)
-        
-
-    def forward(self, pos_encodings):
-        pos1, pos2, pos3, pos4 = pos_encodings
-
-        x = pos4
-
-        x = self.up1(x, pos3)
-        x = self.up2(x, pos2)
-        x = self.up3(x, pos1)
-        x = self.out(x)
-
-        return x
-
-
-# if __name__=="__main__":
-#     decoder = MonoDepthDecoder()
-#     pos_encodings = [torch.randn(1, 32, 32, 32), torch.randn(1, 64, 16, 16), torch.randn(1, 160, 8, 8), torch.randn(1, 256, 4, 4)]
-#     depth = decoder(pos_encodings)
-#     print(depth.shape)
-=======
         self.conv = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1),
             nn.BatchNorm2d(out_channels),
@@ -99,4 +72,3 @@ class FusionBlock(nn.Module):
     
     def forward(self, x):
         return self.conv(x)
->>>>>>> b356d1e5c87f6d957bdae21878df4e3ea8538f97

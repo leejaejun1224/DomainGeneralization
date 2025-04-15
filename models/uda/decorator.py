@@ -48,8 +48,8 @@ class StereoDepthUDAInference(nn.Module):
         
         return output, map, features
         
-    def decode_forward(self, pos_encodings):
-        depth_map = self.decoder(pos_encodings)
+    def decode_forward(self, features):
+        depth_map = self.decoder(features)
         return depth_map
 
 
