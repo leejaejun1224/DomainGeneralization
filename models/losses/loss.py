@@ -5,11 +5,12 @@ import torch.nn.functional as F
 
 
 def calc_depth_loss(data_batch, model='s'):
-    # Create a valid mask for depth_low (non-zero values)
-    src_depth_map = data_batch['src_depth_low']
-    valid_mask = src_depth_map > 0
+    src_disparity_map = data_batch['src_disparity_low'] / 4.0
+    valid_mask = src_disparity_map > 0
     depth_map = data_batch['depth_map_' + model].squeeze(1)
-    depth_loss = F.smooth_l1_loss(depth_map[valid_mask], src_depth_map[valid_mask], size_average=True)
+    topk_val, topk_ind = torch.topk(depth_map, k=1, dim=1)
+    topk_ind = topk_ind.squeeze(1)
+    depth_loss = F.smooth_l1_loss(topk_ind[valid_mask], src_disparity_map[valid_mask], size_average=True)
     return depth_loss
 
 

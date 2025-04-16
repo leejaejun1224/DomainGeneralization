@@ -9,7 +9,7 @@ import math
 import gc
 import time
 import timm
-from models.encoder.MiTbackbonedpt import MixVisionTransformer
+from models.encoder.MiTbackbone import MixVisionTransformer
 from transformers import SegformerModel
 
 
@@ -51,8 +51,8 @@ class FeatureMiT(SubModule):
                                       drop_path_rate=0.1)
 
     def forward(self, x):
-        features, attn_weights = self.model(x)
-        return features, attn_weights  # [stage1, stage2, stage3, stage4]
+        features, attn_weights, pos_encodings = self.model(x)
+        return features, attn_weights, pos_encodings  # [stage1, stage2, stage3, stage4]
 
 
 class Feature(SubModule):
@@ -276,8 +276,8 @@ class Fast_ACVNet_plus(nn.Module):
         return concat_volume
     # forward는 그대로 유지 (디버깅 print 문은 유지)
     def forward(self, left, right):
-        feature_left, attn_weights_left = self.feature(left)
-        feature_right, attn_weights_right = self.feature(right)
+        feature_left, attn_weights_left, pos_encodings_left = self.feature(left)
+        feature_right, attn_weights_right, pos_encodings_right = self.feature(right)
         features_left, features_right = self.feature_up(feature_left, feature_right)
 
         stem_2x = self.stem_2(left)
@@ -332,4 +332,4 @@ class Fast_ACVNet_plus(nn.Module):
         pred = regression_topk(cost.squeeze(1), disparity_sample_topk, 2)
         pred_up = context_upsample(pred, spx_pred)
         confidence_map, _ = att_prob.max(dim=1, keepdim=True)
-        return [pred_up * 4, pred.squeeze(1) * 4, pred_att_up * 4, pred_att * 4], [confidence_map.squeeze(1), corr_volume_1, att_prob],  [feature_left, attn_weights_left]
+        return [pred_up * 4, pred.squeeze(1) * 4, pred_att_up * 4, pred_att * 4], [confidence_map.squeeze(1), corr_volume_1, att_prob],  [feature_left, attn_weights_left, pos_encodings_left]
