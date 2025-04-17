@@ -11,7 +11,7 @@ from models.uda.decorator import StereoDepthUDAInference
 
 from models.uda.utils import calc_entropy, refine_disparity
 from models.losses.loss import calc_supervised_train_loss, calc_depth_loss
-from models.losses.loss import calc_supervised_val_loss
+from models.losses.loss import calc_supervised_val_loss, sceneflow_supervised_loss
 from models.losses.loss import calc_pseudo_loss, calc_pseudo_soft_loss, calc_pseudo_entropy_top1_loss
 from models.losses.loss import calc_reconstruction_loss, calc_pseudo_entropy_loss, calc_entropy_loss
 from models.losses.photometric import photometric_loss, photometric_loss_low, photometric_loss_half
@@ -117,6 +117,12 @@ class StereoDepthUDA(StereoDepthUDAInference):
         depth_loss = photometric_loss(data_batch)
         depth_loss_half = photometric_loss_half(data_batch)
         depth_loss_low = photometric_loss_low(data_batch)
+
+        ### just for sceneflow
+        depth_loss_sceneflow = sceneflow_supervised_loss(data_batch)
+        
+
+
         # 만약에 pseudo loss가 nan이 나오면 그냥 total loss로만 backward를 하면 되나
 
         # total_loss = supervised_loss + pseudo_loss*true_ratio + (1-true_ratio)*reconstruction_loss
@@ -124,7 +130,8 @@ class StereoDepthUDA(StereoDepthUDAInference):
         # total_loss = supervised_loss +  reconstruction_loss
         # total_loss = supervised_loss + 0.2 * pseudo_loss + 0.5 * reconstruction_loss
         
-        total_loss = depth_loss + 0.8 * depth_loss_half + 0.5 * depth_loss_low
+        # total_loss = depth_loss + 0.8 * depth_loss_half + 0.5 * depth_loss_low
+        total_loss = depth_loss_sceneflow
         # total_loss = pseudo_loss
 
         log_vars = {
@@ -193,11 +200,14 @@ class StereoDepthUDA(StereoDepthUDAInference):
         depth_loss = photometric_loss(data_batch)
         depth_loss_low = photometric_loss_low(data_batch)
         depth_loss_half = photometric_loss_half(data_batch)
+        depth_loss_sceneflow = sceneflow_supervised_loss(data_batch)
+
         # total_loss = supervised_loss + true_ratio * pseudo_loss  + (1-true_ratio)*reconstruction_loss
         # total_loss = supervised_loss + true_ratio * pseudo_loss
         # total_loss = supervised_loss + 0.1 * pseudo_loss
         # total_loss = supervised_loss + 0.2 * pseudo_loss + 0.5 * reconstruction_loss
-        total_loss = depth_loss + 0.8 * depth_loss_half + 0.5 * depth_loss_low
+        # total_loss = depth_loss + 0.8 * depth_loss_half + 0.5 * depth_loss_low
+        total_loss = depth_loss_sceneflow
         # total_loss = pseudo_loss
 
         log_vars = {

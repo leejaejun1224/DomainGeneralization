@@ -3,6 +3,13 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
+def sceneflow_supervised_loss(data_batch):
+    src_disparity_map = data_batch['src_disparity']
+    valid_mask = src_disparity_map > 0
+    depth_map = data_batch['depth_map_s_up'].squeeze(1)
+    depth_loss = F.smooth_l1_loss(depth_map[valid_mask], src_disparity_map[valid_mask], size_average=True)
+    return depth_loss
+
 
 def calc_depth_loss(data_batch, model='s'):
     src_disparity_map = data_batch['src_disparity_low'] / 4.0
