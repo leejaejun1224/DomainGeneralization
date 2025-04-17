@@ -104,7 +104,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
 
         supervised_loss = calc_supervised_train_loss(data_batch, model='s')
         # pseudo_loss, true_ratio = calc_pseudo_loss(data_batch, threshold, model='s')
-        calc_entropy(data_batch, temperature=temperature, threshold=0.0009)
+        calc_entropy(data_batch, temperature=temperature, threshold=0.000906)
         
         data_batch['tgt_refined_pred_disp_t'] = refine_disparity(data_batch, threshold=2.0)
 
@@ -120,8 +120,8 @@ class StereoDepthUDA(StereoDepthUDAInference):
         # total_loss = supervised_loss + true_ratio * pseudo_loss
         # total_loss = supervised_loss +  reconstruction_loss
         # total_loss = supervised_loss + 0.2 * pseudo_loss + 0.5 * reconstruction_loss
-        total_loss = pseudo_loss
         
+        total_loss = pseudo_loss
         # total_loss = pseudo_loss
 
         log_vars = {

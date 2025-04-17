@@ -239,8 +239,8 @@ def main():
     model.init_ema()
 
     optimizer = torch.optim.Adam(model.parameters(), lr=cfg['lr'])
-    if args.checkpoint is not None:
-        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    # if args.checkpoint is not None:
+    #     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         
     log_dict['student_params'] = sum(p.numel() for p in model.student_model.parameters())
     log_dict['teacher_params'] = sum(p.numel() for p in model.teacher_model.parameters())

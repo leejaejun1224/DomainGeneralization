@@ -102,12 +102,10 @@ def calc_pseudo_entropy_top1_loss(data_batch, model='s'):
     weights = [1.0]
     entropy_mask = [entropy_mask]
 
-
-    pseudo_label_loss = get_loss([data_batch['tgt_entropy_map_idx_t']], 
+    pseudo_label_loss = get_loss([data_batch['tgt_entropy_map_idx_s']], 
                                  [data_batch['tgt_refined_pred_disp_t']], 
                                  entropy_mask, 
                                  weights)
-
     return pseudo_label_loss, true_ratio
 
 

@@ -17,59 +17,57 @@ def refine_disparity(data_batch, threshold):
     pred_disp = pred_disp * diff_mask2
 
     result = top_one + pred_disp
-    return result   
+    return result
     
 
 
 def calc_entropy(data_batch, threshold, k=12, temperature=0.5, eps=1e-6):
     for model in ['s', 't']:
-        if model == 's':
-            temperature = 1.0
+        # 1) cost volume 가져오기
         key = 'tgt_corr_volume_' + model
-        vol = data_batch[key].squeeze(1) # [B, D, H, W]
-        B = vol.shape[0]
-        topk_vals, _ = torch.topk(vol, k=k, dim=1)
-        top_one, top_one_idx = torch.topk(vol, k=1, dim=1)
-        # Calculate the max value of the top one pixels
-        top_one_max = top_one.max().item()
-        top_one_min = top_one.min().item()
-        top_one_mean = top_one.mean().item()
-        
+        vol = data_batch[key].squeeze(1)       # [B, D, H, W]
+        B, D, H, W = vol.shape
 
-        scaled_topk_vals = topk_vals / temperature
+        # 2) temperature scaling & softmax
+        temp = (0.5 if model == 's' else temperature)
+        p_vol = F.softmax(vol / temp, dim=1)   # [B, D, H, W]
 
-        exp_vals = torch.exp(scaled_topk_vals)
-        sum_exp = exp_vals.sum(dim=1, keepdim=True) + eps
+        # 3) top-k 확률만 골라 정규화 → topk_p
+        topk_vals, _ = torch.topk(p_vol, k=k, dim=1)            # [B, k, H, W]
+        sum_topk = topk_vals.sum(dim=1, keepdim=True).clamp(min=eps)   # [B,1,H,W]
+        topk_p = topk_vals / sum_topk                                   # [B, k, H, W]
 
-        p = exp_vals / sum_exp
-        p = torch.clamp(p, eps, 1.0)
+        H_map = -(topk_p * torch.log(topk_p)).sum(dim=1, keepdim=True)  # [B,1,H,W]
+        H_map = H_map - 2.484
 
-        H = -(p * p.log()).sum(dim=1) - 2.484
-        # H = -(p * p.log()).sum(dim=1)
-        H = H.unsqueeze(1)
-        
-        # Handle batch-specific thresholds
+        # 5) threshold mask
         if isinstance(threshold, torch.Tensor) and threshold.shape[0] == B:
-            # Create per-batch threshold masks
-            batch_masks = []
-            for i in range(B):
-                batch_mask = H[i:i+1] < threshold[i]
-                batch_masks.append(batch_mask)
-            mask = torch.cat(batch_masks, dim=0).cuda()
+            thr = threshold.view(B,1,1,1)
         else:
-            mask = H < threshold
-        
-        # H = H * mask
-        top_one_idx = top_one_idx * mask
-        
-        # Count the number of true pixels in mask
-        num_true_pixels = mask.sum().item()
+            thr = float(threshold)
+        mask_bool = (H_map < thr)           # [B,1,H,W]
+        mask = mask_bool.float()
 
-        disparity_cleaned = replace_above_threshold_with_local_mean(top_one_idx)
+        # 6) Straight-Through Hard Top-1
+        top1_idx = torch.argmax(p_vol, dim=1, keepdim=True)            # [B,1,H,W]
+        hard_onehot = F.one_hot(top1_idx.squeeze(1), num_classes=D)    \
+                         .permute(0,3,1,2).float()                      # [B,D,H,W]
+        p_hard = hard_onehot - p_vol.detach() + p_vol                  # [B,D,H,W]
+        disp_vals = torch.arange(D, device=vol.device).view(1,D,1,1).float()
+        hard_disp = (p_hard * disp_vals).sum(dim=1, keepdim=True)       # [B,1,H,W]
 
-        data_batch['tgt_entropy_mask_' + model] = mask
-        data_batch['tgt_entropy_map_' + model] = H
-        data_batch['tgt_entropy_map_idx_' + model] = disparity_cleaned
+        # 7) hard_disp에 mask 직접 적용
+        refined_disp = hard_disp * mask                                 # [B,1,H,W]
+
+        # 8) 결과 저장
+        data_batch['tgt_entropy_mask_'    + model] = mask_bool
+        data_batch['tgt_entropy_map_'     + model] = H_map
+        data_batch['tgt_entropy_map_idx_' + model] = refined_disp
+
+    return data_batch
+
+
+
 
 
 
