@@ -69,4 +69,8 @@ class DPTHead(nn.Module):
         self.relu = nn.ReLU()
         self.sigmoid = nn.Sigmoid()
 
+
         # self.reassemble_blocks 
+
+    def forward(self, x):
+        return x
