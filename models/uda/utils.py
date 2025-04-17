@@ -2,6 +2,23 @@ import torch
 import torch.nn.functional as F
 
 
+def refine_disparity(data_batch, threshold):
+    top_one = data_batch['tgt_entropy_map_idx_t']
+    pred_disp = data_batch['pseudo_disp'][1].unsqueeze(1)
+    mask = (top_one > 0) & (top_one < 256)
+
+    top_one = top_one * mask 
+    pred_disp = pred_disp * mask
+
+    diff = torch.abs(top_one - pred_disp)
+    diff_mask = diff <= threshold
+    top_one = top_one * diff_mask
+    diff_mask2 = diff > threshold
+    pred_disp = pred_disp * diff_mask2
+
+    result = top_one + pred_disp
+    return result   
+    
 
 
 def calc_entropy(data_batch, threshold, k=12, temperature=0.5, eps=1e-6):
@@ -27,8 +44,8 @@ def calc_entropy(data_batch, threshold, k=12, temperature=0.5, eps=1e-6):
         p = exp_vals / sum_exp
         p = torch.clamp(p, eps, 1.0)
 
-        # H = -(p * p.log()).sum(dim=1) - 2.484
-        H = -(p * p.log()).sum(dim=1)
+        H = -(p * p.log()).sum(dim=1) - 2.484
+        # H = -(p * p.log()).sum(dim=1)
         H = H.unsqueeze(1)
         
         # Handle batch-specific thresholds
@@ -58,7 +75,7 @@ def calc_entropy(data_batch, threshold, k=12, temperature=0.5, eps=1e-6):
 
 def replace_above_threshold_with_local_mean(disparity: torch.Tensor,
                                               kernel_size: int = 7,
-                                              threshold_value: float = 35.0) -> torch.Tensor:
+                                              threshold_value: float = 40.0) -> torch.Tensor:
 
     if disparity.dim() != 4 or disparity.size(1) != 1:
         raise ValueError("disparity 텐서는 (B, 1, H, W) 형태여야 합니다.")

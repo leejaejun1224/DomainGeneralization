@@ -104,7 +104,7 @@ def calc_pseudo_entropy_top1_loss(data_batch, model='s'):
 
 
     pseudo_label_loss = get_loss([data_batch['tgt_pred_disp_' + model][1].unsqueeze(1)], 
-                                 [data_batch['tgt_entropy_map_idx_t']], 
+                                 [data_batch['tgt_refined_pred_disp_t']], 
                                  entropy_mask, 
                                  weights)
 

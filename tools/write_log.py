@@ -224,4 +224,4 @@ class Logger:
         self.save_att(data_batch)
         self.save_disparity(data_batch, log_vars)
         self.compute_metrics(data_batch)
-        self.save_depth_map(data_batch)
+        # self.save_depth_map(data_batch)

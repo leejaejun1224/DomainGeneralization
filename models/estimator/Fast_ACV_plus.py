@@ -40,7 +40,7 @@ class FeatureMiTPtr(SubModule):
 
     def forward(self, x):
         outputs = self.encoder(x, output_hidden_states=True)
-        return outputs.hidden_states
+        return outputs.hidden_states, outputs.attentions
 
 class FeatureMiT(SubModule):
     def __init__(self):
@@ -238,7 +238,7 @@ class Fast_ACVNet_plus(nn.Module):
         super(Fast_ACVNet_plus, self).__init__()
         self.maxdisp = maxdisp
         self.att_weights_only = att_weights_only
-        self.feature = FeatureMiT()
+        self.feature = FeatureMiTPtr()
         self.feature_up = FeatUp()
         chans = [32, 64, 160, 256]
 
@@ -276,8 +276,8 @@ class Fast_ACVNet_plus(nn.Module):
         return concat_volume
     # forward는 그대로 유지 (디버깅 print 문은 유지)
     def forward(self, left, right):
-        feature_left, attn_weights_left, pos_encodings_left = self.feature(left)
-        feature_right, attn_weights_right, pos_encodings_right = self.feature(right)
+        feature_left, attn_weights_left  = self.feature(left)
+        feature_right, attn_weights_right = self.feature(right)
         features_left, features_right = self.feature_up(feature_left, feature_right)
 
         stem_2x = self.stem_2(left)
@@ -332,4 +332,4 @@ class Fast_ACVNet_plus(nn.Module):
         pred = regression_topk(cost.squeeze(1), disparity_sample_topk, 2)
         pred_up = context_upsample(pred, spx_pred)
         confidence_map, _ = att_prob.max(dim=1, keepdim=True)
-        return [pred_up * 4, pred.squeeze(1) * 4, pred_att_up * 4, pred_att * 4], [confidence_map.squeeze(1), corr_volume_1, att_prob],  [feature_left, attn_weights_left, pos_encodings_left]
+        return [pred_up * 4, pred.squeeze(1) * 4, pred_att_up * 4, pred_att * 4], [confidence_map.squeeze(1), corr_volume_1, att_prob],  [feature_left, attn_weights_left]

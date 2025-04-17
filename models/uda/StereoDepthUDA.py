@@ -9,7 +9,7 @@ from models.estimator import __models__
 from models.decoder.mono import MonoDepthDecoder
 from models.uda.decorator import StereoDepthUDAInference
 
-from models.uda.utils import calc_entropy
+from models.uda.utils import calc_entropy, refine_disparity
 from models.losses.loss import calc_supervised_train_loss, calc_depth_loss
 from models.losses.loss import calc_supervised_val_loss
 from models.losses.loss import calc_pseudo_loss, calc_pseudo_soft_loss, calc_pseudo_entropy_top1_loss
@@ -104,7 +104,10 @@ class StereoDepthUDA(StereoDepthUDAInference):
 
         supervised_loss = calc_supervised_train_loss(data_batch, model='s')
         # pseudo_loss, true_ratio = calc_pseudo_loss(data_batch, threshold, model='s')
-        calc_entropy(data_batch, temperature=temperature, threshold=1.0)
+        calc_entropy(data_batch, temperature=temperature, threshold=0.0009)
+        
+        data_batch['tgt_refined_pred_disp_t'] = refine_disparity(data_batch, threshold=2.0)
+
         pseudo_loss, true_ratio = calc_pseudo_entropy_top1_loss(data_batch, model='s')    
         reconstruction_loss = calc_reconstruction_loss(data_batch, domain='src', model='s')
 
@@ -117,7 +120,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
         # total_loss = supervised_loss + true_ratio * pseudo_loss
         # total_loss = supervised_loss +  reconstruction_loss
         # total_loss = supervised_loss + 0.2 * pseudo_loss + 0.5 * reconstruction_loss
-        total_loss = supervised_loss + depth_loss
+        total_loss = pseudo_loss
         
         # total_loss = pseudo_loss
 
@@ -167,7 +170,6 @@ class StereoDepthUDA(StereoDepthUDAInference):
             data_batch['attn_weights_t'] = features[1]
             # data_batch['pos_encodings_t'] = features[2]
 
-
         data_batch['depth_map_s'] = self.decode_forward(data_batch['features_s'])
         ## pseudo loss를 계산을 할 때 threshold를 두는 게 맞아?
         # pseudo_loss, true_ratio = calc_pseudo_loss(data_batch, threshold)
@@ -177,7 +179,11 @@ class StereoDepthUDA(StereoDepthUDAInference):
         else:
             supervised_loss = torch.tensor(0.0)
 
-        calc_entropy(data_batch, threshold=0.0009)
+        calc_entropy(data_batch, threshold=0.000906)
+
+        data_batch['tgt_refined_pred_disp_t'] = refine_disparity(data_batch, threshold=2.0)
+        
+        
         pseudo_loss, true_ratio = calc_pseudo_entropy_top1_loss(data_batch, model='s')    
         reconstruction_loss = calc_reconstruction_loss(data_batch, domain='src', model='s')
         entropy_loss = calc_entropy_loss(data_batch['tgt_entropy_map_s'], data_batch['tgt_entropy_map_t'], data_batch['tgt_entropy_mask_t'])
@@ -186,7 +192,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
         # total_loss = supervised_loss + true_ratio * pseudo_loss
         # total_loss = supervised_loss + 0.1 * pseudo_loss
         # total_loss = supervised_loss + 0.2 * pseudo_loss + 0.5 * reconstruction_loss
-        total_loss = supervised_loss + depth_loss
+        total_loss = pseudo_loss
         # total_loss = pseudo_loss
 
         log_vars = {
