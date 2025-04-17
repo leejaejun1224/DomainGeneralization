@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-
+import torch.nn.functional as F
 class Upsample(nn.Module):
     def __init__(self, in_channels, out_channels):
         super().__init__()
@@ -42,8 +42,20 @@ class MonoDepthDecoder(nn.Module):
         self.up1 = Upsample(encoder_channels[3], decoder_channels[0])
         self.up2 = Upsample(encoder_channels[2], decoder_channels[1])
         self.up3 = Upsample(encoder_channels[1], decoder_channels[2])
-        self.out = nn.Conv2d(encoder_channels[0], final_channels, kernel_size=3, padding=1)
-        self.act = nn.ReLU()
+        self.out_conv = nn.Sequential(
+            nn.ConvTranspose2d(decoder_channels[2]*2, decoder_channels[2], kernel_size=2, stride=2),  # now 1/2
+            nn.ReLU(inplace=True),
+            nn.Conv2d(decoder_channels[2], decoder_channels[2], kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(decoder_channels[2],  1,   kernel_size=3, padding=1),
+            # nn.Sigmoid()  # [0,1]
+        )
+        self.out_conv_low = nn.Sequential(
+            nn.Conv2d(decoder_channels[2]*2, decoder_channels[2], kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(decoder_channels[2],  1,   kernel_size=3, padding=1),
+            # nn.Sigmoid()  # [0,1]
+        )
 
     def forward(self, features):
         # pos1, pos2, pos3, pos4 = pos_encodings
@@ -54,10 +66,20 @@ class MonoDepthDecoder(nn.Module):
         x = self.up1(x, feat3)
         x = self.up2(x, feat2)
         x = self.up3(x, feat1)
-        x = self.out(x)
+        x_low = self.out_conv_low(torch.cat([x, feat1], 1))
+        x_low = torch.clamp(x_low, 0.0, 1.0)
 
-        x = self.act(x)
-        return x
+        x_half = self.out_conv(torch.cat([x, feat1], 1))  # 1/2
+        x_half = torch.clamp(x_half, 0.0, 1.0)
+        # 최종: 1/2 → 1/1 (원본 해상도)
+        x_full = F.interpolate(
+            x_half,
+            scale_factor=2,         # 1/2 → 1/1
+            mode='bilinear',
+            align_corners=True
+        )
+
+        return x_low*48.0, x_half*96.0, x_full*192.0
 
 
 # if __name__=="__main__":

@@ -91,8 +91,14 @@ class KITTI2015Dataset(Dataset):
             # random crop
             left_img = left_img.crop((x1, y1, x1 + crop_w, y1 + crop_h))
             right_img = right_img.crop((x1, y1, x1 + crop_w, y1 + crop_h))
+            left_img_half = left_img.resize((crop_w//2, crop_h//2), Image.BICUBIC)
+            right_img_half = right_img.resize((crop_w//2, crop_h//2), Image.BICUBIC)
+            left_img_low = left_img.resize((crop_w//4, crop_h//4), Image.BICUBIC)
+            right_img_low = right_img.resize((crop_w//4, crop_h//4), Image.BICUBIC)
+            
             disparity = disparity[y1:y1 + crop_h, x1:x1 + crop_w]
             disparity_low = cv2.resize(disparity, (crop_w//4, crop_h//4), interpolation=cv2.INTER_NEAREST)
+            disparity_half = cv2.resize(disparity, (crop_w//2, crop_h//2), interpolation=cv2.INTER_NEAREST)
 
             valid_mask = disparity_low > 0
             if np.any(valid_mask):
@@ -114,11 +120,20 @@ class KITTI2015Dataset(Dataset):
             processed = get_transform()
             left_img = processed(left_img)
             right_img = processed(right_img)
+            left_img_half = processed(left_img_half)
+            right_img_half = processed(right_img_half)
+            left_img_low = processed(left_img_low)
+            right_img_low = processed(right_img_low)
 
             return {"left": left_img,
                     "right": right_img,
+                    "left_low": left_img_low,
+                    "right_low": right_img_low,
+                    "left_half": left_img_half,
+                    "right_half": right_img_half,
                     "disparity": disparity,
                     "disparity_low": disparity_low,
+                    "disparity_half": disparity_half,
                     "depth_low": depth_low,
                     "left_filename" : self.left_filenames[idx],
                     "right_filename" : self.right_filenames[idx]}
@@ -128,8 +143,16 @@ class KITTI2015Dataset(Dataset):
 
             # normalize
             processed = get_transform()
+            left_img_half = cv2.resize(left_img, (1248//2, 384//2), interpolation=cv2.INTER_NEAREST)
+            right_img_half = cv2.resize(right_img, (1248//2, 384//2), interpolation=cv2.INTER_NEAREST)
+            left_img_low = cv2.resize(left_img, (1248//4, 384//4), interpolation=cv2.INTER_NEAREST)
+            right_img_low = cv2.resize(right_img, (1248//4, 384//4), interpolation=cv2.INTER_NEAREST)
             left_img = processed(left_img).numpy()
             right_img = processed(right_img).numpy()
+            left_img_low = processed(left_img_low).numpy()
+            right_img_low = processed(right_img_low).numpy()
+            left_img_half = processed(left_img_half).numpy()
+            right_img_half = processed(right_img_half).numpy()
 
             # pad to size 1248x384
             top_pad = 384 - h
@@ -143,6 +166,7 @@ class KITTI2015Dataset(Dataset):
             if disparity is not None:
                 assert len(disparity.shape) == 2
                 disparity = np.lib.pad(disparity, ((top_pad, 0), (0, right_pad)), mode='constant', constant_values=0)
+                disparity_half = cv2.resize(disparity, (1248//2, 384//2), interpolation=cv2.INTER_NEAREST)
                 disparity_low = cv2.resize(disparity, (1248//4, 384//4), interpolation=cv2.INTER_NEAREST)
                 valid_mask = disparity_low > 0
                 if np.any(valid_mask):
@@ -162,13 +186,22 @@ class KITTI2015Dataset(Dataset):
             if disparity is not None:
                 return {"left": left_img,
                         "right": right_img,
+                        "left_half": left_img_half,
+                        "right_half": right_img_half,
+                        "left_low": left_img_low,
+                        "right_low": right_img_low,
                         "disparity": disparity,
                         "disparity_low": disparity_low,
+                        "disparity_half": disparity_half,
                         "depth_low": depth_low,
                         "left_filename": self.left_filenames[idx],
                         "right_filename": self.right_filenames[idx]}
             else:
                 return {"left": left_img,
                         "right": right_img,
+                        "left_half": left_img_half,
+                        "right_half": right_img_half,
+                        "left_low": left_img_low,
+                        "right_low": right_img_low, 
                         "left_filename": self.left_filenames[idx],
                         "right_filename": self.right_filenames[idx]}

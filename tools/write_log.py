@@ -64,10 +64,10 @@ class Logger:
         plt.close()
 
     def save_depth_map(self, data_batch):
-        depth_map = data_batch['depth_map_s'].squeeze().cpu().numpy()
+        depth_map = data_batch['depth_map_s_up'].squeeze().cpu().numpy()
         filename = data_batch['src_left_filename'].split('/')[-1]
         plt.figure(figsize=(12, 8))
-        img = plt.imshow(depth_map, cmap='jet', vmin=0, vmax=1)
+        img = plt.imshow(depth_map, cmap='jet', vmin=0, vmax=192)
         cbar = plt.colorbar(img, fraction=0.015, pad=0.04)
         cbar.ax.tick_params(labelsize=8)
         plt.axis('off')
@@ -224,4 +224,4 @@ class Logger:
         self.save_att(data_batch)
         self.save_disparity(data_batch, log_vars)
         self.compute_metrics(data_batch)
-        # self.save_depth_map(data_batch)
+        self.save_depth_map(data_batch)

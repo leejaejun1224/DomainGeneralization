@@ -14,6 +14,7 @@ from models.losses.loss import calc_supervised_train_loss, calc_depth_loss
 from models.losses.loss import calc_supervised_val_loss
 from models.losses.loss import calc_pseudo_loss, calc_pseudo_soft_loss, calc_pseudo_entropy_top1_loss
 from models.losses.loss import calc_reconstruction_loss, calc_pseudo_entropy_loss, calc_entropy_loss
+from models.losses.photometric import photometric_loss, photometric_loss_low, photometric_loss_half
 import time
 
 
@@ -99,7 +100,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
             data_batch['attn_weights_t'] = features[1]
             # data_batch['pos_encodings_t'] = features[2]
 
-        data_batch['depth_map_s'] = self.decode_forward(data_batch['features_s'])
+        data_batch['depth_map_s'], data_batch['depth_map_s_half'], data_batch['depth_map_s_up'] = self.decode_forward(data_batch['features_s'])
         
 
         supervised_loss = calc_supervised_train_loss(data_batch, model='s')
@@ -113,7 +114,9 @@ class StereoDepthUDA(StereoDepthUDAInference):
 
         entropy_loss = calc_entropy_loss(data_batch['tgt_entropy_map_s'], data_batch['tgt_entropy_map_t'], data_batch['tgt_entropy_mask_t'])
         
-        depth_loss = calc_depth_loss(data_batch, model='s')
+        depth_loss = photometric_loss(data_batch)
+        depth_loss_half = photometric_loss_half(data_batch)
+        depth_loss_low = photometric_loss_low(data_batch)
         # 만약에 pseudo loss가 nan이 나오면 그냥 total loss로만 backward를 하면 되나
 
         # total_loss = supervised_loss + pseudo_loss*true_ratio + (1-true_ratio)*reconstruction_loss
@@ -121,7 +124,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
         # total_loss = supervised_loss +  reconstruction_loss
         # total_loss = supervised_loss + 0.2 * pseudo_loss + 0.5 * reconstruction_loss
         
-        total_loss = pseudo_loss
+        total_loss = depth_loss + 0.8 * depth_loss_half + 0.5 * depth_loss_low
         # total_loss = pseudo_loss
 
         log_vars = {
@@ -170,7 +173,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
             data_batch['attn_weights_t'] = features[1]
             # data_batch['pos_encodings_t'] = features[2]
 
-        data_batch['depth_map_s'] = self.decode_forward(data_batch['features_s'])
+        data_batch['depth_map_s'], data_batch['depth_map_s_half'], data_batch['depth_map_s_up'] = self.decode_forward(data_batch['features_s'])
         ## pseudo loss를 계산을 할 때 threshold를 두는 게 맞아?
         # pseudo_loss, true_ratio = calc_pseudo_loss(data_batch, threshold)
 
@@ -187,12 +190,14 @@ class StereoDepthUDA(StereoDepthUDAInference):
         pseudo_loss, true_ratio = calc_pseudo_entropy_top1_loss(data_batch, model='s')    
         reconstruction_loss = calc_reconstruction_loss(data_batch, domain='src', model='s')
         entropy_loss = calc_entropy_loss(data_batch['tgt_entropy_map_s'], data_batch['tgt_entropy_map_t'], data_batch['tgt_entropy_mask_t'])
-        depth_loss = calc_depth_loss(data_batch, model='s')
+        depth_loss = photometric_loss(data_batch)
+        depth_loss_low = photometric_loss_low(data_batch)
+        depth_loss_half = photometric_loss_half(data_batch)
         # total_loss = supervised_loss + true_ratio * pseudo_loss  + (1-true_ratio)*reconstruction_loss
         # total_loss = supervised_loss + true_ratio * pseudo_loss
         # total_loss = supervised_loss + 0.1 * pseudo_loss
         # total_loss = supervised_loss + 0.2 * pseudo_loss + 0.5 * reconstruction_loss
-        total_loss = pseudo_loss
+        total_loss = depth_loss + 0.8 * depth_loss_half + 0.5 * depth_loss_low
         # total_loss = pseudo_loss
 
         log_vars = {
