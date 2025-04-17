@@ -143,10 +143,10 @@ class KITTI2015Dataset(Dataset):
 
             # normalize
             processed = get_transform()
-            left_img_half = cv2.resize(left_img, (1248//2, 384//2), interpolation=cv2.INTER_NEAREST)
-            right_img_half = cv2.resize(right_img, (1248//2, 384//2), interpolation=cv2.INTER_NEAREST)
-            left_img_low = cv2.resize(left_img, (1248//4, 384//4), interpolation=cv2.INTER_NEAREST)
-            right_img_low = cv2.resize(right_img, (1248//4, 384//4), interpolation=cv2.INTER_NEAREST)
+            left_img_half = left_img.resize((1248//2, 384//2), Image.BICUBIC)
+            right_img_half = right_img.resize((1248//2, 384//2), Image.BICUBIC)
+            left_img_low = left_img.resize((1248//4, 384//4), Image.BICUBIC)
+            right_img_low = right_img.resize((1248//4, 384//4), Image.BICUBIC)
             left_img = processed(left_img).numpy()
             right_img = processed(right_img).numpy()
             left_img_low = processed(left_img_low).numpy()
