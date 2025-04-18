@@ -173,7 +173,7 @@ def train_epoch(model, source_loader, target_loader, optimizer, threshold_manage
             'depth_loss': sum(depth_losses)/len(depth_losses),
             'learning_rate': current_lr
         }
-    return {'train_loss': 0, 'true_ratio_train': 0, 'train_pseudo_loss': 0, 'reconstruction_loss': 0, 'learning_rate': current_lr}
+    return {'train_loss': 0, 'true_ratio_train': 0, 'train_pseudo_loss': 0, 'reconstruction_loss': 0, 'learning_rate': current_lr, 'depth_loss': 0}
 
 def validate(model, source_loader, target_loader):
     model.eval()

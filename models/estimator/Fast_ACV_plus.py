@@ -232,6 +232,69 @@ class hourglass_att(nn.Module):
         conv = self.conv1_up(conv1)
         return conv
     
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+class CrossViewTransformerBlock(nn.Module):
+    """
+    Cross-attention block: Left queries Right, and Right queries Left,
+    then fuse back into feature maps.
+    """
+    def __init__(self, dim, num_heads=4, dropout=0.0):
+        super().__init__()
+        self.num_heads = num_heads
+        self.dim = dim
+        # Cross-attention layers
+        self.attn_L2R = nn.MultiheadAttention(embed_dim=dim, num_heads=num_heads, dropout=dropout, batch_first=True)
+        self.attn_R2L = nn.MultiheadAttention(embed_dim=dim, num_heads=num_heads, dropout=dropout, batch_first=True)
+        # Fusion layers
+        self.fuse_L = nn.Sequential(
+            nn.Conv2d(2*dim, dim, kernel_size=1, bias=False),
+            nn.BatchNorm2d(dim),
+            nn.ReLU(inplace=True)
+        )
+        self.fuse_R = nn.Sequential(
+            nn.Conv2d(2*dim, dim, kernel_size=1, bias=False),
+            nn.BatchNorm2d(dim),
+            nn.ReLU(inplace=True)
+        )
+
+    def forward(self, feat_L, feat_R):
+        """
+        feat_L, feat_R: [B, C, H, W]
+        returns: fused_feat_L, fused_feat_R
+        """
+        B, C, H, W = feat_L.shape
+        N = H * W
+        # flatten spatial dims
+        fL = feat_L.view(B, C, N).permute(0, 2, 1)  # [B, N, C]
+        fR = feat_R.view(B, C, N).permute(0, 2, 1)  # [B, N, C]
+        # Left->Right cross-attention
+        attn_L2R_out, _ = self.attn_L2R(query=fL, key=fR, value=fR)  # [B,N,C]
+        # Right->Left cross-attention
+        attn_R2L_out, _ = self.attn_R2L(query=fR, key=fL, value=fL)  # [B,N,C]
+        # reshape back
+        att_L = attn_R2L_out.permute(0,2,1).view(B, C, H, W)  # context for L
+        att_R = attn_L2R_out.permute(0,2,1).view(B, C, H, W)  # context for R
+        # fuse original + context
+        fused_L = self.fuse_L(torch.cat([feat_L, att_L], dim=1))
+        fused_R = self.fuse_R(torch.cat([feat_R, att_R], dim=1))
+        return fused_L, fused_R
+
+# Example integration into Fast_ACVNet_plus:
+# in __init__:
+#    self.cross_att_block = CrossViewTransformerBlock(dim=80, num_heads=4)
+# in forward(), after features_left,features_right = self.feature_up(...):
+#    # take features at resolution 1/4
+#    fl, fr = features_left[0], features_right[0]    # [B,80,H',W']
+#    fl_fused, fr_fused = self.cross_att_block(fl, fr)
+#    features_left[0], features_right[0] = fl_fused, fr_fused
+
+
+
+            
     
 class Fast_ACVNet_plus(nn.Module):
     def __init__(self, maxdisp, att_weights_only):
@@ -241,6 +304,11 @@ class Fast_ACVNet_plus(nn.Module):
         self.feature = FeatureMiTPtr()
         self.feature_up = FeatUp()
         chans = [32, 64, 160, 256]
+        self.cross_att_block = CrossViewTransformerBlock(dim=chans[2]*2, num_heads=4)
+        self.global_fuse = nn.Sequential(
+            nn.Conv2d(chans[0] + 320, chans[0], kernel_size=1, bias=False),
+            nn.BatchNorm2d(chans[0]), nn.ReLU(inplace=True)
+        )
 
         self.stem_2 = nn.Sequential(
             BasicConv(3, 32, kernel_size=3, stride=2, padding=1),
@@ -268,7 +336,6 @@ class Fast_ACVNet_plus(nn.Module):
         self.concat_feature_att_4 = channelAtt(16, 80)
         self.hourglass = hourglass(16)
 
-
     def concat_volume_generator(self, left_input, right_input, disparity_samples):
         right_feature_map, left_feature_map = SpatialTransformer_grid(left_input,
                                                                        right_input, disparity_samples)
@@ -279,6 +346,15 @@ class Fast_ACVNet_plus(nn.Module):
         feature_left, attn_weights_left  = self.feature(left)
         feature_right, attn_weights_right = self.feature(right)
         features_left, features_right = self.feature_up(feature_left, feature_right)
+        fl, fr = features_left[2], features_right[2]   
+        fl_fused, fr_fused = self.cross_att_block(fl, fr)
+        fl_fused = F.interpolate(fl_fused, scale_factor=4, mode='bilinear', align_corners=False)
+        fr_fused = F.interpolate(fr_fused, scale_factor=4, mode='bilinear', align_corners=False)
+
+        fuse_in_L = torch.cat([features_left[0], fl_fused], dim=1)
+        fuse_in_R = torch.cat([features_right[0], fr_fused], dim=1)
+        features_left[0]  = self.global_fuse(fuse_in_L)
+        features_right[0] = self.global_fuse(fuse_in_R)
 
         stem_2x = self.stem_2(left)
         stem_4x = self.stem_4(stem_2x)
@@ -290,6 +366,7 @@ class Fast_ACVNet_plus(nn.Module):
 
         match_left = self.desc(self.conv(features_left[0]))
         match_right = self.desc(self.conv(features_right[0]))
+
 
         corr_volume_1 = build_norm_correlation_volume(match_left, match_right, self.maxdisp//4)
         top_one, entropy_map = volume_entropy_softmax(corr_volume_1)
