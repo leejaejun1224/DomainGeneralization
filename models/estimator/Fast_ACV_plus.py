@@ -39,7 +39,7 @@ class FeatureMiTPtr(SubModule):
         self.encoder = self.model.encoder
 
     def forward(self, x):
-        outputs = self.encoder(x, output_hidden_states=True)
+        outputs = self.encoder(x, output_hidden_states=True, output_attentions=True)
         return outputs.hidden_states, outputs.attentions
 
 class FeatureMiT(SubModule):
@@ -291,7 +291,130 @@ class CrossViewTransformerBlock(nn.Module):
 #    fl, fr = features_left[0], features_right[0]    # [B,80,H',W']
 #    fl_fused, fr_fused = self.cross_att_block(fl, fr)
 #    features_left[0], features_right[0] = fl_fused, fr_fused
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
 
+# ---------------------------------------------------------
+class _ResDilBlock(nn.Module):
+    """3×3 표준 + 3×3 팽창 conv로 수용영역 확장"""
+    def __init__(self, ch, dil=2):
+        super().__init__()
+        self.conv1 = nn.Sequential(
+            nn.Conv2d(ch, ch, 3, 1, 1, bias=False),
+            nn.BatchNorm2d(ch), nn.ReLU(inplace=True))
+        self.conv2 = nn.Sequential(
+            nn.Conv2d(ch, ch, 3, 1, padding=dil, dilation=dil, bias=False),
+            nn.BatchNorm2d(ch))
+        self.act = nn.ReLU(inplace=True)
+    def forward(self,x):
+        return self.act(x + self.conv2(self.conv1(x)))
+
+# ---------------------------------------------------------
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+class _ResDilBlock(nn.Module):
+    def __init__(self, ch, dil=2):
+        super().__init__()
+        self.conv1 = nn.Sequential(
+            nn.Conv2d(ch, ch, 3, 1, 1, bias=False),
+            nn.BatchNorm2d(ch), nn.ReLU(inplace=True)
+        )
+        self.conv2 = nn.Sequential(
+            nn.Conv2d(ch, ch, 3, 1, padding=dil, dilation=dil, bias=False),
+            nn.BatchNorm2d(ch)
+        )
+        self.act = nn.ReLU(inplace=True)
+
+    def forward(self, x):
+        return self.act(x + self.conv2(self.conv1(x)))
+
+class _ASPP(nn.Module):
+    def __init__(self, ch, out=256, rates=(1,6,12,18)):
+        super().__init__()
+        self.branches = nn.ModuleList([
+            nn.Sequential(
+                nn.Conv2d(ch, out//len(rates), 3, 1, padding=r, dilation=r, bias=False),
+                nn.BatchNorm2d(out//len(rates)), nn.ReLU(inplace=True)
+            ) for r in rates
+        ])
+        self.project = nn.Sequential(
+            nn.Conv2d(out, ch, 1, bias=False),
+            nn.BatchNorm2d(ch), nn.ReLU(inplace=True)
+        )
+
+    def forward(self, x):
+        y = torch.cat([b(x) for b in self.branches], dim=1)
+        return self.project(y)
+
+class _NonLocal(nn.Module):
+    def __init__(self, ch, red=2):
+        super().__init__()
+        self.theta = nn.Conv2d(ch, ch//red, 1, bias=False)
+        self.phi   = nn.Conv2d(ch, ch//red, 1, bias=False)
+        self.g     = nn.Conv2d(ch, ch//red, 1, bias=False)
+        self.out   = nn.Conv2d(ch//red, ch, 1, bias=False)
+
+    def forward(self, x):
+        B, C, H, W = x.shape
+        th = self.theta(x).reshape(B, -1, H*W)      # [B, C', N]
+        ph = self.phi(x).reshape(B, -1, H*W)        # [B, C', N]
+        g  = self.g(x).reshape(B, -1, H*W)          # [B, C', N]
+        attn = torch.softmax(torch.bmm(th.transpose(1,2), ph), dim=-1)  # [B, N, N]
+        y = torch.bmm(g, attn.transpose(1,2)).reshape(B, -1, H, W)      # [B, C', H, W]
+        return x + self.out(y)
+
+class PropagationNetLarge(nn.Module):
+    """
+    입력 : feature F [B, C_f, H, W],
+           confidence mask w [B, 1, H, W]
+    출력 : 전역 컨텍스트 보강된 피처 [B, C_f, H, W]
+    """
+    def __init__(self, feat_ch=32):
+        super().__init__()
+        in_ch = feat_ch + 1    # F + confidence mask
+        base  = 128
+
+        # Encoder
+        self.down1 = nn.Sequential(
+            nn.Conv2d(in_ch, base, 7, 1, 3, bias=False),
+            nn.BatchNorm2d(base), nn.ReLU(inplace=True)
+        )
+        self.res1  = _ResDilBlock(base, dil=2)
+        self.down2 = nn.Sequential(
+            nn.Conv2d(base, base*2, 3, 2, 1, bias=False),
+            nn.BatchNorm2d(base*2), nn.ReLU(inplace=True)
+        )
+        self.res2  = _ResDilBlock(base*2, dil=4)
+
+        # Bottleneck
+        self.aspp  = _ASPP(base*2)
+        self.nl    = _NonLocal(base*2)
+
+        # Decoder
+        self.up1   = nn.Sequential(
+            nn.ConvTranspose2d(base*2, base, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(base), nn.ReLU(inplace=True)
+        )
+        self.iconv1 = _ResDilBlock(base, dil=2)
+
+        # Output: refined feature dimension = feat_ch
+        self.out   = nn.Conv2d(base, feat_ch, 3, 1, 1, bias=False)
+
+    def forward(self, feat, conf):
+        # feat: [B, C_f, H, W]
+        # conf: [B, 1, H, W]
+        x = torch.cat([feat, conf], dim=1)           # [B, C_f+1, H, W]
+        x1 = self.res1(self.down1(x))                # [B,128,H,W]
+        x2 = self.res2(self.down2(x1))               # [B,256,H/2,W/2]
+        x2 = self.nl(self.aspp(x2))                  # [B,256,H/2,W/2]
+
+        up = self.up1(x2)                            # [B,128,H,W]
+        up = self.iconv1(up + x1)                    # [B,128,H,W]
+        feat_ctx = self.out(up)                      # [B, C_f, H, W]
+        return feat_ctx
 
 
             
@@ -304,11 +427,8 @@ class Fast_ACVNet_plus(nn.Module):
         self.feature = FeatureMiTPtr()
         self.feature_up = FeatUp()
         chans = [32, 64, 160, 256]
-        self.cross_att_block = CrossViewTransformerBlock(dim=chans[2]*2, num_heads=4)
-        self.global_fuse = nn.Sequential(
-            nn.Conv2d(chans[0] + 320, chans[0], kernel_size=1, bias=False),
-            nn.BatchNorm2d(chans[0]), nn.ReLU(inplace=True)
-        )
+        self.propagation_net = PropagationNetLarge(feat_ch=chans[0])
+
 
         self.stem_2 = nn.Sequential(
             BasicConv(3, 32, kernel_size=3, stride=2, padding=1),
@@ -346,34 +466,33 @@ class Fast_ACVNet_plus(nn.Module):
         feature_left, attn_weights_left  = self.feature(left)
         feature_right, attn_weights_right = self.feature(right)
         features_left, features_right = self.feature_up(feature_left, feature_right)
-        fl, fr = features_left[2], features_right[2]   
-        fl_fused, fr_fused = self.cross_att_block(fl, fr)
-        fl_fused = F.interpolate(fl_fused, scale_factor=4, mode='bilinear', align_corners=False)
-        fr_fused = F.interpolate(fr_fused, scale_factor=4, mode='bilinear', align_corners=False)
 
-        fuse_in_L = torch.cat([features_left[0], fl_fused], dim=1)
-        fuse_in_R = torch.cat([features_right[0], fr_fused], dim=1)
-        features_left[0]  = self.global_fuse(fuse_in_L)
-        features_right[0] = self.global_fuse(fuse_in_R)
 
         stem_2x = self.stem_2(left)
         stem_4x = self.stem_4(stem_2x)
         stem_2y = self.stem_2(right)
         stem_4y = self.stem_4(stem_2y)
 
-        features_left[0] = torch.cat((features_left[0], stem_4x), 1)
-        features_right[0] = torch.cat((features_right[0], stem_4y), 1)
+        features_left_cat = torch.cat((features_left[0], stem_4x), 1)
+        features_right_cat = torch.cat((features_right[0], stem_4y), 1)
 
-        match_left = self.desc(self.conv(features_left[0]))
-        match_right = self.desc(self.conv(features_right[0]))
-
+        match_left = self.desc(self.conv(features_left_cat))
+        match_right = self.desc(self.conv(features_right_cat))
 
         corr_volume_1 = build_norm_correlation_volume(match_left, match_right, self.maxdisp//4)
-        top_one, entropy_map = volume_entropy_softmax(corr_volume_1)
+        top_one, entropy_map, mask = volume_entropy_softmax(corr_volume_1)
         peak_confidence = peak_confidence_from_volume(corr_volume_1)
+
+
+        global_feat_L = self.propagation_net(features_left[0], mask)
+        global_feat_R = self.propagation_net(features_right[0], mask)
+        match_left_global = self.desc(self.conv(torch.cat((global_feat_L, stem_4x), 1)))
+        match_right_global = self.desc(self.conv(torch.cat((global_feat_R, stem_4y), 1)))
+        corr_volume_2 = build_norm_correlation_volume(match_left_global, match_right_global, self.maxdisp//4)
+
         corr_volume = self.corr_stem(corr_volume_1)
 
-        cost_att = self.corr_feature_att_4(corr_volume, features_left[0])
+        cost_att = self.corr_feature_att_4(corr_volume, features_left_cat)
         att_weights = self.hourglass_att(cost_att, features_left)
         att_weights_prob = F.softmax(att_weights, dim=2)
         _, ind = att_weights_prob.sort(2, True)
@@ -384,15 +503,15 @@ class Fast_ACVNet_plus(nn.Module):
         disparity_sample_topk = ind_k.squeeze(1).float()
 
         if not self.att_weights_only:
-            concat_features_left = self.concat_feature(features_left[0])
-            concat_features_right = self.concat_feature(features_right[0])
+            concat_features_left = self.concat_feature(features_left_cat)
+            concat_features_right = self.concat_feature(features_right_cat)
             concat_volume = self.concat_volume_generator(concat_features_left, concat_features_right, disparity_sample_topk)
             volume = att_topk * concat_volume
             volume = self.concat_stem(volume)
-            volume = self.concat_feature_att_4(volume, features_left[0])
+            volume = self.concat_feature_att_4(volume, features_left_cat)
             cost = self.hourglass(volume, features_left)
 
-        xspx = self.spx_4(features_left[0])
+        xspx = self.spx_4(features_left_cat)
         xspx = self.spx_2(xspx, stem_2x)
         spx_pred = self.spx(xspx)
         spx_pred = F.softmax(spx_pred, 1)
@@ -409,4 +528,4 @@ class Fast_ACVNet_plus(nn.Module):
         pred = regression_topk(cost.squeeze(1), disparity_sample_topk, 2)
         pred_up = context_upsample(pred, spx_pred)
         confidence_map, _ = att_prob.max(dim=1, keepdim=True)
-        return [pred_up * 4, pred.squeeze(1) * 4, pred_att_up * 4, pred_att * 4], [confidence_map.squeeze(1), corr_volume_1, att_prob],  [feature_left, attn_weights_left]
+        return [pred_up * 4, pred.squeeze(1) * 4, pred_att_up * 4, pred_att * 4], [confidence_map.squeeze(1), corr_volume_1, att_prob, corr_volume_2],  [feature_left, attn_weights_left]

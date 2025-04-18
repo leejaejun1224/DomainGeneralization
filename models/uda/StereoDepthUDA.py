@@ -76,7 +76,8 @@ class StereoDepthUDA(StereoDepthUDAInference):
         src_pred, map, features = self.student_forward(data_batch['src_left'], data_batch['src_right'])
         data_batch['src_pred_disp_s'] = src_pred
         data_batch['src_confidence_map_s'] = map[0]
-        data_batch['src_corr_volume_s'] = map[1]
+        data_batch['src_corr_volume_s_1'] = map[1]
+        data_batch['src_corr_volume_s_2'] = map[3]
         data_batch['features_s'] = features[0]
         data_batch['attn_weights_s'] = features[1]
         # data_batch['pos_encodings_s'] = features[2]
@@ -84,7 +85,8 @@ class StereoDepthUDA(StereoDepthUDAInference):
         tgt_pred, map, features = self.student_forward(data_batch['tgt_left'], data_batch['tgt_right'])  
         data_batch['tgt_pred_disp_s'] = tgt_pred
         data_batch['tgt_confidence_map_s'] = map[0]
-        data_batch['tgt_corr_volume_s'] = map[1]
+        data_batch['tgt_corr_volume_s_1'] = map[1]
+        data_batch['tgt_corr_volume_s_2'] = map[3]
         data_batch['features_s'] = features[0]
         data_batch['attn_weights_s'] = features[1]
         # data_batch['pos_encodings_s'] = features[2]
@@ -95,7 +97,8 @@ class StereoDepthUDA(StereoDepthUDAInference):
                 data_batch['tgt_left'], data_batch['tgt_right'])
             data_batch['pseudo_disp'] = pseudo_disp
             data_batch['confidence_map'] = map[0]
-            data_batch['tgt_corr_volume_t'] = map[1]
+            data_batch['tgt_corr_volume_t_1'] = map[1]
+            data_batch['tgt_corr_volume_t_2'] = map[3]
             data_batch['features_t'] = features[0]
             data_batch['attn_weights_t'] = features[1]
             # data_batch['pos_encodings_t'] = features[2]

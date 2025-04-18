@@ -212,12 +212,12 @@ def volume_entropy_softmax(volume, k=12, temperature=0.5, eps=1e-6):
     # 4) 엔트로피 ㄱㄱ
     H = -(p * p.log()).sum(dim=1) - 2.484  # [B, H, W]
     H = H.unsqueeze(1)
-    mask = H < 0.00089
+    mask = H < 0.000905
     # H = H * mask
     top_one_idx = top_one_idx*mask
     top_one_idx = top_one_idx.unsqueeze(1)
     # H = H.unsqueeze(1).unsqueeze(1)
-    return top_one_idx, H
+    return top_one_idx, H, mask
 
 
 
