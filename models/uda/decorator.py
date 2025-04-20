@@ -22,7 +22,7 @@ class StereoDepthUDAInference(nn.Module):
         # ema teacher model
         self.teacher_model = __models__[cfg['model']](maxdisp=cfg['maxdisp'],
                                     att_weights_only=cfg['att_weights_only'])
-        self.decoder = MonoDepthDecoder(max_disp=60)
+        # self.decoder = MonoDepthDecoder(max_disp=60)
         # flag for initializing EMA weights
         self.ema_initialized = False
         self.cfg = cfg
