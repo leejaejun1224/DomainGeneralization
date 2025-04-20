@@ -429,7 +429,7 @@ class Fast_ACVNet_plus(nn.Module):
         self.feature = FeatureMiTPtr()
         self.feature_up = FeatUp()
         chans = [32, 64, 160, 256]
-        # self.propagation_net = PropagationNetLarge(feat_ch=chans[0])
+        self.propagation_net = PropagationNetLarge(feat_ch=chans[0])
 
 
         self.stem_2 = nn.Sequential(
