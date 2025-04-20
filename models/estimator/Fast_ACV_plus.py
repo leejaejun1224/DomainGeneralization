@@ -233,89 +233,24 @@ class hourglass_att(nn.Module):
         return conv
     
 
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
+"""
+PropagationNetLarge v2
+----------------------
+* wider ASPP rates   : (3, 6, 12, 24)
+* red–dilated stack  : dilations = [1, 2, 4, 8]
+* depth‑aware texture–hierarchy attention
+    ‑ `depth_prob` (32‑bin soft‑max from EfficientNet depth branch)
+    ‑ sigmoid → channel–wise weights → feature × weights
+* still takes a *soft* confidence map (entropy‑derived) as 1‑channel input.
+"""
 
-class CrossViewTransformerBlock(nn.Module):
-    """
-    Cross-attention block: Left queries Right, and Right queries Left,
-    then fuse back into feature maps.
-    """
-    def __init__(self, dim, num_heads=4, dropout=0.0):
-        super().__init__()
-        self.num_heads = num_heads
-        self.dim = dim
-        # Cross-attention layers
-        self.attn_L2R = nn.MultiheadAttention(embed_dim=dim, num_heads=num_heads, dropout=dropout, batch_first=True)
-        self.attn_R2L = nn.MultiheadAttention(embed_dim=dim, num_heads=num_heads, dropout=dropout, batch_first=True)
-        # Fusion layers
-        self.fuse_L = nn.Sequential(
-            nn.Conv2d(2*dim, dim, kernel_size=1, bias=False),
-            nn.BatchNorm2d(dim),
-            nn.ReLU(inplace=True)
-        )
-        self.fuse_R = nn.Sequential(
-            nn.Conv2d(2*dim, dim, kernel_size=1, bias=False),
-            nn.BatchNorm2d(dim),
-            nn.ReLU(inplace=True)
-        )
-
-    def forward(self, feat_L, feat_R):
-        """
-        feat_L, feat_R: [B, C, H, W]
-        returns: fused_feat_L, fused_feat_R
-        """
-        B, C, H, W = feat_L.shape
-        N = H * W
-        # flatten spatial dims
-        fL = feat_L.view(B, C, N).permute(0, 2, 1)  # [B, N, C]
-        fR = feat_R.view(B, C, N).permute(0, 2, 1)  # [B, N, C]
-        # Left->Right cross-attention
-        attn_L2R_out, _ = self.attn_L2R(query=fL, key=fR, value=fR)  # [B,N,C]
-        # Right->Left cross-attention
-        attn_R2L_out, _ = self.attn_R2L(query=fR, key=fL, value=fL)  # [B,N,C]
-        # reshape back
-        att_L = attn_R2L_out.permute(0,2,1).view(B, C, H, W)  # context for L
-        att_R = attn_L2R_out.permute(0,2,1).view(B, C, H, W)  # context for R
-        # fuse original + context
-        fused_L = self.fuse_L(torch.cat([feat_L, att_L], dim=1))
-        fused_R = self.fuse_R(torch.cat([feat_R, att_R], dim=1))
-        return fused_L, fused_R
-
-# Example integration into Fast_ACVNet_plus:
-# in __init__:
-#    self.cross_att_block = CrossViewTransformerBlock(dim=80, num_heads=4)
-# in forward(), after features_left,features_right = self.feature_up(...):
-#    # take features at resolution 1/4
-#    fl, fr = features_left[0], features_right[0]    # [B,80,H',W']
-#    fl_fused, fr_fused = self.cross_att_block(fl, fr)
-#    features_left[0], features_right[0] = fl_fused, fr_fused
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 # ---------------------------------------------------------
 class _ResDilBlock(nn.Module):
-    """3×3 표준 + 3×3 팽창 conv로 수용영역 확장"""
-    def __init__(self, ch, dil=2):
-        super().__init__()
-        self.conv1 = nn.Sequential(
-            nn.Conv2d(ch, ch, 3, 1, 1, bias=False),
-            nn.BatchNorm2d(ch), nn.ReLU(inplace=True))
-        self.conv2 = nn.Sequential(
-            nn.Conv2d(ch, ch, 3, 1, padding=dil, dilation=dil, bias=False),
-            nn.BatchNorm2d(ch))
-        self.act = nn.ReLU(inplace=True)
-    def forward(self,x):
-        return self.act(x + self.conv2(self.conv1(x)))
-
-# ---------------------------------------------------------
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-
-class _ResDilBlock(nn.Module):
+    """3×3 standard + 3×3 dilated conv for larger RF."""
     def __init__(self, ch, dil=2):
         super().__init__()
         self.conv1 = nn.Sequential(
@@ -331,13 +266,16 @@ class _ResDilBlock(nn.Module):
     def forward(self, x):
         return self.act(x + self.conv2(self.conv1(x)))
 
+# ---------------------------------------------------------
 class _ASPP(nn.Module):
-    def __init__(self, ch, out=256, rates=(1,6,12,18)):
+    """Atrous Spatial Pyramid Pooling with custom rates."""
+    def __init__(self, ch, out=256, rates=(3, 6, 12, 24)):
         super().__init__()
         self.branches = nn.ModuleList([
             nn.Sequential(
-                nn.Conv2d(ch, out//len(rates), 3, 1, padding=r, dilation=r, bias=False),
-                nn.BatchNorm2d(out//len(rates)), nn.ReLU(inplace=True)
+                nn.Conv2d(ch, out // len(rates), 3, 1, padding=r, dilation=r,
+                          bias=False),
+                nn.BatchNorm2d(out // len(rates)), nn.ReLU(inplace=True)
             ) for r in rates
         ])
         self.project = nn.Sequential(
@@ -349,72 +287,136 @@ class _ASPP(nn.Module):
         y = torch.cat([b(x) for b in self.branches], dim=1)
         return self.project(y)
 
+# ---------------------------------------------------------
 class _NonLocal(nn.Module):
+    """Simple Non‑Local block (embedded Gaussian)."""
     def __init__(self, ch, red=2):
         super().__init__()
-        self.theta = nn.Conv2d(ch, ch//red, 1, bias=False)
-        self.phi   = nn.Conv2d(ch, ch//red, 1, bias=False)
-        self.g     = nn.Conv2d(ch, ch//red, 1, bias=False)
-        self.out   = nn.Conv2d(ch//red, ch, 1, bias=False)
+        self.theta = nn.Conv2d(ch, ch // red, 1, bias=False)
+        self.phi   = nn.Conv2d(ch, ch // red, 1, bias=False)
+        self.g     = nn.Conv2d(ch, ch // red, 1, bias=False)
+        self.out   = nn.Conv2d(ch // red, ch, 1, bias=False)
 
     def forward(self, x):
         B, C, H, W = x.shape
-        th = self.theta(x).reshape(B, -1, H*W)      # [B, C', N]
-        ph = self.phi(x).reshape(B, -1, H*W)        # [B, C', N]
-        g  = self.g(x).reshape(B, -1, H*W)          # [B, C', N]
-        attn = torch.softmax(torch.bmm(th.transpose(1,2), ph), dim=-1)  # [B, N, N]
-        y = torch.bmm(g, attn.transpose(1,2)).reshape(B, -1, H, W)      # [B, C', H, W]
+        th = self.theta(x).reshape(B, -1, H * W)           # [B, C', N]
+        ph = self.phi(x).reshape(B, -1, H * W)             # [B, C', N]
+        g  = self.g(x).reshape(B, -1, H * W)               # [B, C', N]
+        attn = torch.softmax(torch.bmm(th.transpose(1, 2), ph), dim=-1)  # [B, N, N]
+        y = torch.bmm(g, attn.transpose(1, 2)).reshape(B, -1, H, W)      # [B, C', H, W]
         return x + self.out(y)
 
+# ---------------------------------------------------------
+class DepthTextureAtt(nn.Module):
+    """
+    Texture‑hierarchy attention (논문 식 7–8)
+      depth_prob : [B, 32, H, W]  (channel‑softmax from depth branch)
+      feat       : [B, C,  H, W]
+    """
+    def __init__(self, feat_ch):
+        super().__init__()
+        self.feat_ch = feat_ch
+        self.conv = nn.Sequential(
+            nn.Conv2d(32, 32, 1, 1, 0, bias=False),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(32, 32, 1, 1, 0, bias=False),
+            nn.ReLU(inplace=True)
+            )
+    def forward(self, feat, depth_prob):
+        depth_prob = self.conv(depth_prob)
+        # sigmoid → channel weights A  (0–1)
+        A = torch.sigmoid(depth_prob)                  # [B,32,H,W]
+        # broadcast to match feat channels (32 bins ≥ feat_ch)
+        feat_w = feat * A[:, :self.feat_ch]            # element‑wise
+        return feat_w
+
+# ---------------------------------------------------------
 class PropagationNetLarge(nn.Module):
     """
-    입력 : feature F [B, C_f, H, W],
-           confidence mask w [B, 1, H, W]
-    출력 : 전역 컨텍스트 보강된 피처 [B, C_f, H, W]
+    Args
+    ----
+      feat_ch : input feature channels (32 by default)
+
+    Inputs
+    ------
+      feat   : [B, feat_ch, H, W]
+      conf   : [B, 1,        H, W]   (soft confidence 0‑1)
+      depth_prob (optional) : [B,32,H,W]  – depth‑branch soft‑max
+
+    Output
+    ------
+      feat_ctx : [B, feat_ch, H, W]  (context‑enhanced feature)
     """
-    def __init__(self, feat_ch=32):
+    def __init__(self, feat_ch: int = 32):
         super().__init__()
-        in_ch = feat_ch + 1    # F + confidence mask
+        in_ch = feat_ch + 1              # concatenate confidence map
         base  = 128
 
-        # Encoder
+        # ---------- Encoder ----------
         self.down1 = nn.Sequential(
             nn.Conv2d(in_ch, base, 7, 1, 3, bias=False),
             nn.BatchNorm2d(base), nn.ReLU(inplace=True)
         )
-        self.res1  = _ResDilBlock(base, dil=2)
+        self.res1 = _ResDilBlock(base, dil=2)
+
         self.down2 = nn.Sequential(
-            nn.Conv2d(base, base*2, 3, 2, 1, bias=False),
-            nn.BatchNorm2d(base*2), nn.ReLU(inplace=True)
+            nn.Conv2d(base, base * 2, 3, 2, 1, bias=False),
+            nn.BatchNorm2d(base * 2), nn.ReLU(inplace=True)
         )
-        self.res2  = _ResDilBlock(base*2, dil=4)
+        self.res2 = _ResDilBlock(base * 2, dil=4)
 
-        # Bottleneck
-        self.aspp  = _ASPP(base*2)
-        self.nl    = _NonLocal(base*2)
+        # ---------- Bottleneck ----------
+        self.aspp = _ASPP(base * 2, rates=(3, 6, 12, 24))
+        self.nl   = _NonLocal(base * 2)
 
-        # Decoder
-        self.up1   = nn.Sequential(
-            nn.ConvTranspose2d(base*2, base, 4, 2, 1, bias=False),
+        # red‑dilated conv stack (1,2,4,8)
+        self.rd   = nn.Sequential(
+            _ResDilBlock(base * 2, dil=1),
+            _ResDilBlock(base * 2, dil=2),
+            _ResDilBlock(base * 2, dil=4),
+            _ResDilBlock(base * 2, dil=8),
+        )
+
+        # ---------- Decoder ----------
+        self.up1 = nn.Sequential(
+            nn.ConvTranspose2d(base * 2, base, 4, 2, 1, bias=False),
             nn.BatchNorm2d(base), nn.ReLU(inplace=True)
         )
         self.iconv1 = _ResDilBlock(base, dil=2)
 
-        # Output: refined feature dimension = feat_ch
-        self.out   = nn.Conv2d(base, feat_ch, 3, 1, 1, bias=False)
+        # depth‑aware texture attention
+        self.tex_att = DepthTextureAtt(feat_ch)
 
-    def forward(self, feat, conf):
-        # feat: [B, C_f, H, W]
-        # conf: [B, 1, H, W]
-        x = torch.cat([feat, conf], dim=1)           # [B, C_f+1, H, W]
-        x1 = self.res1(self.down1(x))                # [B,128,H,W]
-        x2 = self.res2(self.down2(x1))               # [B,256,H/2,W/2]
-        x2 = self.nl(self.aspp(x2))                  # [B,256,H/2,W/2]
+        # ---------- Output ----------
+        self.out = nn.Conv2d(base, feat_ch, 3, 1, 1, bias=False)
 
-        up = self.up1(x2)                            # [B,128,H,W]
-        up = self.iconv1(up + x1)                    # [B,128,H,W]
-        feat_ctx = self.out(up)                      # [B, C_f, H, W]
-        return feat_ctx
+    # ---------------------------------
+    def forward(self, feat: torch.Tensor,
+                conf: torch.Tensor,
+                depth_prob = None):
+        # concat confidence map
+        x = torch.cat([feat, conf], dim=1)     # [B, feat_ch+1, H, W]
+
+        # encoder
+        x1 = self.res1(self.down1(x))          # [B,128,H,W]
+        x2 = self.res2(self.down2(x1))         # [B,256,H/2,W/2]
+
+        # bottleneck
+        x2 = self.rd(self.nl(self.aspp(x2)))   # ASPP → NL → RD
+
+        # decoder
+        up = self.up1(x2)                      # [B,128,H,W]
+        up = self.iconv1(up + x1)              # skip connection
+
+        # texture‑hierarchy attention
+        if depth_prob is not None:
+            # depth_prob expected at same (H,W) – resize if necessary
+            if depth_prob.shape[-2:] != up.shape[-2:]:
+                depth_prob = F.interpolate(depth_prob, size=up.shape[-2:],
+                                           mode='bilinear', align_corners=True)
+            up = self.tex_att(up, depth_prob)  # apply attention
+
+        return self.out(up)                    # [B, feat_ch, H, W]
 
 
             
@@ -484,13 +486,13 @@ class Fast_ACVNet_plus(nn.Module):
         peak_confidence = peak_confidence_from_volume(corr_volume_1)
 
 
-        global_feat_L = self.propagation_net(features_left[0], mask)
-        global_feat_R = self.propagation_net(features_right[0], mask)
+        global_feat_L = self.propagation_net(features_left[0], mask, depth_prob=None)
+        global_feat_R = self.propagation_net(features_right[0], mask, depth_prob=None)
         match_left_global = self.desc(self.conv(torch.cat((global_feat_L, stem_4x), 1)))
         match_right_global = self.desc(self.conv(torch.cat((global_feat_R, stem_4y), 1)))
         corr_volume_2 = build_norm_correlation_volume(match_left_global, match_right_global, self.maxdisp//4)
 
-        corr_volume = self.corr_stem(corr_volume_1)
+        corr_volume = self.corr_stem(corr_volume_2)
 
         cost_att = self.corr_feature_att_4(corr_volume, features_left_cat)
         att_weights = self.hourglass_att(cost_att, features_left)
@@ -528,4 +530,4 @@ class Fast_ACVNet_plus(nn.Module):
         pred = regression_topk(cost.squeeze(1), disparity_sample_topk, 2)
         pred_up = context_upsample(pred, spx_pred)
         confidence_map, _ = att_prob.max(dim=1, keepdim=True)
-        return [pred_up * 4, pred.squeeze(1) * 4, pred_att_up * 4, pred_att * 4], [confidence_map.squeeze(1), corr_volume_1, att_prob, corr_volume_2],  [feature_left, attn_weights_left]
+        return [pred_up * 4, pred.squeeze(1) * 4, pred_att_up * 4, pred_att * 4], [confidence_map.squeeze(1), corr_volume_1, att_prob, corr_volume_1],  [feature_left, attn_weights_left]

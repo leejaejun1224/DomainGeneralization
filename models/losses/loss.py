@@ -27,7 +27,72 @@ def calc_entropy_loss(source_entropy, target_entropy, mask):
     entropy_loss = F.smooth_l1_loss(source_entropy[mask], target[mask], size_average=True) * 100
     return entropy_loss
 
+import torch
+import torch.nn.functional as F
 
+def one_hot_entropy_ce_loss(
+    data_batch,
+    model='s',
+    stage1=1,
+    stage2=2,
+    temp1=0.5,
+    temp2=0.5,
+    eps=1e-6,
+    scale=1.0,
+    reduction='mean'
+):
+    """
+    One‑hot encoding cross‑entropy loss using calc_entropy outputs.
+    
+    Args:
+        data_batch: dict, calc_entropy() 호출 후 반환된 값.
+        model:      's' or 't' (student/teacher)
+        stage1:     int, pseudo‑GT를 뽑을 corr_volume 단계 (1 or 2)
+        stage2:     int, loss를 계산할 corr_volume 단계 (1 or 2), 보통 stage2=stage1+1
+        temp1:      float, pseudo‑GT 생성 시 softmax 온도
+        temp2:      float, 손실 계산 시 softmax 온도
+        eps:        float, log 안정화용
+        scale:      float, 최종 loss 스케일링
+        reduction:  'mean' | 'sum' | 'none'
+    
+    Returns:
+        torch.Tensor:
+          * reduction='mean' 또는 'sum' → scalar loss
+          * reduction='none' → [B,1,H,W] per‑pixel loss
+    """
+    # 1) logits 가져오기
+    vol1 = data_batch[f'tgt_corr_volume_{model}_{stage1}'].squeeze(1)  # [B,D,H,W]
+    vol2 = data_batch[f'tgt_corr_volume_{model}_{stage2}'].squeeze(1)  # [B,D,H,W]
+    mask = data_batch[f'tgt_entropy_mask_{model}_{stage1}']           # [B,1,H,W], bool
+    refined = data_batch['tgt_refined_pred_disp_t']     # [B,1,H,W], float→int idx
+    
+    B, D, H, W = vol2.shape
+
+    # 2) refined_disp → target index → one‑hot
+    target_idx = refined.squeeze(1).long()                            # [B,H,W]
+    one_hot = F.one_hot(target_idx, num_classes=D)                    # [B,H,W,D]
+    one_hot = one_hot.permute(0,3,1,2).float()                        # [B,D,H,W]
+    
+    # 3) mask 적용 (엔트로피 낮은 픽셀만)
+    mask_f = mask.float()                                            # [B,1,H,W]
+    one_hot = one_hot * mask_f                                       # [B,D,H,W]
+    
+    # 4) Stage2 softmax
+    p2 = F.softmax(vol2 / temp2, dim=1)                               # [B,D,H,W]
+    
+    # 5) per‑pixel 교차엔트로피
+    loss_map = - one_hot * torch.log(p2 + eps)                        # [B,D,H,W]
+    loss_map = loss_map.sum(dim=1, keepdim=True)                      # [B,1,H,W]
+    
+    # 6) reduction
+    if reduction == 'mean':
+        loss = loss_map.sum() / (mask_f.sum() + eps)
+    elif reduction == 'sum':
+        loss = loss_map.sum()
+    else:
+        loss = loss_map                                               # [B,1,H,W]
+    
+    return loss * scale
 
 
 def get_loss(disp_ests, disp_gts, img_masks, weights):
@@ -35,7 +100,6 @@ def get_loss(disp_ests, disp_gts, img_masks, weights):
     all_losses = []
 
     for disp_est, disp_gt, img_mask, weight in zip(disp_ests, disp_gts, img_masks, weights):
-        
         all_losses.append(weight * F.smooth_l1_loss(disp_est[img_mask], disp_gt[img_mask], size_average=True))
     return sum(all_losses)
 
@@ -47,6 +111,7 @@ def calc_supervised_train_loss(data_batch, model='s'):
     mask = (gt_disp > 0) & (gt_disp < 256)
     data_batch['mask'] = mask
     mask_low = (gt_disp_low > 0) & (gt_disp_low < 256)
+    data_batch['mask_low'] = mask_low
     masks = [mask, mask_low, mask, mask_low]
     gt_disps = [gt_disp, gt_disp_low, gt_disp, gt_disp_low]
     # scale별 weight 예시
@@ -57,14 +122,16 @@ def calc_supervised_train_loss(data_batch, model='s'):
 
 def calc_supervised_val_loss(data_batch, model='s'):
     key = 'src_pred_disp_' + model
-    pred_disp, gt_disp = data_batch[key], data_batch['src_disparity']
+    pred_disp, gt_disp, gt_disp_low = data_batch[key], data_batch['src_disparity'], data_batch['src_disparity_low']
 
     mask = (gt_disp > 0) & (gt_disp < 256)
     data_batch['mask'] = mask
-    masks = [mask]
-    gt_disps = [gt_disp]
+    mask_low = (gt_disp_low > 0) & (gt_disp_low < 256)
+    data_batch['mask_low'] = mask_low
+    masks = [mask, mask_low]
+    gt_disps = [gt_disp, gt_disp_low]
     # scale별 weight 예시
-    weights = [1.0]
+    weights = [1.0, 0.3]
     loss = get_loss(pred_disp, gt_disps, masks, weights)
     return loss
 
@@ -100,7 +167,7 @@ def calc_pseudo_loss(data_batch, threshold, model='s'):
 
 def calc_pseudo_entropy_top1_loss(data_batch, model='s'):
 
-    entropy_mask = data_batch['tgt_entropy_map_t'] > 0
+    entropy_mask = data_batch['tgt_entropy_map_t_1'] > 0
     
     true_count = entropy_mask.sum() 
     total_pixels = entropy_mask.numel()

@@ -100,20 +100,20 @@ class KITTI2015Dataset(Dataset):
             disparity_low = cv2.resize(disparity, (crop_w//4, crop_h//4), interpolation=cv2.INTER_NEAREST)
             disparity_half = cv2.resize(disparity, (crop_w//2, crop_h//2), interpolation=cv2.INTER_NEAREST)
 
-            valid_mask = disparity_low > 0
+            valid_mask = disparity > 0
             if np.any(valid_mask):
-                disp_min = np.min(disparity_low[valid_mask])
-                disp_max = np.max(disparity_low[valid_mask])
+                disp_min = np.min(disparity[valid_mask])
+                disp_max = np.max(disparity[valid_mask])
                 # 유효한 값이 모두 동일하지 않을 때
                 if disp_max != disp_min:
-                    depth_low = np.zeros_like(disparity_low)
-                    depth_low[valid_mask] = 1e-4 + (disparity_low[valid_mask] - disp_min) / (disp_max - disp_min) 
+                    depth_map = np.zeros_like(disparity)
+                    depth_map[valid_mask] = 1e-4 + (disparity[valid_mask] - disp_min) / (disp_max - disp_min) 
                 else:
                     # 모든 유효 값이 동일하다면, 논리적으로 scaling이 어려우므로 기본값 1로 설정 (0이 아닌 부분만)
-                    depth_low = np.ones_like(disparity_low)
-                    depth_low[~valid_mask] = 0
+                    depth_map = np.ones_like(disparity)
+                    depth_map[~valid_mask] = 0
             else:
-                depth_low = disparity_low.copy()
+                depth_map = disparity.copy()
 
 
             # to tensor, normalize
@@ -134,7 +134,7 @@ class KITTI2015Dataset(Dataset):
                     "disparity": disparity,
                     "disparity_low": disparity_low,
                     "disparity_half": disparity_half,
-                    "depth_low": depth_low,
+                    "depth_map": depth_map,
                     "left_filename" : self.left_filenames[idx],
                     "right_filename" : self.right_filenames[idx]}
 
@@ -168,20 +168,20 @@ class KITTI2015Dataset(Dataset):
                 disparity = np.lib.pad(disparity, ((top_pad, 0), (0, right_pad)), mode='constant', constant_values=0)
                 disparity_half = cv2.resize(disparity, (1248//2, 384//2), interpolation=cv2.INTER_NEAREST)
                 disparity_low = cv2.resize(disparity, (1248//4, 384//4), interpolation=cv2.INTER_NEAREST)
-                valid_mask = disparity_low > 0
+                valid_mask = disparity > 0
                 if np.any(valid_mask):
-                    disp_min = np.min(disparity_low[valid_mask])
-                    disp_max = np.max(disparity_low[valid_mask])
+                    disp_min = np.min(disparity[valid_mask])
+                    disp_max = np.max(disparity[valid_mask])
                     # 유효한 값이 모두 동일하지 않을 때
                     if disp_max != disp_min:
-                        depth_low = np.zeros_like(disparity_low)
-                        depth_low[valid_mask] = 1e-4 + (disparity_low[valid_mask] - disp_min) / (disp_max - disp_min) * (10 - 1e-4)
+                        depth_map = np.zeros_like(disparity)
+                        depth_map[valid_mask] = 1e-4 + (disparity[valid_mask] - disp_min) / (disp_max - disp_min)
                     else:
                         # 모든 유효 값이 동일하다면, 논리적으로 scaling이 어려우므로 기본값 1로 설정 (0이 아닌 부분만)
-                        depth_low = np.ones_like(disparity_low)
-                        depth_low[~valid_mask] = 0
+                        depth_map = np.ones_like(disparity)
+                        depth_map[~valid_mask] = 0
                 else:
-                    depth_low = disparity_low.copy()
+                    depth_map = disparity.copy()
 
             if disparity is not None:
                 return {"left": left_img,
@@ -193,7 +193,7 @@ class KITTI2015Dataset(Dataset):
                         "disparity": disparity,
                         "disparity_low": disparity_low,
                         "disparity_half": disparity_half,
-                        "depth_low": depth_low,
+                        "depth_map": depth_map,
                         "left_filename": self.left_filenames[idx],
                         "right_filename": self.right_filenames[idx]}
             else:

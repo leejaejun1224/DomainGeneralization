@@ -18,7 +18,7 @@ uda = dict(
 optimizer = dict(
     optimizer = "Adam",
     lr = 1e-4,
-    adjust_lr = "20,40,60:2"
+    adjust_lr = "300,450:10"
 )
 
 # name_dataset = 'kitti2015_to_kitti2012'
@@ -27,13 +27,13 @@ name_dataset = 'cityscapes_to_kitti2015'
 
 data = dict(
     train = dict(
-        epoch = 100,
+        epoch = 750,
         batch_size = 2,
         num_workers = 2,
         shuffle = True,
         pin_memory = True,
-        val_interval = 10,
-        save_interval = 10
+        val_interval = 50,
+        save_interval = 50
     ),
     test = dict(
         batch_size = 1,

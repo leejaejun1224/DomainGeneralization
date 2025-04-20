@@ -6,6 +6,7 @@ from copy import deepcopy
 from models.estimator.Fast_ACV import Fast_ACVNet
 from models.losses.loss import get_loss
 from models.decoder.mono import MonoDepthDecoder
+from models.decoder.monodpt import DPTDepthDecoder
 from models.estimator import __models__
 from models.head.head import GeometricHead
 
@@ -21,7 +22,7 @@ class StereoDepthUDAInference(nn.Module):
         # ema teacher model
         self.teacher_model = __models__[cfg['model']](maxdisp=cfg['maxdisp'],
                                     att_weights_only=cfg['att_weights_only'])
-        self.decoder = MonoDepthDecoder()
+        self.decoder = MonoDepthDecoder(max_disp=60)
         # flag for initializing EMA weights
         self.ema_initialized = False
         self.cfg = cfg
@@ -49,8 +50,8 @@ class StereoDepthUDAInference(nn.Module):
         return output, map, features
         
     def decode_forward(self, features):
-        depth_map, depth_map_half, depth_map_up = self.decoder(features)
-        return depth_map, depth_map_half, depth_map_up
+        depth_map = self.decoder(features)
+        return depth_map
 
 
 

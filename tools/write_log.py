@@ -67,7 +67,7 @@ class Logger:
         depth_map = data_batch['depth_map_s_up'].squeeze().cpu().numpy()
         filename = data_batch['src_left_filename'].split('/')[-1]
         plt.figure(figsize=(12, 8))
-        img = plt.imshow(depth_map, cmap='jet', vmin=0, vmax=192)
+        img = plt.imshow(depth_map, cmap='jet')
         cbar = plt.colorbar(img, fraction=0.015, pad=0.04)
         cbar.ax.tick_params(labelsize=8)
         plt.axis('off')
@@ -137,7 +137,7 @@ class Logger:
 
 
     def save_entropy(self, data_batch):
-        top_one_map = data_batch['tgt_entropy_map_idx_t'] * 4
+        top_one_map = data_batch['tgt_entropy_map_idx_t_1'] * 4
         top_one_map_resized = F.interpolate(top_one_map.float(), scale_factor=4, mode="nearest")
         top_one_map_resized = top_one_map_resized.squeeze(0).squeeze(0).cpu().numpy()
         filename = data_batch['tgt_left_filename'].split('/')[-1]
@@ -151,7 +151,7 @@ class Logger:
         plt.close()
 
 
-        entropy_map = data_batch['tgt_entropy_map_t']
+        entropy_map = data_batch['tgt_entropy_map_t_1']
         entropy_map_resized = F.interpolate(entropy_map.float(), scale_factor=4, mode="nearest")
         entropy_map_resized = entropy_map_resized.squeeze(0).squeeze(0).cpu().numpy()       
         filename = data_batch['tgt_left_filename'].split('/')[-1]
@@ -224,4 +224,4 @@ class Logger:
         self.save_att(data_batch)
         self.save_disparity(data_batch, log_vars)
         self.compute_metrics(data_batch)
-        self.save_depth_map(data_batch)
+        # self.save_depth_map(data_batch)

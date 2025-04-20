@@ -14,9 +14,10 @@ from models.losses.loss import calc_supervised_train_loss, calc_depth_loss
 from models.losses.loss import calc_supervised_val_loss, sceneflow_supervised_loss
 from models.losses.loss import calc_pseudo_loss, calc_pseudo_soft_loss, calc_pseudo_entropy_top1_loss
 from models.losses.loss import calc_reconstruction_loss, calc_pseudo_entropy_loss, calc_entropy_loss
+from models.losses.loss import one_hot_entropy_ce_loss
 from models.losses.photometric import photometric_loss, photometric_loss_low, photometric_loss_half
 import time
-
+from models.losses.monoloss import MonoDepthLoss
 
 ### if student => model = 's'
 ### if teacher => model = 't'
@@ -26,6 +27,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
         self.cfg = cfg
         self.student_optimizer = student_optimizer
         self.teacher_optimizer = teacher_optimizer
+        self.depth_loss = MonoDepthLoss()
 
     def update_ema(self, iter, alpha=0.99):
         alpha_teacher = min(1 - 1 / (iter + 1), alpha)
@@ -103,26 +105,27 @@ class StereoDepthUDA(StereoDepthUDAInference):
             data_batch['attn_weights_t'] = features[1]
             # data_batch['pos_encodings_t'] = features[2]
 
-        data_batch['depth_map_s'], data_batch['depth_map_s_half'], data_batch['depth_map_s_up'] = self.decode_forward(data_batch['features_s'])
+        data_batch['depth_map_s'] = self.decode_forward(data_batch['features_s'])
         
 
         supervised_loss = calc_supervised_train_loss(data_batch, model='s')
         # pseudo_loss, true_ratio = calc_pseudo_loss(data_batch, threshold, model='s')
-        calc_entropy(data_batch, temperature=temperature, threshold=0.000906)
+        calc_entropy(data_batch, temperature=temperature, threshold=0.0009)
         
         data_batch['tgt_refined_pred_disp_t'] = refine_disparity(data_batch, threshold=2.0)
+        # # pseudo_loss, true_ratio = calc_pseudo_entropy_top1_loss(data_batch, model='s')    
+        # # reconstruction_loss = calc_reconstruction_loss(data_batch, domain='src', model='s')
 
-        pseudo_loss, true_ratio = calc_pseudo_entropy_top1_loss(data_batch, model='s')    
-        reconstruction_loss = calc_reconstruction_loss(data_batch, domain='src', model='s')
-
-        entropy_loss = calc_entropy_loss(data_batch['tgt_entropy_map_s'], data_batch['tgt_entropy_map_t'], data_batch['tgt_entropy_mask_t'])
-        
+        # entropy_loss = calc_entropy_loss(data_batch['tgt_entropy_map_s'], data_batch['tgt_entropy_map_t'], data_batch['tgt_entropy_mask_t'])
+        one_hot_loss = one_hot_entropy_ce_loss(data_batch)
+        # depth_loss = self.depth_loss(data_batch['depth_map_s'], data_batch['src_left_low'], data_batch['src_right_low'], data_batch['mask_low'].unsqueeze(1), (data_batch['src_disparity_low']/4.0).unsqueeze(1))
+        # depth_loss = self.depth_loss(data_batch['depth_map_s'], data_batch['src_left'], data_batch['src_right'], data_batch['mask'].unsqueeze(1), (data_batch['src_depth_map']).unsqueeze(1))
         # depth_loss = photometric_loss(data_batch)
         # depth_loss_half = photometric_loss_half(data_batch)
         # depth_loss_low = photometric_loss_low(data_batch)
 
         ### just for sceneflow
-        depth_loss_sceneflow = sceneflow_supervised_loss(data_batch)
+        # depth_loss_sceneflow = sceneflow_supervised_loss(data_batch)
         
 
 
@@ -134,16 +137,16 @@ class StereoDepthUDA(StereoDepthUDAInference):
         # total_loss = supervised_loss + 0.2 * pseudo_loss + 0.5 * reconstruction_loss
         
         # total_loss = depth_loss + 0.8 * depth_loss_half + 0.5 * depth_loss_low
-        total_loss = supervised_loss
+        # total_loss = supervised_loss + 0.5*one_hot_loss
         # total_loss = pseudo_loss
-
+        total_loss =  supervised_loss + 0.5 * one_hot_loss
         log_vars = {
             'loss': total_loss.item(),
             'supervised_loss': supervised_loss.item(),
-            'unsupervised_loss': pseudo_loss.item(),
-            'true_ratio': true_ratio.item(),
-            'reconstruction_loss': reconstruction_loss.item(),
-            'depth_loss': depth_loss_sceneflow.item()
+            'unsupervised_loss': total_loss.item(),
+            'true_ratio': total_loss.item(),
+            'reconstruction_loss': total_loss.item(),
+            'depth_loss': one_hot_loss.item()
         }
 
         total_loss.backward()
@@ -156,7 +159,8 @@ class StereoDepthUDA(StereoDepthUDAInference):
         start = time.time()
         data_batch['src_pred_disp_s'], map, features = self.student_forward(data_batch['src_left'], data_batch['src_right'])
         data_batch['src_confidence_map_s'] = map[0]
-        data_batch['src_corr_volume_s'] = map[1]
+        data_batch['src_corr_volume_s_1'] = map[1]
+        data_batch['src_corr_volume_s_2'] = map[3]
         data_batch['features_s'] = features[0]
         data_batch['attn_weights_s'] = features[1]
         # data_batch['pos_encodings_s'] = features[2]
@@ -164,7 +168,8 @@ class StereoDepthUDA(StereoDepthUDAInference):
         # print(f"forward time: {end - start}")
         data_batch['tgt_pred_disp_s'], map, features = self.student_forward(data_batch['tgt_left'], data_batch['tgt_right'])
         data_batch['tgt_confidence_map_s'] = map[0]
-        data_batch['tgt_corr_volume_s'] = map[1]
+        data_batch['tgt_corr_volume_s_1'] = map[1]
+        data_batch['tgt_corr_volume_s_2'] = map[3]
         data_batch['features_s'] = features[0]
         data_batch['attn_weights_s'] = features[1]
         # data_batch['pos_encodings_s'] = features[2]
@@ -178,12 +183,13 @@ class StereoDepthUDA(StereoDepthUDAInference):
             # ㅋㅋ 이 1이 뭐더라 시발
             data_batch['pseudo_disp'] = pseudo_disp
             data_batch['confidence_map'] = map[0]
-            data_batch['tgt_corr_volume_t'] = map[1]
+            data_batch['tgt_corr_volume_t_1'] = map[1]
+            data_batch['tgt_corr_volume_t_2'] = map[3]
             data_batch['features_t'] = features[0]
             data_batch['attn_weights_t'] = features[1]
             # data_batch['pos_encodings_t'] = features[2]
 
-        data_batch['depth_map_s'], data_batch['depth_map_s_half'], data_batch['depth_map_s_up'] = self.decode_forward(data_batch['features_s'])
+        data_batch['depth_map_s'] = self.decode_forward(data_batch['features_s'])
         ## pseudo loss를 계산을 할 때 threshold를 두는 게 맞아?
         # pseudo_loss, true_ratio = calc_pseudo_loss(data_batch, threshold)
 
@@ -192,34 +198,38 @@ class StereoDepthUDA(StereoDepthUDAInference):
         else:
             supervised_loss = torch.tensor(0.0)
 
-        calc_entropy(data_batch, threshold=0.000895)
+        calc_entropy(data_batch, threshold=0.00090)
 
         data_batch['tgt_refined_pred_disp_t'] = refine_disparity(data_batch, threshold=2.0)
         
         
-        pseudo_loss, true_ratio = calc_pseudo_entropy_top1_loss(data_batch, model='s')    
-        reconstruction_loss = calc_reconstruction_loss(data_batch, domain='src', model='s')
-        entropy_loss = calc_entropy_loss(data_batch['tgt_entropy_map_s'], data_batch['tgt_entropy_map_t'], data_batch['tgt_entropy_mask_t'])
-        # depth_loss = photometric_loss(data_batch)
+        # pseudo_loss, true_ratio = calc_pseudo_entropy_top1_loss(data_batch, model='s')    
+        # reconstruction_loss = calc_reconstruction_loss(data_batch, domain='src', model='s')
+        # entropy_loss = calc_entropy_loss(data_batch['tgt_entropy_map_s'], data_batch['tgt_entropy_map_t'], data_batch['tgt_entropy_mask_t'])
+        one_hot_loss = one_hot_entropy_ce_loss(data_batch)
+
+        
+        # depth_loss = self.depth_loss(data_batch['depth_map_s'], data_batch['src_left'], data_batch['src_right'], data_batch['mask'].unsqueeze(1), (data_batch['src_depth_map']).unsqueeze(1))
+        # depth_loss = self.depth_loss(data_batch['depth_map_s_up'], data_batch['src_left'], data_batch['src_right'], data_batch['mask'].unsqueeze(1), (data_batch['src_disparity']).unsqueeze(1))
+
         # depth_loss_low = photometric_loss_low(data_batch)
         # depth_loss_half = photometric_loss_half(data_batch)
-        depth_loss_sceneflow = sceneflow_supervised_loss(data_batch)
+        # depth_loss_sceneflow = sceneflow_supervised_loss(data_batch)
 
         # total_loss = supervised_loss + true_ratio * pseudo_loss  + (1-true_ratio)*reconstruction_loss
         # total_loss = supervised_loss + true_ratio * pseudo_loss
         # total_loss = supervised_loss + 0.1 * pseudo_loss
         # total_loss = supervised_loss + 0.2 * pseudo_loss + 0.5 * reconstruction_loss
         # total_loss = depth_loss + 0.8 * depth_loss_half + 0.5 * depth_loss_low
-        total_loss = supervised_loss
-        # total_loss = pseudo_loss
+        total_loss = supervised_loss + one_hot_loss # total_loss = depth_loss
 
         log_vars = {
             'loss': total_loss.item(),
             'supervised_loss': supervised_loss.item(),
-            'unsupervised_loss': pseudo_loss.item(),
-            'true_ratio': true_ratio.item(),
-            'reconstruction_loss': reconstruction_loss.item(),
-            'depth_loss': depth_loss_sceneflow.item()
+            'unsupervised_loss': total_loss.item(),
+            'true_ratio': total_loss.item(),
+            'reconstruction_loss': total_loss.item(),
+            'depth_loss': one_hot_loss.item()
         }
         return log_vars
 
