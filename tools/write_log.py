@@ -48,15 +48,15 @@ class Logger:
 
     def save_att(self, data_batch):
         att_prob = data_batch['src_confidence_map_s']
-        att_prob = F.interpolate(att_prob.unsqueeze(0), 
+        att_prob = F.interpolate(att_prob, 
                         scale_factor=4, 
                         mode='bilinear', 
-                        align_corners=False).squeeze(0)
+                        align_corners=False)
         att_prob = att_prob.squeeze().cpu().numpy()
         filename = data_batch['src_left_filename'].split('/')[-1]
         
         plt.figure(figsize=(12, 8))
-        img = plt.imshow(att_prob, cmap='gray', vmin=0.0, vmax=1.0)
+        img = plt.imshow(att_prob, cmap='jet')
         cbar = plt.colorbar(img, fraction=0.015, pad=0.04)
         cbar.ax.tick_params(labelsize=8)
         plt.axis('off')
@@ -64,7 +64,7 @@ class Logger:
         plt.close()
 
     def save_depth_map(self, data_batch):
-        depth_map = data_batch['depth_map_s_up'].squeeze().cpu().numpy()
+        depth_map = data_batch['tgt_refined_pred_disp_t'].squeeze().cpu().numpy()
         filename = data_batch['src_left_filename'].split('/')[-1]
         plt.figure(figsize=(12, 8))
         img = plt.imshow(depth_map, cmap='jet')

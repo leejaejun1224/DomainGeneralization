@@ -3,7 +3,7 @@ import torch.nn.functional as F
 
 
 def refine_disparity(data_batch, threshold):
-    top_one = data_batch['tgt_entropy_map_idx_t_2']
+    top_one = data_batch['tgt_entropy_map_idx_t_1']
     pred_disp = data_batch['pseudo_disp'][1].unsqueeze(1) / 4.0
     mask = (top_one > 0) & (top_one < 256)
 
@@ -19,7 +19,7 @@ def refine_disparity(data_batch, threshold):
     result = top_one + pred_disp
     result = torch.clamp(result, 0, 192-1)
     # print(result.max())
-    return result
+    return result, diff_mask
     
 
 
@@ -68,7 +68,6 @@ def calc_entropy(data_batch, threshold, k=12, temperature=0.5, eps=1e-6):
             data_batch['tgt_entropy_map_idx_' + model + '_' + str(i)] = refined_disp
 
     return data_batch
-
 
 
 

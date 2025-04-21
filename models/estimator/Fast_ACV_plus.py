@@ -5,6 +5,7 @@ import torch.utils.data
 from torch.autograd import Variable
 import torch.nn.functional as F
 from models.estimator.submodules import *
+from models.estimator.refiner import *
 import math
 import gc
 import time
@@ -429,7 +430,8 @@ class Fast_ACVNet_plus(nn.Module):
         self.feature = FeatureMiTPtr()
         self.feature_up = FeatUp()
         chans = [32, 64, 160, 256]
-        self.propagation_net = PropagationNetLarge(feat_ch=chans[0])
+        self.module = RefineCostVolume(feat_ch=32, max_disp=maxdisp, emb=64, pos_sigma=0.05, tau=0.5)
+        # self.propagation_net = PropagationNetLarge(feat_ch=chans[0])
 
 
         self.stem_2 = nn.Sequential(
@@ -469,7 +471,6 @@ class Fast_ACVNet_plus(nn.Module):
         feature_right, attn_weights_right = self.feature(right)
         features_left, features_right = self.feature_up(feature_left, feature_right)
 
-
         stem_2x = self.stem_2(left)
         stem_4x = self.stem_4(stem_2x)
         stem_2y = self.stem_2(right)
@@ -478,6 +479,7 @@ class Fast_ACVNet_plus(nn.Module):
         features_left_cat = torch.cat((features_left[0], stem_4x), 1)
         features_right_cat = torch.cat((features_right[0], stem_4y), 1)
 
+        ## 애는 local한 영역을 보니까 위에서 넣자
         match_left = self.desc(self.conv(features_left_cat))
         match_right = self.desc(self.conv(features_right_cat))
 
@@ -486,13 +488,18 @@ class Fast_ACVNet_plus(nn.Module):
         peak_confidence = peak_confidence_from_volume(corr_volume_1)
 
 
-        global_feat_L = self.propagation_net(features_left[0], mask, depth_prob=None)
-        global_feat_R = self.propagation_net(features_right[0], mask, depth_prob=None)
-        match_left_global = self.desc(self.conv(torch.cat((global_feat_L, stem_4x), 1)))
-        match_right_global = self.desc(self.conv(torch.cat((global_feat_R, stem_4y), 1)))
-        corr_volume_2 = build_norm_correlation_volume(match_left_global, match_right_global, self.maxdisp//4)
+        # feat_refined_left, chan_w_left, spat_map_left, attn_loss_left = self.module(features_left[0], mask)
+        # feat_refined_right, chan_w_right, spat_map_right, attn_loss_right = self.module(features_right[0], mask)
 
-        corr_volume = self.corr_stem(corr_volume_2)
+        corr_volume_2, mask_pred_L, mask_pred_R, mask_loss = self.module(features_left[0], features_right[0], mask)
+
+
+        # global_feat_L = self.propagation_net(features_left[0], mask, depth_prob=None)
+        # global_feat_R = self.propagation_net(features_right[0], mask, depth_prob=None)
+        # match_left_global = self.desc(self.conv(torch.cat((feat_refined_left, stem_4x), 1)))
+        # match_right_global = self.desc(self.conv(torch.cat((feat_refined_right, stem_4y), 1)))
+        # corr_volume_2 = build_norm_correlation_volume(match_left_global, match_right_global, self.maxdisp//4)
+        corr_volume = self.corr_stem(corr_volume_1)
 
         cost_att = self.corr_feature_att_4(corr_volume, features_left_cat)
         att_weights = self.hourglass_att(cost_att, features_left)
@@ -530,4 +537,4 @@ class Fast_ACVNet_plus(nn.Module):
         pred = regression_topk(cost.squeeze(1), disparity_sample_topk, 2)
         pred_up = context_upsample(pred, spx_pred)
         confidence_map, _ = att_prob.max(dim=1, keepdim=True)
-        return [pred_up * 4, pred.squeeze(1) * 4, pred_att_up * 4, pred_att * 4], [confidence_map.squeeze(1), corr_volume_1, att_prob, corr_volume_2],  [feature_left, attn_weights_left]
+        return [pred_up * 4, pred.squeeze(1) * 4, pred_att_up * 4, pred_att * 4], [mask_pred_L, corr_volume_1, att_prob, corr_volume_2],  [feature_left, attn_weights_left, mask_loss]

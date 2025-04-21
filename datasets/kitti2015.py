@@ -9,6 +9,7 @@ import torchvision.transforms as transforms
 import torch
 import torchvision
 import matplotlib.pyplot as plt
+from scipy.ndimage import gaussian_filter
 
 
 class KITTI2015Dataset(Dataset):
@@ -57,6 +58,21 @@ class KITTI2015Dataset(Dataset):
             disparity = self.load_disp(os.path.join(self.datapath, self.disp_filenames[idx]))
         else:
             disparity = None
+
+
+        left_low_np = np.array(left_img).astype(np.float32) / 255.0  # [Hc,Wc,3]
+        gray = cv2.cvtColor((left_low_np*255).astype(np.uint8),
+                            cv2.COLOR_RGB2GRAY).astype(np.float32) / 255.0
+        gx = cv2.Sobel(gray, cv2.CV_32F, 1, 0, ksize=3)
+        gy = cv2.Sobel(gray, cv2.CV_32F, 0, 1, ksize=3)
+        mag = np.sqrt(gx*gx + gy*gy)
+        mag_norm = (mag - mag.min()) / (mag.max() - mag.min() + 1e-6)
+        textureless = 1.0 - mag_norm
+        textureless_sm = gaussian_filter(textureless, sigma=5)
+        # to tensor [1,Hc,Wc]
+        textureless_score = torch.from_numpy(textureless_sm).unsqueeze(0).float()
+
+
 
         if self.training:
             
@@ -135,6 +151,7 @@ class KITTI2015Dataset(Dataset):
                     "disparity_low": disparity_low,
                     "disparity_half": disparity_half,
                     "depth_map": depth_map,
+                    "textureless_score": textureless_score,
                     "left_filename" : self.left_filenames[idx],
                     "right_filename" : self.right_filenames[idx]}
 
@@ -190,6 +207,7 @@ class KITTI2015Dataset(Dataset):
                         "right_half": right_img_half,
                         "left_low": left_img_low,
                         "right_low": right_img_low,
+                        "textureless_score": textureless_score,
                         "disparity": disparity,
                         "disparity_low": disparity_low,
                         "disparity_half": disparity_half,
@@ -203,5 +221,6 @@ class KITTI2015Dataset(Dataset):
                         "right_half": right_img_half,
                         "left_low": left_img_low,
                         "right_low": right_img_low, 
+                        "textureless_score": textureless_score,
                         "left_filename": self.left_filenames[idx],
                         "right_filename": self.right_filenames[idx]}

@@ -46,7 +46,7 @@ def compute_metric_for_each_image(metric_func):
 def EPE_metric(pred_disp, gt_disp, max_disp):
     valid_mask = (gt_disp > 0) & (gt_disp < max_disp)
     pred_disp, gt_disp = pred_disp[valid_mask], gt_disp[valid_mask]
-    return F.l1_loss(pred_disp, gt_disp, size_average=True)
+    return F.l1_loss(pred_disp, gt_disp, reduction='mean')
 
 
 @make_nograd_func

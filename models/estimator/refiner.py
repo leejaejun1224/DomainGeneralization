@@ -1,0 +1,132 @@
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+# ----------------------------------------------------------
+# 1. Entropy Mask Predictor
+# ----------------------------------------------------------
+class MaskHead(nn.Module):
+    def __init__(self, in_ch: int, mid_ch: int = 32):
+        super().__init__()
+        self.conv = nn.Sequential(
+            nn.Conv2d(in_ch, mid_ch, 3, padding=1, bias=False),
+            nn.BatchNorm2d(mid_ch),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(mid_ch, mid_ch, 3, padding=1, bias=False),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(mid_ch, 1, 3, padding=1, bias=False),
+        )
+    def forward(self, x):
+        return torch.sigmoid(self.conv(x))          # [B,1,H,W]  (prob. of high‑entropy)
+
+# ----------------------------------------------------------
+# 2. High↔Low Co‑Attention with positional bias
+# ----------------------------------------------------------
+class HiLoAttention(nn.Module):
+    def __init__(self, in_ch: int, emb: int = 64, pos_sigma: float = 0.05):
+        super().__init__()
+        self.q = nn.Conv2d(in_ch, emb, 1, bias=False)
+        self.k = nn.Conv2d(in_ch, emb, 1, bias=False)
+        self.v = nn.Conv2d(in_ch, emb, 1, bias=False)
+        self.proj = nn.Linear(emb, in_ch, bias=False)
+        self.scale = emb ** -0.5
+        self.pos_sigma = pos_sigma
+
+    def forward(self, feat, mask_hi):
+        # feat: [B,C,H,W], mask_hi: [B,1,H,W] bool or 0/1
+        B,C,H,W = feat.shape
+        Q = self.q(feat)    # [B,E,H,W]
+        K = self.k(feat)
+        V = self.v(feat)
+
+        # flatten
+        Qf = Q.view(B, -1, H*W).permute(0,2,1)     # [B,N,E]
+        Kf = K.view(B, -1, H*W).permute(0,2,1)     # [B,N,E]
+        Vf = V.view(B, -1, H*W).permute(0,2,1)     # [B,N,E]
+
+        mask_flat = mask_hi.view(B, -1)            # [B,N]
+
+        # pre‑compute positional coordinates (normalized)
+        y = torch.linspace(0, 1, H, device=feat.device)
+        x = torch.linspace(0, 1, W, device=feat.device)
+        yy, xx = torch.meshgrid(y, x, indexing='ij')
+        pos = torch.stack([yy, xx], dim=-1).view(1, -1, 2)  # [1,N,2]
+
+        out_feat = feat.clone()
+
+        for b in range(B):
+            hi_idx  = mask_flat[b].nonzero(as_tuple=False).squeeze(1)
+            lo_idx  = (~mask_flat[b]).nonzero(as_tuple=False).squeeze(1)
+            if hi_idx.numel()==0 or lo_idx.numel()==0:
+                continue
+
+            q = Qf[b, hi_idx]                       # [Nh,E]
+            k = Kf[b, lo_idx]                       # [Nl,E]
+            v = Vf[b, lo_idx]                       # [Nl,E]
+
+            # similarity + positional bias
+            sim = (q @ k.T) * self.scale            # [Nh,Nl]
+
+            pos_q = pos[:, hi_idx].squeeze(0)       # [Nh,2]
+            pos_k = pos[:, lo_idx].squeeze(0)       # [Nl,2]
+            d2 = torch.cdist(pos_q, pos_k, p=2).pow(2)  # [Nh,Nl]
+            pos_bias = -d2 / (2*self.pos_sigma**2)
+
+            attn = F.softmax(sim + pos_bias, dim=-1)        # [Nh,Nl]
+            agg  = attn @ v                                  # [Nh,E]
+
+            # scatter back
+            delta = self.proj(agg) # [Nh,C]
+            feat_flat = out_feat[b].view(C, -1)
+            feat_flat[:, hi_idx] = feat_flat[:, hi_idx] + delta.T
+            out_feat[b] = feat_flat.view(C, H, W)
+
+        return out_feat
+
+# ----------------------------------------------------------
+# 3. RefineCostVolume Module
+# ----------------------------------------------------------
+class RefineCostVolume(nn.Module):
+    def __init__(self, feat_ch: int, max_disp: int,
+                 emb: int = 64, pos_sigma: float = 0.05, tau: float = 0.0):
+        super().__init__()
+        self.mask_head = MaskHead(feat_ch)
+        self.hilo_attn = HiLoAttention(feat_ch, emb, pos_sigma)
+        self.max_disp  = max_disp//4
+        self.tau = tau        # threshold for teacher mask
+
+    def build_cost(self, fL, fR):
+        B,C,H,W = fL.shape
+        cost = fL.new_zeros(B, self.max_disp, H, W)
+        for d in range(self.max_disp):
+            if d>0:
+                cost[:,d,:,d:] = (fL[:,:,:,d:] * fR[:,:,:,:-d]).mean(1)
+            else:
+                cost[:,d] = (fL * fR).mean(1)
+        return cost
+
+    def forward(self, featL, featR, teacher_entropy=None):
+        """
+        featL / featR : [B,C,H,W]
+        teacher_entropy: [B,1,H,W] normed entropy map (0~1)   (optional, training only)
+        returns:
+          cost_refined, mask_pred, (optional) mask_loss
+        """
+        # 1. predict high‑entropy mask
+        mask_pred_L= self.mask_head(featL)   # prob ∈ (0,1)
+        mask_pred_R = self.mask_head(featR)
+        # teacher mask supervision (training)
+        mask_loss = None
+        if teacher_entropy is not None:
+            # teacher_entropy: low →0, high→1
+            mask_loss = F.binary_cross_entropy(mask_pred_L, teacher_entropy.float())
+
+        # Binarize for attention (inference / forward)
+        mask_bin_L = mask_pred_L > 0.5
+        mask_bin_R = mask_pred_R > 0.5
+        # 2. Hi‑Lo attention refinement
+        featL_ref = self.hilo_attn(featL, mask_bin_L)
+        featR_ref = self.hilo_attn(featR, mask_bin_R)
+        # 3. cost volume
+        cost = self.build_cost(featL_ref, featR_ref).unsqueeze(1)
+        return cost, mask_pred_L, mask_pred_R, mask_loss

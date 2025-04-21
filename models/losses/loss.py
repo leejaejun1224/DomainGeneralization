@@ -1,13 +1,14 @@
 import torch 
+import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
-
+from sklearn.cluster import DBSCAN
 
 def sceneflow_supervised_loss(data_batch):
     src_disparity_map = data_batch['src_disparity']
     valid_mask = src_disparity_map > 0
     depth_map = data_batch['depth_map_s_up'].squeeze(1)
-    depth_loss = F.smooth_l1_loss(depth_map[valid_mask], src_disparity_map[valid_mask], size_average=True)
+    depth_loss = F.smooth_l1_loss(depth_map[valid_mask], src_disparity_map[valid_mask], reduction='mean')
     return depth_loss
 
 
@@ -17,90 +18,55 @@ def calc_depth_loss(data_batch, model='s'):
     depth_map = data_batch['depth_map_' + model].squeeze(1)
     topk_val, topk_ind = torch.topk(depth_map, k=1, dim=1)
     topk_ind = topk_ind.squeeze(1)
-    depth_loss = F.smooth_l1_loss(topk_ind[valid_mask], src_disparity_map[valid_mask], size_average=True)
+    depth_loss = F.smooth_l1_loss(topk_ind[valid_mask], src_disparity_map[valid_mask], reduction='mean')
     return depth_loss
 
 
 def calc_entropy_loss(source_entropy, target_entropy, mask):
-    # entropy_loss = F.smooth_l1_loss(source_entropy[mask], target_entropy[mask], size_average=True)
+    # entropy_loss = F.smooth_l1_loss(source_entropy[mask], target_entropy[mask], reduction='mean')
     target = torch.zeros_like(source_entropy)
-    entropy_loss = F.smooth_l1_loss(source_entropy[mask], target[mask], size_average=True) * 100
+    entropy_loss = F.smooth_l1_loss(source_entropy[mask], target[mask], reduction='mean') * 100
     return entropy_loss
 
 import torch
 import torch.nn.functional as F
 
-def one_hot_entropy_ce_loss(
-    data_batch,
-    model='s',
-    stage1=1,
-    stage2=2,
-    temp1=0.5,
-    temp2=0.5,
-    eps=1e-6,
-    scale=1.0,
-    reduction='mean'
-):
-    """
-    One‑hot encoding cross‑entropy loss using calc_entropy outputs.
-    
-    Args:
-        data_batch: dict, calc_entropy() 호출 후 반환된 값.
-        model:      's' or 't' (student/teacher)
-        stage1:     int, pseudo‑GT를 뽑을 corr_volume 단계 (1 or 2)
-        stage2:     int, loss를 계산할 corr_volume 단계 (1 or 2), 보통 stage2=stage1+1
-        temp1:      float, pseudo‑GT 생성 시 softmax 온도
-        temp2:      float, 손실 계산 시 softmax 온도
-        eps:        float, log 안정화용
-        scale:      float, 최종 loss 스케일링
-        reduction:  'mean' | 'sum' | 'none'
-    
-    Returns:
-        torch.Tensor:
-          * reduction='mean' 또는 'sum' → scalar loss
-          * reduction='none' → [B,1,H,W] per‑pixel loss
-    """
-    # 1) logits 가져오기
-    vol1 = data_batch[f'tgt_corr_volume_{model}_{stage1}'].squeeze(1)  # [B,D,H,W]
-    vol2 = data_batch[f'tgt_corr_volume_{model}_{stage2}'].squeeze(1)  # [B,D,H,W]
-    mask = data_batch[f'tgt_entropy_mask_{model}_{stage1}']           # [B,1,H,W], bool
-    refined = data_batch['tgt_refined_pred_disp_t']     # [B,1,H,W], float→int idx
-    
-    B, D, H, W = vol2.shape
 
-    # 2) refined_disp → target index → one‑hot
-    target_idx = refined.squeeze(1).long()                            # [B,H,W]
-    one_hot = F.one_hot(target_idx, num_classes=D)                    # [B,H,W,D]
-    one_hot = one_hot.permute(0,3,1,2).float()                        # [B,D,H,W]
+import torch
+import torch.nn.functional as F
+
+def one_hot_entropy_ce_loss(data_batch,
+                            diff_mask,
+                            temp=0.1):
+    student_corr_volume = data_batch['tgt_corr_volume_s_1'].squeeze(1)
+    teacher_corr_volume = data_batch['tgt_corr_volume_t_1'].squeeze(1)
+    B, D, H, W = student_corr_volume.shape
+
+    # Apply mask to the volumes directly instead of indexing with mask
+    masked_student = student_corr_volume * diff_mask
+    masked_teacher = teacher_corr_volume * diff_mask
     
-    # 3) mask 적용 (엔트로피 낮은 픽셀만)
-    mask_f = mask.float()                                            # [B,1,H,W]
-    one_hot = one_hot * mask_f                                       # [B,D,H,W]
+    # Apply softmax along the disparity dimension
+    student_softmax = F.softmax(masked_student, dim=1)
+    teacher_softmax = F.softmax(masked_teacher / temp, dim=1)
     
-    # 4) Stage2 softmax
-    p2 = F.softmax(vol2 / temp2, dim=1)                               # [B,D,H,W]
-    
-    # 5) per‑pixel 교차엔트로피
-    loss_map = - one_hot * torch.log(p2 + eps)                        # [B,D,H,W]
-    loss_map = loss_map.sum(dim=1, keepdim=True)                      # [B,1,H,W]
-    
-    # 6) reduction
-    if reduction == 'mean':
-        loss = loss_map.sum() / (mask_f.sum() + eps)
-    elif reduction == 'sum':
-        loss = loss_map.sum()
+    # Use KL divergence as it's more appropriate for distribution matching
+    loss = F.cross_entropy(student_softmax, teacher_softmax)
+    # Only consider loss at valid mask positions
+    valid_positions = diff_mask.sum()
+    if valid_positions > 0:
+        loss = (loss * diff_mask).sum() / valid_positions
     else:
-        loss = loss_map                                               # [B,1,H,W]
+        loss = torch.tensor(0.0, device=student_corr_volume.device)
     
-    return loss * scale
-
+    return loss
 
 def get_loss(disp_ests, disp_gts, img_masks, weights):
 
     all_losses = []
 
     for disp_est, disp_gt, img_mask, weight in zip(disp_ests, disp_gts, img_masks, weights):
-        all_losses.append(weight * F.smooth_l1_loss(disp_est[img_mask], disp_gt[img_mask], size_average=True))
+        all_losses.append(weight * F.smooth_l1_loss(disp_est[img_mask], disp_gt[img_mask], reduction='mean'))
     return sum(all_losses)
 
 # dont touch 
@@ -151,17 +117,13 @@ def calc_pseudo_loss(data_batch, threshold, model='s'):
 
     ## oh shit it only think about the first index of the output 
     ## no consider the batch size
-    mask = (pseudo_disp > 0) & (pseudo_disp < 256) & (confidence_map >= threshold.unsqueeze(1).unsqueeze(2).cuda())
+    mask = (pseudo_disp > 0) & (pseudo_disp < 256) 
     data_batch['pseudo_mask'] = mask
     mask = mask.tolist()
     weights = [1.0]
-    confidence_mask = confidence_map >= threshold.unsqueeze(1).unsqueeze(2).cuda()
-    true_count = confidence_mask.sum(dim=(0,1,2)) 
-    total_pixels = confidence_mask.numel()
-    true_ratio = true_count.float() / total_pixels
-
+    true_count = 0.0
     pseudo_label_loss = get_loss(pred_disp, pseudo_disp, mask, weights)
-    return pseudo_label_loss, true_ratio
+    return pseudo_label_loss, true_count
 
 
 
