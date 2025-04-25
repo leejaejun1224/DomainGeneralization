@@ -16,11 +16,8 @@ class MonoDepthDecoder(nn.Module):
 
         self.fuse = nn.Sequential(
             nn.Conv2d(256 * 4, 256, 3, padding=1, bias=False),
-            nn.BatchNorm2d(256),
             nn.ReLU(inplace=True),
             nn.Conv2d(256, 128, 3, padding=1, bias=False),
-            nn.BatchNorm2d(128),
-            nn.ReLU(inplace=True),
         )
         self.head = nn.Conv2d(128, out_ch, 1)
         self.max_disp = max_disp
