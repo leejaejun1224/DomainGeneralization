@@ -91,7 +91,7 @@ class RefineCostVolume(nn.Module):
                  emb: int = 64, pos_sigma: float = 0.05, tau: float = 0.0):
         super().__init__()
         self.mask_head = MaskHead(feat_ch)
-        self.hilo_attn = HiLoAttention(feat_ch, emb, pos_sigma)
+        self.propagation = RelativePropagation(feat_ch, K=20)
         self.max_disp  = max_disp//4
         self.tau = tau        # threshold for teacher mask
 
@@ -125,8 +125,58 @@ class RefineCostVolume(nn.Module):
         mask_bin_L = mask_pred_L > 0.5
         mask_bin_R = mask_pred_R > 0.5
         # 2. Hi‑Lo attention refinement
-        featL_ref = self.hilo_attn(featL, mask_bin_L)
-        featR_ref = self.hilo_attn(featR, mask_bin_R)
+        featL_ref = self.propagation(featL, mask_bin_L)
+        featR_ref = self.propagation(featR, mask_bin_R)
         # 3. cost volume
         cost = self.build_cost(featL_ref, featR_ref).unsqueeze(1)
         return cost, mask_pred_L, mask_pred_R, mask_loss
+
+
+
+class RelativePropagation(nn.Module):
+
+    def __init__(self, feat_ch: int, K: int = 8):
+        super().__init__()
+        self.K = K
+        self.offset_conv = nn.Conv2d(feat_ch, 2 * K, kernel_size=1)
+        self.weight_conv = nn.Conv2d(feat_ch, K, kernel_size=1)
+
+    def forward(self, feat: torch.Tensor, mask_high: torch.Tensor) -> torch.Tensor:
+        B, C, H, W = feat.shape
+        K = self.K
+
+        # 1) predict offsets and weights
+        offsets = self.offset_conv(feat)           # [B, 2K, H, W]
+        weights = self.weight_conv(feat)           # [B, K, H, W]
+        weights = F.softmax(weights, dim=1)        # normalize weights
+
+        # 2) base sampling grid in normalized coords [-1,1]
+        xs = torch.linspace(-1, 1, W, device=feat.device)
+        ys = torch.linspace(-1, 1, H, device=feat.device)
+        grid_y, grid_x = torch.meshgrid(ys, xs, indexing='ij')  # [H, W]
+        base_grid = torch.stack((grid_x, grid_y), dim=-1)       # [H, W, 2]
+        base_grid = base_grid.unsqueeze(0).expand(B, H, W, 2)    # [B, H, W, 2]
+
+        # 3) propagate features
+        residual = torch.zeros_like(feat)
+        for k in range(K):
+            # extract dx, dy and normalize
+            dx = offsets[:, 2*k    , :, :]  # [B, H, W]
+            dy = offsets[:, 2*k + 1, :, :]  # [B, H, W]
+            dx_norm = dx / ((W - 1) / 2)
+            dy_norm = dy / ((H - 1) / 2)
+
+            # vectorized offset addition
+            offset_grid = torch.stack((dx_norm, dy_norm), dim=-1)  # [B, H, W, 2]
+            grid_k = base_grid + offset_grid                     # [B, H, W, 2]
+
+            # sample and accumulate
+            sampled = F.grid_sample(
+                feat, grid_k, mode='bilinear', align_corners=True
+            )  # [B, C, H, W]
+            w = weights[:, k:k+1, :, :]                            # [B, 1, H, W]
+            residual = residual + sampled * w
+
+        # 4) apply only on high-entropy positions
+        refined_feat = feat + residual * mask_high.float()
+        return refined_feat

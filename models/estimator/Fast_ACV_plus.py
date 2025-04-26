@@ -52,8 +52,8 @@ class FeatureMiT(SubModule):
                                       drop_path_rate=0.1)
 
     def forward(self, x):
-        features, attn_weights, pos_encodings = self.model(x)
-        return features, attn_weights, pos_encodings  # [stage1, stage2, stage3, stage4]
+        features, attn_weights = self.model(x)
+        return features, attn_weights  # [stage1, stage2, stage3, stage4]
 
 
 class Feature(SubModule):
@@ -427,10 +427,10 @@ class Fast_ACVNet_plus(nn.Module):
         super(Fast_ACVNet_plus, self).__init__()
         self.maxdisp = maxdisp
         self.att_weights_only = att_weights_only
-        self.feature = FeatureMiTPtr()
+        self.feature = FeatureMiT()
         self.feature_up = FeatUp()
         chans = [32, 64, 160, 256]
-        self.module = RefineCostVolume(feat_ch=32, max_disp=maxdisp, emb=64, pos_sigma=0.05, tau=0.5)
+        self.module = RefineCostVolume(feat_ch=32, max_disp=maxdisp)
         # self.propagation_net = PropagationNetLarge(feat_ch=chans[0])
 
 
@@ -537,4 +537,4 @@ class Fast_ACVNet_plus(nn.Module):
         pred = regression_topk(cost.squeeze(1), disparity_sample_topk, 2)
         pred_up = context_upsample(pred, spx_pred)
         confidence_map, _ = att_prob.max(dim=1, keepdim=True)
-        return [pred_up * 4, pred.squeeze(1) * 4, pred_att_up * 4, pred_att * 4], [mask_pred_L, corr_volume_1, att_prob, corr_volume_2],  [feature_left, attn_weights_left, mask_loss]
+        return [pred_up * 4, pred.squeeze(1) * 4, pred_att_up * 4, pred_att * 4], [mask_pred_L, corr_volume_2, att_prob, corr_volume_2],  [feature_left, attn_weights_left, mask_loss]

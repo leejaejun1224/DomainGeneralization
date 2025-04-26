@@ -62,6 +62,11 @@ def calc_entropy(data_batch, threshold, k=12, temperature=0.5, eps=1e-6):
             # 7) hard_disp에 mask 직접 적용
             refined_disp = hard_disp * mask                                 # [B,1,H,W]
 
+            disp_vals = torch.arange(D, device=vol.device, dtype=vol.dtype) \
+                            .view(1, D, 1, 1)
+            disp_map = (F.softmax(vol, dim=1) * disp_vals).sum(dim=1, keepdim=True)
+
+
             # 8) 결과 저장
             data_batch['tgt_entropy_mask_'    + model + '_' + str(i)] = mask_bool
             data_batch['tgt_entropy_map_'     + model + '_' + str(i)] = H_map
