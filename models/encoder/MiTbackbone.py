@@ -35,7 +35,7 @@ class RelPosBias2D(nn.Module):
         return bias.permute(2, 0, 1)
 
 class EfficientSelfAttentionRel(nn.Module):
-    """Self-attention with static or continuous relative positional bias."""
+    """Self-attention with continuous relative positional bias only."""
     def __init__(
         self,
         dim,
@@ -44,27 +44,22 @@ class EfficientSelfAttentionRel(nn.Module):
         attn_drop=0.,
         proj_drop=0.,
         sr_ratio=1,
-        rel_size=(64, 64),
         mlp_hidden=64,
     ):
         super().__init__()
         assert dim % num_heads == 0, "dim must be divisible by num_heads"
         self.num_heads = num_heads
-        head_dim = dim // num_heads
-        self.scale = head_dim ** -0.5
         self.sr_ratio = sr_ratio
+        self.scale = (dim // num_heads) ** -0.5
 
-        # QKV projections
+        # QKV and output projections
         self.q = nn.Linear(dim, dim, bias=qkv_bias)
         self.kv = nn.Linear(dim, dim * 2, bias=qkv_bias)
-        # output projection
         self.proj = nn.Linear(dim, dim)
         self.attn_drop = nn.Dropout(attn_drop)
         self.proj_drop = nn.Dropout(proj_drop)
 
-        # static bias table for sr_ratio == 1
-        self.rel_bias = RelPosBias2D(num_heads, rel_size[0], rel_size[1])
-        # continuous MLP for sr_ratio > 1
+        # continuous MLP for any sr_ratio
         self.pos_mlp = nn.Sequential(
             nn.Linear(2, mlp_hidden),
             nn.ReLU(inplace=True),
@@ -80,73 +75,64 @@ class EfficientSelfAttentionRel(nn.Module):
         elif isinstance(m, nn.LayerNorm):
             nn.init.constant_(m.weight, 1.0)
             nn.init.constant_(m.bias, 0)
-        elif isinstance(m, nn.Conv2d):
-            fan_out = m.kernel_size[0] * m.kernel_size[1] * m.out_channels // m.groups
-            m.weight.data.normal_(0, math.sqrt(2.0 / fan_out))
-            if m.bias is not None:
-                m.bias.data.zero_()
 
     def forward(self, x, H, W):
-        """
-        x: [B, Nq, C], Nq = H * W
-        returns: out [B, Nq, C], attn [B, heads, Nq, Nk]
-        """
         B, Nq, C = x.shape
         heads = self.num_heads
-        head_dim = C // heads
+        dim_head = C // heads
 
         # Q projection
-        q = self.q(x).reshape(B, Nq, heads, head_dim).permute(0, 2, 1, 3)
+        q = self.q(x).reshape(B, Nq, heads, dim_head).permute(0,2,1,3)
 
-        # KV projection
+        # K,V with optional downsampling
         if self.sr_ratio > 1:
-            # downsample spatially for kv
             Hk, Wk = H // self.sr_ratio, W // self.sr_ratio
-            Nk = Hk * Wk
-            feat_map = x.permute(0, 2, 1).reshape(B, C, H, W)
+            feat_map = x.permute(0,2,1).reshape(B,C,H,W)
             down = F.avg_pool2d(feat_map, self.sr_ratio, self.sr_ratio)
-            kv_tokens = down.reshape(B, C, -1).permute(0, 2, 1)  # [B, Nk, C]
-            kv = self.kv(kv_tokens).reshape(B, Nk, 2, heads, head_dim).permute(2, 0, 3, 1, 4)
+            kv_tokens = down.reshape(B,C,-1).permute(0,2,1)  # [B, Nk, C]
+            Nk = Hk * Wk
         else:
+            kv_tokens = x
             Nk = Nq
-            kv = self.kv(x).reshape(B, Nq, 2, heads, head_dim).permute(2, 0, 3, 1, 4)
 
-        k, v = kv[0], kv[1]  # each [B, heads, Nk, head_dim]
+        kv = self.kv(kv_tokens)                    # [B, Nk, 2*C]
+        kv = kv.reshape(B, Nk, 2, heads, dim_head).permute(2,0,3,1,4)
+        k, v = kv[0], kv[1]                        # [B, heads, Nk, dim_head]
 
-        # attention logits
-        attn_logits = (q @ k.transpose(-2, -1)) * self.scale  # [B, heads, Nq, Nk]
+        # raw attention logits
+        attn_logits = (q @ k.transpose(-2,-1)) * self.scale  # [B, heads, Nq, Nk]
 
-        # add relative positional bias
-        if self.sr_ratio == 1:
-            bias = self.rel_bias()  # [heads, Nq, Nq]
-            attn_logits = attn_logits + bias.unsqueeze(0)
+        # continuous relative positional bias for all cases
+        # build normalized coords for query
+        yq = torch.linspace(-1,1,H,device=x.device)
+        xq = torch.linspace(-1,1,W,device=x.device)
+        yyq, xxq = torch.meshgrid(yq, xq, indexing='ij')
+        coords_q = torch.stack([yyq, xxq], dim=-1).view(Nq,2)
+
+        # coords for key
+        if self.sr_ratio > 1:
+            yk = torch.linspace(-1,1,Hk,device=x.device)
+            xk = torch.linspace(-1,1,Wk,device=x.device)
+            yyk, xxk = torch.meshgrid(yk, xk, indexing='ij')
+            coords_k = torch.stack([yyk, xxk], dim=-1).view(Nk,2)
         else:
-            # continuous bias between Q-grid and K-grid
-            yq = torch.linspace(-1, 1, H, device=x.device)
-            xq = torch.linspace(-1, 1, W, device=x.device)
-            yy_q, xx_q = torch.meshgrid(yq, xq, indexing='ij')
-            coords_q = torch.stack([yy_q, xx_q], dim=-1).view(Nq, 2)
+            coords_k = coords_q
 
-            Hk, Wk = H // self.sr_ratio, W // self.sr_ratio
-            yk = torch.linspace(-1, 1, Hk, device=x.device)
-            xk = torch.linspace(-1, 1, Wk, device=x.device)
-            yy_k, xx_k = torch.meshgrid(yk, xk, indexing='ij')
-            coords_k = torch.stack([yy_k, xx_k], dim=-1).view(Nk, 2)
-
-            offsets = coords_q[:, None, :] - coords_k[None, :, :]  # [Nq, Nk, 2]
-            bias = self.pos_mlp(offsets.view(-1, 2))              # [Nq*Nk, heads]
-            bias = bias.view(Nq, Nk, heads).permute(2, 0, 1)      # [heads, Nq, Nk]
-            attn_logits = attn_logits + bias.unsqueeze(0)
+        offsets = coords_q[:,None,:] - coords_k[None,:,:]   # [Nq, Nk, 2]
+        bias = self.pos_mlp(offsets.view(-1,2))             # [Nq*Nk, heads]
+        bias = bias.view(Nq, Nk, heads).permute(2,0,1)       # [heads, Nq, Nk]
+        attn_logits = attn_logits + bias.unsqueeze(0)
 
         # softmax + dropout
         attn = F.softmax(attn_logits, dim=-1)
         attn = self.attn_drop(attn)
 
         # aggregate and project
-        out = (attn @ v).transpose(1, 2).reshape(B, Nq, C)
+        out = (attn @ v).transpose(1,2).reshape(B, Nq, C)
         out = self.proj(out)
         out = self.proj_drop(out)
         return out, attn
+
 
 
 # torch.flatten(n, m) n차원부터 시작해서 m차원까지 포함해서 flatten하라는 뜻(m의 기본값은 -1) 
@@ -227,7 +213,6 @@ class Block(nn.Module):
             attn_drop=attn_drop,
             proj_drop=proj_drop,
             sr_ratio=sr_ratio,
-            rel_size=rel_size,
         )
         self.drop_path = DropPath(drop_path) if drop_path > 0 else nn.Identity()
         mlp_hidden = int(dim * mlp_ratio)
