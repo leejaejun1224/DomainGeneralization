@@ -186,7 +186,7 @@ class RelativePropagation(nn.Module):
 class RefineNet(nn.Module):
     def __init__(self,
                  in_channels: int = 32,
-                 num_heads: int = 4,
+                 num_heads: int = 2,
                  window_size: int = 11,
                  tau: float = 1.0):
         super().__init__()
@@ -213,7 +213,7 @@ class RefineNet(nn.Module):
         q, k, v = qkv[:,0], qkv[:,1], qkv[:,2]
 
         # 2) confidence mask → (B,1,H,W)
-        w_mask = mask_high.sigmoid()  # already {0,1}
+        w_mask = mask_high.float()  # already {0,1}
 
         # 3) 채널(=h*Hd) 차원만 flat
         #    k_flat,v_flat: (B, h*Hd, H, W)
@@ -248,4 +248,6 @@ class RefineNet(nn.Module):
         # 10) 최종 reshape → (1, 32, 64, 128)
         out = out_flat.view(B, self.C, H, W)
 
-        return feat + self.proj(out)
+        feat_res = self.proj(out)
+
+        return feat + feat_res

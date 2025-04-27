@@ -142,8 +142,8 @@ class StereoDepthUDA(StereoDepthUDAInference):
         # total_loss = depth_loss + 0.8 * depth_loss_half + 0.5 * depth_loss_low
         # total_loss = supervised_loss + 0.5*one_hot_loss
         # total_loss = pseudo_loss
-        attn_loss = 0.5*data_batch['src_attn_loss_s'] 
-        total_loss = supervised_loss # total_loss = depth_loss
+        attn_loss = 0.1 * data_batch['src_attn_loss_s'] 
+        total_loss = supervised_loss + attn_loss # total_loss = depth_loss
         log_vars = {
             'loss': total_loss.item(),
             'supervised_loss': supervised_loss.item(),
@@ -167,7 +167,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
         data_batch['src_corr_volume_s_2'] = map[3]
         data_batch['features_s'] = features[0]
         data_batch['attn_weights_s'] = features[1]
-        data_batch['src_attn_loss_s'] = features[2]
+        # data_batch['src_attn_loss_s'] = features[2]
         # data_batch['pos_encodings_s'] = features[2]
         end = time.time()
         # print(f"forward time: {end - start}")
