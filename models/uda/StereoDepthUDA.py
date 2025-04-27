@@ -143,7 +143,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
         # total_loss = supervised_loss + 0.5*one_hot_loss
         # total_loss = pseudo_loss
         attn_loss = 0.5*data_batch['src_attn_loss_s'] 
-        total_loss = supervised_loss + attn_loss # total_loss = depth_loss
+        total_loss = supervised_loss # total_loss = depth_loss
         log_vars = {
             'loss': total_loss.item(),
             'supervised_loss': supervised_loss.item(),
@@ -228,8 +228,8 @@ class StereoDepthUDA(StereoDepthUDAInference):
         # total_loss = supervised_loss + 0.1 * pseudo_loss
         # total_loss = supervised_loss + 0.2 * pseudo_loss + 0.5 * reconstruction_loss
         # total_loss = depth_loss + 0.8 * depth_loss_half + 0.5 * depth_loss_low
-        attn_loss = 0.5*data_batch['src_attn_loss_s'] 
-        total_loss = supervised_loss + attn_loss  # total_loss = depth_loss
+        # attn_loss = 0.5 * data_batch['src_attn_loss_s'] 
+        total_loss = supervised_loss   # total_loss = depth_loss
 
         log_vars = {
             'loss': total_loss.item(),
@@ -237,7 +237,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
             'unsupervised_loss': total_loss.item(),
             'true_ratio': total_loss.item(),
             'reconstruction_loss': total_loss.item(),
-            'depth_loss': attn_loss
+            'depth_loss': 0.0
         }
         return log_vars
 

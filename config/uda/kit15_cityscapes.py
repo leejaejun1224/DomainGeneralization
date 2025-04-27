@@ -17,7 +17,7 @@ uda = dict(
 
 optimizer = dict(
     optimizer = "Adam",
-    lr = 1e-4,
+    lr = 1e-3,
     adjust_lr = "300,450:10"
 )
 
@@ -32,8 +32,8 @@ data = dict(
         num_workers = 2,
         shuffle = True,
         pin_memory = True,
-        val_interval = 1,
-        save_interval = 1
+        val_interval = 10,
+        save_interval = 10
     ),
     test = dict(
         batch_size = 1,

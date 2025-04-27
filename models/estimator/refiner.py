@@ -1,3 +1,4 @@
+import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -91,7 +92,8 @@ class RefineCostVolume(nn.Module):
                  emb: int = 64, pos_sigma: float = 0.05, tau: float = 0.0):
         super().__init__()
         self.mask_head = MaskHead(feat_ch)
-        self.propagation = RelativePropagation(feat_ch, K=20)
+        # self.propagation = RelativePropagation(feat_ch, K=20)
+        self.propagation = RefineNet(in_channels=32, num_heads=4, window_size=11, tau=1.0)
         self.max_disp  = max_disp//4
         self.tau = tau        # threshold for teacher mask
 
@@ -122,14 +124,14 @@ class RefineCostVolume(nn.Module):
             mask_loss = F.binary_cross_entropy(mask_pred_L, teacher_entropy.float())
 
         # Binarize for attention (inference / forward)
-        mask_bin_L = mask_pred_L > 0.5
-        mask_bin_R = mask_pred_R > 0.5
+        mask_bin_L = mask_pred_L < 0.5
+        mask_bin_R = mask_pred_R < 0.5
         # 2. Hi‑Lo attention refinement
         featL_ref = self.propagation(featL, mask_bin_L)
         featR_ref = self.propagation(featR, mask_bin_R)
         # 3. cost volume
-        cost = self.build_cost(featL_ref, featR_ref).unsqueeze(1)
-        return cost, mask_pred_L, mask_pred_R, mask_loss
+        # cost = self.build_cost(featL_ref, featR_ref).unsqueeze(1)
+        return featL_ref,featR_ref, mask_pred_L, mask_pred_R, mask_loss
 
 
 
@@ -180,3 +182,70 @@ class RelativePropagation(nn.Module):
         # 4) apply only on high-entropy positions
         refined_feat = feat + residual * mask_high.float()
         return refined_feat
+    
+class RefineNet(nn.Module):
+    def __init__(self,
+                 in_channels: int = 32,
+                 num_heads: int = 4,
+                 window_size: int = 11,
+                 tau: float = 1.0):
+        super().__init__()
+        assert in_channels % num_heads == 0
+        self.C    = in_channels
+        self.h    = num_heads
+        self.Hd   = in_channels // num_heads
+        self.win  = window_size
+        self.scale = self.Hd ** -0.5
+
+        self.to_qkv   = nn.Conv2d(in_channels, in_channels * 3, 1, bias=False)
+        self.proj     = nn.Conv2d(in_channels, in_channels, 1, bias=True)
+        self.pos_bias = nn.Parameter(torch.zeros(num_heads, window_size * window_size))
+        self.unfold   = nn.Unfold(kernel_size=window_size,
+                                  padding=window_size // 2)
+        self.tau      = tau
+
+    def forward(self, feat: torch.Tensor, mask_high: torch.Tensor):
+        B, C, H, W = feat.shape
+        L = H * W
+
+        # 1) Q,K,V 분리 → (B, h, Hd, H, W)
+        qkv = self.to_qkv(feat).view(B, 3, self.h, self.Hd, H, W)
+        q, k, v = qkv[:,0], qkv[:,1], qkv[:,2]
+
+        # 2) confidence mask → (B,1,H,W)
+        w_mask = mask_high.sigmoid()  # already {0,1}
+
+        # 3) 채널(=h*Hd) 차원만 flat
+        #    k_flat,v_flat: (B, h*Hd, H, W)
+        k_flat = k.flatten(1,2)
+        v_flat = v.flatten(1,2)
+        w_flat = w_mask       # (B, 1, H, W)
+
+        # 4) unfold → (B, channels*win², L)
+        k_unf = self.unfold(k_flat)
+        v_unf = self.unfold(v_flat)
+        w_unf = self.unfold(w_flat)
+        # 5) view back → (B, h, Hd, win², L) / (B,1,1,win²,L)
+        k_unf = k_unf.view(B, self.h, self.Hd, self.win*self.win, L)
+        v_unf = v_unf.view(B, self.h, self.Hd, self.win*self.win, L)
+        w_unf = w_unf.repeat(1, self.h, 1, 1, 1)
+
+        # 6) confidence-gating
+        k_unf = k_unf * (w_unf / self.tau)
+        v_unf = v_unf * (w_unf / self.tau)
+
+        # 7) Q 준비 → (B, h, Hd, L)
+        q_flat = q.flatten(3).unsqueeze(3)  # (B, h, Hd, 1, L)
+        # 8) Attention score → (B, h, win², L)
+        attn = (q_flat * k_unf).sum(2) * self.scale
+
+        bias = self.pos_bias.unsqueeze(0).unsqueeze(-1)
+        attn = attn + bias
+        attn = F.softmax(attn, dim=2)
+        # 9) Weighted sum → (B, h, Hd, L)
+        out_flat = (attn.unsqueeze(2) * v_unf).sum(3)
+
+        # 10) 최종 reshape → (1, 32, 64, 128)
+        out = out_flat.view(B, self.C, H, W)
+
+        return feat + self.proj(out)
