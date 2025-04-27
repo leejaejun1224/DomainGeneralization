@@ -213,7 +213,7 @@ class RefineNet(nn.Module):
         q, k, v = qkv[:,0], qkv[:,1], qkv[:,2]
 
         # 2) confidence mask → (B,1,H,W)
-        w_mask = mask_high.float()  # already {0,1}
+        w_mask = (1.0 - mask_high.float())  # already {0,1}
 
         # 3) 채널(=h*Hd) 차원만 flat
         #    k_flat,v_flat: (B, h*Hd, H, W)
@@ -249,5 +249,7 @@ class RefineNet(nn.Module):
         out = out_flat.view(B, self.C, H, W)
 
         feat_res = self.proj(out)
+        feat_mean = feat.abs().mean().item()
+        delta_mean = feat_res.abs().mean().item()
 
         return feat + feat_res
