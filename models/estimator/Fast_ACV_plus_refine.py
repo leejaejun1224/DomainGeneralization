@@ -422,16 +422,16 @@ class PropagationNetLarge(nn.Module):
 
             
     
-class Fast_ACVNet_plus(nn.Module):
+class Fast_ACVNet_plus_refine(nn.Module):
     def __init__(self, maxdisp, att_weights_only):
-        super(Fast_ACVNet_plus, self).__init__()
+        super(Fast_ACVNet_plus_refine, self).__init__()
         self.maxdisp = maxdisp
         self.att_weights_only = att_weights_only
         # self.feature = FeatureMiT()
         self.feature = FeatureMiTPtr()
         self.feature_up = FeatUp()
         chans = [32, 64, 160, 256]
-        # self.module = RefineCostVolume(feat_ch=32, max_disp=maxdisp)
+        self.module = RefineCostVolume(feat_ch=32, max_disp=maxdisp)
         # self.propagation_net = PropagationNetLarge(feat_ch=chans[0])
 
 
@@ -450,9 +450,9 @@ class Fast_ACVNet_plus(nn.Module):
             nn.Conv2d(64, 64, 3, 1, 1, bias=False),
             nn.BatchNorm2d(64), nn.ReLU())
         self.conv = BasicConv(80, 48, kernel_size=3, padding=1, stride=1)
-        # self.conv1 = BasicConv(80, 48, kernel_size=3, padding=1, stride=1)
+        self.conv1 = BasicConv(80, 48, kernel_size=3, padding=1, stride=1)
         self.desc = nn.Conv2d(48, 48, kernel_size=1, padding=0, stride=1)
-        # self.desc1 = nn.Conv2d(48, 48, kernel_size=1, padding=0, stride=1)
+        self.desc1 = nn.Conv2d(48, 48, kernel_size=1, padding=0, stride=1)
         self.corr_stem = BasicConv(1, 8, is_3d=True, kernel_size=3, stride=1, padding=1)
         self.corr_feature_att_4 = channelAtt(8, 80)
         self.hourglass_att = hourglass_att(8)
@@ -493,20 +493,22 @@ class Fast_ACVNet_plus(nn.Module):
 
         # feat_refined_left, chan_w_left, spat_map_left, attn_loss_left = self.module(features_left[0], mask)
         # feat_refined_right, chan_w_right, spat_map_right, attn_loss_right = self.module(features_right[0], mask)
-        # featL_ref,featR_ref, mask_pred_L, mask_pred_R, mask_loss = self.module(features_left[0], features_right[0], mask)
+        featL_ref,featR_ref, mask_pred_L, mask_pred_R, mask_loss = self.module(features_left[0], features_right[0], mask)
 
         ##refine 모델 출력 값 넣기
-        # features_left[0] = featL_ref
-        # features_right[0] = featR_ref
+        features_left[0] = featL_ref
+        features_right[0] = featR_ref
 
-        # features_left_cat_ref = torch.cat((featL_ref, stem_4x), 1)
-        # features_right_cat_ref = torch.cat((featR_ref, stem_4y), 1)
+        features_left_cat_ref = torch.cat((featL_ref, stem_4x), 1)
+        features_right_cat_ref = torch.cat((featR_ref, stem_4y), 1)
 
         ## 애는 local한 영역을 보니까 위에서 넣자
-        # match_left_ref = self.desc1(self.conv1(features_left_cat_ref))
-        # match_right_ref = self.desc1(self.conv1(features_right_cat_ref))
+        match_left_ref = self.desc1(self.conv1(features_left_cat_ref))
+        match_right_ref = self.desc1(self.conv1(features_right_cat_ref))
 
-        corr_volume_2 = build_norm_correlation_volume(match_left, match_right, self.maxdisp//4)
+
+        corr_volume_2 = build_weighted_cost_volume(match_left_ref, match_right_ref, mask_pred_L, mask_pred_R, self.maxdisp//4)
+        # corr_volume_2 = build_norm_correlation_volume(match_left_ref, match_right_ref, self.maxdisp//4)
         # global_feat_L = self.propagation_net(features_left[0], mask, depth_prob=None)
         # global_feat_R = self.propagation_net(features_right[0], mask, depth_prob=None)
         # match_left_global = self.desc(self.conv(torch.cat((feat_refined_left, stem_4x), 1)))
@@ -516,7 +518,7 @@ class Fast_ACVNet_plus(nn.Module):
 
         ### 
         # cost_att = self.corr_feature_att_4(corr_volume, features_left_cat)
-        cost_att = self.corr_feature_att_4(corr_volume, features_left_cat)
+        cost_att = self.corr_feature_att_4(corr_volume, features_left_cat_ref)
         ### 
 
 
@@ -533,10 +535,10 @@ class Fast_ACVNet_plus(nn.Module):
 
 
             ###
-            concat_features_left = self.concat_feature(features_left_cat)
-            # concat_features_left = self.concat_feature(features_left_cat_ref)
-            concat_features_right = self.concat_feature(features_right_cat)
-            # concat_features_right = self.concat_feature(features_right_cat_ref)
+            # concat_features_left = self.concat_feature(features_left_cat)
+            concat_features_left = self.concat_feature(features_left_cat_ref)
+            # concat_features_right = self.concat_feature(features_right_cat)
+            concat_features_right = self.concat_feature(features_right_cat_ref)
             ###
 
 
@@ -546,16 +548,16 @@ class Fast_ACVNet_plus(nn.Module):
             volume = self.concat_stem(volume)
 
             ###
-            volume = self.concat_feature_att_4(volume, features_left_cat)
-            # volume = self.concat_feature_att_4(volume, features_left_cat_ref)
+            # volume = self.concat_feature_att_4(volume, features_left_cat)
+            volume = self.concat_feature_att_4(volume, features_left_cat_ref)
             ###
             
             cost = self.hourglass(volume, features_left)
 
 
             ###
-            xspx = self.spx_4(features_left_cat)
-            # xspx = self.spx_4(features_left_cat_ref)
+            # xspx = self.spx_4(features_left_cat)
+            xspx = self.spx_4(features_left_cat_ref)
             ###
 
             xspx = self.spx_2(xspx, stem_2x)
@@ -577,5 +579,4 @@ class Fast_ACVNet_plus(nn.Module):
         pred = regression_topk(cost.squeeze(1), disparity_sample_topk, 2)
         pred_up = context_upsample(pred, spx_pred)
         confidence_map, _ = att_prob.max(dim=1, keepdim=True)
-        # return [pred_up * 4, pred.squeeze(1) * 4, pred_att_up * 4, pred_att * 4], [confidence_map, corr_volume_2, att_prob, corr_volume_2],  [feature_left, attn_weights_left, mask_loss]
-        return [pred_up * 4, pred.squeeze(1) * 4, pred_att_up * 4, pred_att * 4], [confidence_map, corr_volume_2, att_prob, corr_volume_2],  [feature_left, attn_weights_left, None]
+        return [pred_up * 4, pred.squeeze(1) * 4, pred_att_up * 4, pred_att * 4], [mask_pred_L, corr_volume_2, att_prob, corr_volume_2],  [feature_left, attn_weights_left, mask_loss]

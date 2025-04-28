@@ -163,6 +163,8 @@ def build_norm_correlation_volume(refimg_fea, targetimg_fea, maxdisp):
 def build_weighted_cost_volume(refimg_fea, targetimg_fea, mask_pred_L, mask_pred_R, maxdisp):
     B, C, H, W = refimg_fea.shape
     volume = refimg_fea.new_zeros([B, 1, maxdisp, H, W])
+    alpha = 0.5
+    eps = 0.1
     for i in range(maxdisp):
         if i > 0:
             f1 = refimg_fea[:, :, :, i:]
@@ -170,12 +172,20 @@ def build_weighted_cost_volume(refimg_fea, targetimg_fea, mask_pred_L, mask_pred
             corr = norm_correlation(f1, f2)
             left_conf = mask_pred_L[:, :, :, i:]
             right_conf = mask_pred_R[:, :, :, :-i]
-            w = left_conf * right_conf
+            w_raw = left_conf * right_conf
+            w = eps + (1.0 - eps)*w_raw.pow(alpha)
             volume[:, :, i, :, i:] = corr * w
+            print((corr*w).abs().mean()/corr.abs().mean())
+            print(w.mean(), w.std(), w.min(), w.max())
         else:
             corr = norm_correlation(refimg_fea, targetimg_fea)
-            w = mask_pred_L * mask_pred_R
+            w_raw = mask_pred_L * mask_pred_R
+            w = eps + (1.0 - eps)*w_raw.pow(alpha)
             volume[:, :, i, :, :] = corr * w
+            print((corr*w).abs().mean()/corr.abs().mean())
+            print(w.mean(), w.std(), w.min(), w.max())
+
+
     volume = volume.contiguous()
     return volume
 

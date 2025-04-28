@@ -120,18 +120,115 @@ class RefineCostVolume(nn.Module):
         # teacher mask supervision (training)
         mask_loss = None
         if teacher_entropy is not None:
-            # teacher_entropy: low →0, high→1
+            # teacher_entropy: low →1, high→0
             mask_loss = F.binary_cross_entropy(mask_pred_L, teacher_entropy.float())
 
         # Binarize for attention (inference / forward)
-        mask_bin_L = mask_pred_L < 0.5
-        mask_bin_R = mask_pred_R < 0.5
+
+        ## 여기서 true인 부분은 내가 refine을 해야하는 부분
+        ### output이 sigmoid 결과임. 고로 1에 가까울수록 신뢰픽셀이라는 뜻임.
+        mask_bin_L = mask_pred_L > 0.5
+        mask_bin_R = mask_pred_R > 0.5
         # 2. Hi‑Lo attention refinement
         featL_ref = self.propagation(featL, mask_bin_L)
         featR_ref = self.propagation(featR, mask_bin_R)
+
+        mask_pred_ref_L = self.mask_head(featL_ref)
+        if teacher_entropy is not None:
+            mask_loss += F.binary_cross_entropy(mask_pred_ref_L, teacher_entropy.float())
         # 3. cost volume
         # cost = self.build_cost(featL_ref, featR_ref).unsqueeze(1)
         return featL_ref,featR_ref, mask_pred_L, mask_pred_R, mask_loss
+
+
+
+class RefineNet(nn.Module):
+    def __init__(self,
+                 in_channels: int = 32,
+                 num_heads: int = 2,
+                 window_size: int = 11,
+                 tau: float = 1.0):
+        super().__init__()
+        assert in_channels % num_heads == 0
+        self.C    = in_channels
+        self.h    = num_heads
+        self.Hd   = in_channels // num_heads
+        self.win  = window_size
+        self.scale = self.Hd ** -0.5
+
+        self.to_qkv   = nn.Conv2d(in_channels, in_channels * 3, 1, bias=False)
+        self.proj     = nn.Conv2d(in_channels, in_channels, 1, bias=True)
+        self.pos_bias = nn.Parameter(torch.zeros(num_heads, window_size * window_size))
+        self.unfold   = nn.Unfold(kernel_size=window_size,
+                                  padding=window_size // 2)
+        self.tau      = tau
+        self.gate = nn.Parameter(torch.zeros(1,self.C,1,1))
+
+
+
+    def forward(self, feat: torch.Tensor, mask_high: torch.Tensor):
+        B, C, H, W = feat.shape
+        L = H * W
+
+        # ─── Step 1: Q/K/V 준비 ─────────────────────────────────────────
+        # to_qkv → (B, 3, h, Hd, H, W)
+        qkv = self.to_qkv(feat).view(B, 3, self.h, self.Hd, H, W)
+        q, k, v = qkv[:,0], qkv[:,1], qkv[:,2]          # 각각 (B, h, Hd, H, W)
+        k_flat = k.flatten(1, 2)                        # (B, h*Hd, H, W)
+        v_flat = v.flatten(1, 2)                        # (B, h*Hd, H, W)
+
+        # ─── Step 2: K/V를 “신뢰 픽셀”만 뽑아내도록 gating ─────────────
+        # mask_high: 1=신뢰, 0=불신 → unfold → (B, win², H*W)
+        w_unf = self.unfold(mask_high.float())                   # (B, win², L)
+        w_unf = w_unf.view(B, 1, 1, self.win*self.win, L)        # (B,1,1,win²,L)
+
+        # k/v unfold → (B, h, Hd, win², L)
+        k_unf = self.unfold(k_flat).view(B, self.h, self.Hd, self.win*self.win, L)
+        v_unf = self.unfold(v_flat).view(B, self.h, self.Hd, self.win*self.win, L)
+
+        # **여기서 곱하기** → K/V 는 오직 “신뢰 픽셀” 정보만 남김
+        k_unf = k_unf * w_unf      # (B, h, Hd, win², L)
+        v_unf = v_unf * w_unf      # (B, h, Hd, win², L)
+
+        # ─── Step 3: “불신 픽셀”만 쿼리로 뽑아서 attention ────────────
+        q_flat = q.flatten(3)
+        mask_low = (mask_high < 0.5).view(B, L)
+
+        # 결과를 담을 텐서
+        out_flat = feat.new_zeros(B, self.h*self.Hd, L)
+
+        for b in range(B):
+            low_idx = mask_low[b].nonzero(as_tuple=False).squeeze(1)
+            if low_idx.numel() == 0:
+                continue
+
+            # — Q: 불신 픽셀만
+            q_low = q_flat[b, :, :, low_idx]           # (h, Hd, N_low)
+
+            # — K/V: 이미 “신뢰 픽셀”만 gating 된 k_unf/v_unf
+            k_low = k_unf[b, :, :, :, low_idx]         # (h, Hd, win², N_low)
+            v_low = v_unf[b, :, :, :, low_idx]         # (h, Hd, win², N_low)
+
+            # attention score 계산
+            attn = (q_low.unsqueeze(2) * k_low).sum(1) * self.scale   # (h, win², N_low)
+            attn = attn + self.pos_bias[..., None]                    # positional bias 더하기
+            attn = F.softmax(attn, dim=1)
+
+            # weighted sum
+            out_low = (attn.unsqueeze(1) * v_low).sum(3)              # (h, Hd, N_low)
+
+            # scatter back: 불신 픽셀 위치에만 값 채우기
+            out_flat[b, :, low_idx] = out_low.view(self.h*self.Hd, -1)
+
+        # reshape & 1×1 conv
+        out = out_flat.view(B, self.C, H, W)
+        feat_ref = self.proj(out)
+
+        # residual은 오직 불신 픽셀에만
+        mask_low_map = mask_low.view(B, 1, H, W).float()
+        refined = feat + feat_ref * mask_low_map
+
+        return refined
 
 
 
@@ -183,73 +280,4 @@ class RelativePropagation(nn.Module):
         refined_feat = feat + residual * mask_high.float()
         return refined_feat
     
-class RefineNet(nn.Module):
-    def __init__(self,
-                 in_channels: int = 32,
-                 num_heads: int = 2,
-                 window_size: int = 11,
-                 tau: float = 1.0):
-        super().__init__()
-        assert in_channels % num_heads == 0
-        self.C    = in_channels
-        self.h    = num_heads
-        self.Hd   = in_channels // num_heads
-        self.win  = window_size
-        self.scale = self.Hd ** -0.5
-
-        self.to_qkv   = nn.Conv2d(in_channels, in_channels * 3, 1, bias=False)
-        self.proj     = nn.Conv2d(in_channels, in_channels, 1, bias=True)
-        self.pos_bias = nn.Parameter(torch.zeros(num_heads, window_size * window_size))
-        self.unfold   = nn.Unfold(kernel_size=window_size,
-                                  padding=window_size // 2)
-        self.tau      = tau
-
-    def forward(self, feat: torch.Tensor, mask_high: torch.Tensor):
-        B, C, H, W = feat.shape
-        L = H * W
-
-        # 1) Q,K,V 분리 → (B, h, Hd, H, W)
-        qkv = self.to_qkv(feat).view(B, 3, self.h, self.Hd, H, W)
-        q, k, v = qkv[:,0], qkv[:,1], qkv[:,2]
-
-        # 2) confidence mask → (B,1,H,W)
-        w_mask = (1.0 - mask_high.float())  # already {0,1}
-
-        # 3) 채널(=h*Hd) 차원만 flat
-        #    k_flat,v_flat: (B, h*Hd, H, W)
-        k_flat = k.flatten(1,2)
-        v_flat = v.flatten(1,2)
-        w_flat = w_mask       # (B, 1, H, W)
-
-        # 4) unfold → (B, channels*win², L)
-        k_unf = self.unfold(k_flat)
-        v_unf = self.unfold(v_flat)
-        w_unf = self.unfold(w_flat)
-        # 5) view back → (B, h, Hd, win², L) / (B,1,1,win²,L)
-        k_unf = k_unf.view(B, self.h, self.Hd, self.win*self.win, L)
-        v_unf = v_unf.view(B, self.h, self.Hd, self.win*self.win, L)
-        w_unf = w_unf.repeat(1, self.h, 1, 1, 1)
-
-        # 6) confidence-gating
-        k_unf = k_unf * (w_unf / self.tau)
-        v_unf = v_unf * (w_unf / self.tau)
-
-        # 7) Q 준비 → (B, h, Hd, L)
-        q_flat = q.flatten(3).unsqueeze(3)  # (B, h, Hd, 1, L)
-        # 8) Attention score → (B, h, win², L)
-        attn = (q_flat * k_unf).sum(2) * self.scale
-
-        bias = self.pos_bias.unsqueeze(0).unsqueeze(-1)
-        attn = attn + bias
-        attn = F.softmax(attn, dim=2)
-        # 9) Weighted sum → (B, h, Hd, L)
-        out_flat = (attn.unsqueeze(2) * v_unf).sum(3)
-
-        # 10) 최종 reshape → (1, 32, 64, 128)
-        out = out_flat.view(B, self.C, H, W)
-
-        feat_res = self.proj(out)
-        feat_mean = feat.abs().mean().item()
-        delta_mean = feat_res.abs().mean().item()
-
-        return feat + feat_res
+    
