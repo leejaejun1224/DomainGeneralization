@@ -175,15 +175,15 @@ def build_weighted_cost_volume(refimg_fea, targetimg_fea, mask_pred_L, mask_pred
             w_raw = left_conf * right_conf
             w = eps + (1.0 - eps)*w_raw.pow(alpha)
             volume[:, :, i, :, i:] = corr * w
-            print((corr*w).abs().mean()/corr.abs().mean())
-            print(w.mean(), w.std(), w.min(), w.max())
+            # print((corr*w).abs().mean()/corr.abs().mean())
+            # print(w.mean(), w.std(), w.min(), w.max())
         else:
             corr = norm_correlation(refimg_fea, targetimg_fea)
             w_raw = mask_pred_L * mask_pred_R
             w = eps + (1.0 - eps)*w_raw.pow(alpha)
             volume[:, :, i, :, :] = corr * w
-            print((corr*w).abs().mean()/corr.abs().mean())
-            print(w.mean(), w.std(), w.min(), w.max())
+            # print((corr*w).abs().mean()/corr.abs().mean())
+            # print(w.mean(), w.std(), w.min(), w.max())
 
 
     volume = volume.contiguous()
