@@ -160,6 +160,26 @@ def build_norm_correlation_volume(refimg_fea, targetimg_fea, maxdisp):
     volume = volume.contiguous()
     return volume
 
+def build_weighted_cost_volume(refimg_fea, targetimg_fea, mask_pred_L, mask_pred_R, maxdisp):
+    B, C, H, W = refimg_fea.shape
+    volume = refimg_fea.new_zeros([B, 1, maxdisp, H, W])
+    for i in range(maxdisp):
+        if i > 0:
+            f1 = refimg_fea[:, :, :, i:]
+            f2 = targetimg_fea[:, :, :, :-i]
+            corr = norm_correlation(f1, f2)
+            left_conf = mask_pred_L[:, :, :, i:]
+            right_conf = mask_pred_R[:, :, :, :-i]
+            w = left_conf * right_conf
+            volume[:, :, i, :, i:] = corr * w
+        else:
+            corr = norm_correlation(refimg_fea, targetimg_fea)
+            w = mask_pred_L * mask_pred_R
+            volume[:, :, i, :, :] = corr * w
+    volume = volume.contiguous()
+    return volume
+
+
 def disparity_variance(x, maxdisp, disparity):
     # the shape of disparity should be B,1,H,W, return is the variance of the cost volume [B,1,H,W]
     assert len(x.shape) == 4

@@ -506,7 +506,9 @@ class Fast_ACVNet_plus(nn.Module):
         match_left_ref = self.desc1(self.conv1(features_left_cat_ref))
         match_right_ref = self.desc1(self.conv1(features_right_cat_ref))
 
-        corr_volume_2 = build_norm_correlation_volume(match_left_ref, match_right_ref, self.maxdisp//4)
+
+        corr_volume_2 = build_weighted_cost_volume(match_left_ref, match_right_ref, mask_pred_L, mask_pred_R, self.maxdisp//4)
+        # corr_volume_2 = build_norm_correlation_volume(match_left_ref, match_right_ref, self.maxdisp//4)
         # global_feat_L = self.propagation_net(features_left[0], mask, depth_prob=None)
         # global_feat_R = self.propagation_net(features_right[0], mask, depth_prob=None)
         # match_left_global = self.desc(self.conv(torch.cat((feat_refined_left, stem_4x), 1)))
