@@ -99,10 +99,10 @@ class FlyingThingDataset(Dataset):
             
             return {"left": left_img,
                     "right": right_img,
-                    "disparity": disparity,
+                    "disparity": disparity*-1,
                     "gradient_map":gradient_map,
-                    "disparity_low":disparity_low,
-                    "disparity_low_r8":disparity_low_r8,
+                    "disparity_low":disparity_low*-1,
+                    "disparity_low_r8":disparity_low_r8*-1,
                     "left_filename": self.left_filenames[index],
                     "right_filename": self.right_filenames[index]}
         else:
@@ -122,11 +122,11 @@ class FlyingThingDataset(Dataset):
             if disparity is not None:
                 return {"left": left_img,
                         "right": right_img,
-                        "disparity": disparity,
+                        "disparity": disparity*-1,
                         "top_pad": 0,
                         "right_pad": 0,
                         "gradient_map":gradient_map,
-                        "disparity_low":disparity_low,
+                        "disparity_low":disparity_low*-1,
                         "left_filename": self.left_filenames[index],
                         "right_filename": self.right_filenames[index]}
             

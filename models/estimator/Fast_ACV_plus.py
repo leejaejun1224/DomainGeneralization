@@ -578,4 +578,6 @@ class Fast_ACVNet_plus(nn.Module):
         pred_up = context_upsample(pred, spx_pred)
         confidence_map, _ = att_prob.max(dim=1, keepdim=True)
         # return [pred_up * 4, pred.squeeze(1) * 4, pred_att_up * 4, pred_att * 4], [confidence_map, corr_volume_2, att_prob, corr_volume_2],  [feature_left, attn_weights_left, mask_loss]
-        return [pred_up * 4, pred.squeeze(1) * 4, pred_att_up * 4, pred_att * 4], [confidence_map, corr_volume_2, att_prob, corr_volume_2],  [feature_left, attn_weights_left, None]
+        return [pred_up * 4, pred.squeeze(1) * 4, pred_att_up * 4, pred_att * 4], \
+            [confidence_map, corr_volume_2, att_prob, corr_volume_2], \
+            [feature_left, attn_weights_left]

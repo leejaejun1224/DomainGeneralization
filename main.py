@@ -146,7 +146,7 @@ def train_epoch(model, source_loader, target_loader, optimizer, threshold_manage
         threshold = threshold_manager.get_threshold(image_ids).float()
         average_threshold.append(threshold.mean().item())
         temperature = max(0.5, 1.0 - 0.5 * (epoch / cfg['epoch']))
-        log_vars = model.train_step(data_batch, optimizer, batch_idx, threshold, temperature=temperature)
+        log_vars = model.train_step(data_batch, optimizer, batch_idx, epoch, temperature=temperature)
         
         if not math.isnan(log_vars['loss']):
             train_losses.append(log_vars['loss'])

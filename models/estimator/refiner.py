@@ -20,7 +20,7 @@ class MaskHead(nn.Module):
 
 class RefineCostVolume(nn.Module):
     def __init__(self, feat_ch: int, max_disp: int,
-                 emb: int = 64, pos_sigma: float = 0.05, tau: float = 0.0):
+                 emb: int = 32, pos_sigma: float = 0.05, tau: float = 0.0):
         super().__init__()
         self.mask_head = MaskHead(feat_ch)
         # self.propagation = RelativePropagation(feat_ch, K=20)
@@ -51,16 +51,16 @@ class RefineCostVolume(nn.Module):
         mask_bin_L = mask_pred_L > 0.5
         mask_bin_R = mask_pred_R > 0.5
         # 2. Hi‑Lo attention refinement
-        featL_ref = self.propagation(featL, mask_bin_L)
-        featR_ref = self.propagation(featR, mask_bin_R)
+        featL_ref = self.propagation(featL, mask_pred_L)
+        featR_ref = self.propagation(featR, mask_pred_R)
 
         mask_pred_ref_L = self.mask_head(featL_ref)
-        if teacher_entropy is not None:
-            mask_loss += F.binary_cross_entropy(mask_pred_ref_L, teacher_entropy.float())
+        # if teacher_entropy is not None:
+        #     mask_loss += F.binary_cross_entropy(mask_pred_ref_L, teacher_entropy.float())
 
         # cost는 weighted cost volume으로 다시 제작
         # cost = self.build_cost(featL_ref, featR_ref).unsqueeze(1)
-        return featL_ref,featR_ref, mask_pred_L, mask_pred_R, mask_loss
+        return featL_ref,featR_ref, mask_pred_L, mask_pred_R
 
 
 
@@ -84,7 +84,7 @@ class RefineNet(nn.Module):
         self.unfold   = nn.Unfold(kernel_size=window_size,
                                   padding=window_size // 2)
         self.tau      = tau
-        self.gate = nn.Parameter(torch.zeros(1,self.C,1,1))
+        # self.gate = nn.Parameter(torch.zeros(1,self.C,1,1))
 
 
 
@@ -116,7 +116,7 @@ class RefineNet(nn.Module):
 
         # ─── Step 3: “불신 픽셀”만 쿼리로 뽑아서 attention ────────────
         q_flat = q.flatten(3)
-        mask_low = (mask_high == 0.0).view(B, L)
+        mask_low = (mask_high < 0.5).view(B, L)
 
         # 결과를 담을 텐서
         out_flat = feat.new_zeros(B, self.h*self.Hd, L)
@@ -156,6 +156,7 @@ class RefineNet(nn.Module):
         # residual은 오직 불신 픽셀에만
         mask_low_map = mask_low.view(B, 1, H, W).float()
         refined = feat + feat_ref * mask_low_map
+        # refined = feat + feat_ref
 
         return refined
 

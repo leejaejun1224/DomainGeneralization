@@ -207,7 +207,6 @@ class Logger:
                         metric: totals[metric] / count
                         for metric in totals
                     }
-
         # Create new dict with averages at top
         metrics_with_averages = {}
         metrics_with_averages.update(averages)

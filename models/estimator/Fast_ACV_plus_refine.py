@@ -493,7 +493,7 @@ class Fast_ACVNet_plus_refine(nn.Module):
 
         # feat_refined_left, chan_w_left, spat_map_left, attn_loss_left = self.module(features_left[0], mask)
         # feat_refined_right, chan_w_right, spat_map_right, attn_loss_right = self.module(features_right[0], mask)
-        featL_ref,featR_ref, mask_pred_L, mask_pred_R, mask_loss = self.module(features_left[0], features_right[0], mask)
+        featL_ref,featR_ref, mask_pred_L, mask_pred_R = self.module(features_left[0], features_right[0], mask)
 
         ##refine 모델 출력 값 넣기
         features_left[0] = featL_ref
@@ -507,13 +507,14 @@ class Fast_ACVNet_plus_refine(nn.Module):
         match_right_ref = self.desc1(self.conv1(features_right_cat_ref))
 
 
-        corr_volume_2 = build_weighted_cost_volume(match_left_ref, match_right_ref, mask_pred_L, mask_pred_R, self.maxdisp//4)
+        corr_volume_2 = build_norm_correlation_volume(match_left_ref, match_right_ref, self.maxdisp//4)
         # corr_volume_2 = build_norm_correlation_volume(match_left_ref, match_right_ref, self.maxdisp//4)
         # global_feat_L = self.propagation_net(features_left[0], mask, depth_prob=None)
         # global_feat_R = self.propagation_net(features_right[0], mask, depth_prob=None)
         # match_left_global = self.desc(self.conv(torch.cat((feat_refined_left, stem_4x), 1)))
         # match_right_global = self.desc(self.conv(torch.cat((feat_refined_right, stem_4y), 1)))
         # corr_volume_2 = build_norm_correlation_volume(match_left_global, match_right_global, self.maxdisp//4)
+
         corr_volume = self.corr_stem(corr_volume_2)
 
         ### 
@@ -579,4 +580,6 @@ class Fast_ACVNet_plus_refine(nn.Module):
         pred = regression_topk(cost.squeeze(1), disparity_sample_topk, 2)
         pred_up = context_upsample(pred, spx_pred)
         confidence_map, _ = att_prob.max(dim=1, keepdim=True)
-        return [pred_up * 4, pred.squeeze(1) * 4, pred_att_up * 4, pred_att * 4], [mask_pred_L, corr_volume_2, att_prob, corr_volume_2],  [feature_left, attn_weights_left, mask_loss]
+        return [pred_up * 4, pred.squeeze(1) * 4, pred_att_up * 4, pred_att * 4], \
+             [confidence_map, corr_volume_2, mask_pred_L, corr_volume_2], \
+             [feature_left, attn_weights_left]

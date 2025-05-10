@@ -2,8 +2,8 @@
 
 
 depth_model = dict(
-    # name = 'Fast_ACVNet_plus',
-    name = 'Fast_ACVNet_plus_refine',
+    name = 'Fast_ACVNet_plus',
+    # name = 'Fast_ACVNet_plus_refine',
     # name = 'Fast_ACVNet',
     maxdisp = 192,
     att_weights_only = False
@@ -18,8 +18,8 @@ uda = dict(
 
 optimizer = dict(
     optimizer = "Adam",
-    lr = 1e-3,
-    adjust_lr = "300,450:10"
+    lr = 1e-4,
+    adjust_lr = "250,400,1000:10"
 )
 
 # name_dataset = 'kitti2015_to_kitti2012'
@@ -28,13 +28,13 @@ name_dataset = 'cityscapes_to_kitti2015'
 
 data = dict(
     train = dict(
-        epoch = 750,
+        epoch = 550,
         batch_size = 2,
         num_workers = 2,
         shuffle = True,
         pin_memory = True,
-        val_interval = 10,
-        save_interval = 10
+        val_interval = 50,
+        save_interval = 50
     ),
     test = dict(
         batch_size = 1,

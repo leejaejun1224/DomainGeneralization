@@ -28,12 +28,7 @@ def calc_entropy_loss(source_entropy, target_entropy, mask):
     entropy_loss = F.smooth_l1_loss(source_entropy[mask], target[mask], reduction='mean') * 100
     return entropy_loss
 
-import torch
-import torch.nn.functional as F
 
-
-import torch
-import torch.nn.functional as F
 
 def one_hot_entropy_ce_loss(data_batch,
                             diff_mask,
@@ -60,6 +55,33 @@ def one_hot_entropy_ce_loss(data_batch,
         loss = torch.tensor(0.0, device=student_corr_volume.device)
     
     return loss
+
+def calc_hinge_loss(data_batch):
+    before_ref = data_batch['tgt_entropy_map_s_1'].float()
+    after_ref = data_batch['tgt_entropy_map_s_2'].float()
+    hinge_loss = F.relu(before_ref.mean() - after_ref.mean())
+
+    return hinge_loss
+
+    
+
+def calc_pre_hourglass_loss(data_batch, model='s'):
+
+    entropy_mask = data_batch['tgt_entropy_map_t_2'] > 0
+    
+    true_count = entropy_mask.sum() 
+    total_pixels = entropy_mask.numel()
+    true_ratio = true_count.float() / total_pixels
+
+    weights = [1.0]
+    entropy_mask = [entropy_mask]
+
+    costvolume_topone_loss = get_loss([data_batch['tgt_entropy_map_idx_s_2']], 
+                                 [data_batch['tgt_refined_pred_disp_t']], 
+                                 entropy_mask, 
+                                 weights)
+    return costvolume_topone_loss
+
 
 def get_loss(disp_ests, disp_gts, img_masks, weights):
 
@@ -129,7 +151,7 @@ def calc_pseudo_loss(data_batch, threshold, model='s'):
 
 def calc_pseudo_entropy_top1_loss(data_batch, model='s'):
 
-    entropy_mask = data_batch['tgt_entropy_map_t_1'] > 0
+    entropy_mask = data_batch['tgt_entropy_map_t_2'] > 0
     
     true_count = entropy_mask.sum() 
     total_pixels = entropy_mask.numel()
@@ -137,12 +159,24 @@ def calc_pseudo_entropy_top1_loss(data_batch, model='s'):
 
     weights = [1.0]
     entropy_mask = [entropy_mask]
-
-    pseudo_label_loss = get_loss([data_batch['tgt_entropy_map_idx_s']], 
-                                 [data_batch['tgt_refined_pred_disp_t']], 
+    pseudo_label_loss = get_loss([data_batch['tgt_pred_disp_s'][1].unsqueeze(1)], 
+                                 [data_batch['tgt_refined_pred_disp_t']*4.0], 
                                  entropy_mask, 
                                  weights)
     return pseudo_label_loss, true_ratio
+
+
+
+def calc_mask_loss(data_batch):
+    
+    """
+    tgt_mask_pred_s : type은 bool
+    tgt_entropy_mask_t_2 : type은 얘도 bool
+    """
+
+    mask_loss = F.binary_cross_entropy(data_batch['src_mask_pred_s'], data_batch['src_entropy_mask_s_1'].float().detach())
+    
+    return mask_loss
 
 
 def calc_pseudo_entropy_loss(data_batch, min_ent=0.00088, model='s'):
@@ -159,7 +193,6 @@ def calc_pseudo_entropy_loss(data_batch, min_ent=0.00088, model='s'):
 
     # 디버깅 출력
     return entropy_loss, true_ratio
-
 
 
 def calc_pseudo_soft_loss(data_batch, threshold, model='s'):
