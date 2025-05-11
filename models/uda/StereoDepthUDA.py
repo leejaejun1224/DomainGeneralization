@@ -79,6 +79,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
         data_batch['src_corr_volume_s_2'] = map[3]
         data_batch['features_s'] = features[0]
         data_batch['attn_weights_s'] = features[1]
+        
         # data_batch['src`_attn_loss_s'] = features[2]
         # data_batch['pos_encodings_s'] = features[2]
 
@@ -180,6 +181,8 @@ class StereoDepthUDA(StereoDepthUDAInference):
         data_batch['tgt_corr_volume_s_2'] = map[3]
         data_batch['features_s'] = features[0]
         data_batch['attn_weights_s'] = features[1]
+        data_batch['prob_s'] = features[2]
+        print(data_batch['prob_s'].shape)
         # data_batch['tgt_attn_loss_s'] = features[2]
         # data_batch['pos_encodings_s'] = features[2]
 
@@ -202,12 +205,12 @@ class StereoDepthUDA(StereoDepthUDAInference):
 
         supervised_loss = calc_supervised_train_loss(data_batch, model='s')
         # pseudo_loss, true_ratio = calc_pseudo_loss(data_batch, threshold=0.2, model='s')
-        calc_entropy(data_batch, threshold=0.0009)
+        calc_entropy(data_batch, threshold=0.00094)
         
         data_batch['tgt_refined_pred_disp_t'], diff_mask = refine_disparity(data_batch, threshold=2.0)
-        pseudo_loss, true_ratio = calc_pseudo_entropy_top1_loss(data_batch, model='s')
-        mask_loss = calc_mask_loss(data_batch) 
-        reconstruction_loss = calc_reconstruction_loss(data_batch, domain='src', model='s')
+        # pseudo_loss, true_ratio = calc_pseudo_entropy_top1_loss(data_batch, model='s')
+        # mask_loss = calc_mask_loss(data_batch) 
+        # reconstruction_loss = calc_reconstruction_loss(data_batch, domain='src', model='s')
 
         # entropy_loss = calc_entropy_loss(data_batch['tgt_entropy_map_s'], data_batch['tgt_entropy_map_t'], data_batch['tgt_entropy_mask_t'])
         one_hot_loss = one_hot_entropy_ce_loss(data_batch, diff_mask)
@@ -229,17 +232,17 @@ class StereoDepthUDA(StereoDepthUDAInference):
         # total_loss = depth_loss + 0.8 * depth_loss_half + 0.5 * depth_loss_low
         # total_loss = supervised_loss + 0.5*one_hot_loss
         # total_loss = pseudo_loss
-        total_loss = supervised_loss + true_ratio * pseudo_loss + \
-                    0.2 * mask_loss + reconstruction_loss
+        # total_loss = supervised_loss + true_ratio * pseudo_loss + \
+        #             0.2 * mask_loss + reconstruction_loss
                     # 0.2 * hinge_loss + 0.2 * pre_hourglass_loss
-        
+        total_loss = supervised_loss
         log_vars = {
             'loss': total_loss.item(),
             'supervised_loss': supervised_loss.item(),
-            'unsupervised_loss': pseudo_loss.item(),
-            'true_ratio': true_ratio.item(),
-            'reconstruction_loss': total_loss.item(),
-            'depth_loss': mask_loss.item()
+            'unsupervised_loss': 0.0,
+            'true_ratio': 0.0,
+            'reconstruction_loss': 0.0,
+            'depth_loss': 0.0
         }
         return log_vars
 

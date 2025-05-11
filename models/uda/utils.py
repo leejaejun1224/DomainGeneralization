@@ -16,7 +16,8 @@ def refine_disparity(data_batch, threshold):
     diff_mask2 = diff > threshold
     pred_disp = pred_disp * diff_mask2
 
-    result = top_one + pred_disp
+    # result = top_one + pred_disp
+    result = top_one
     result = torch.clamp(result, 0, 192-1)
     # print(result.max())
     return result, diff_mask

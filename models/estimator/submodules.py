@@ -379,7 +379,7 @@ def regression_topk(cost, disparity_samples, k):
     prob = F.softmax(cost, 1)
     disparity_samples = torch.gather(disparity_samples, 1, pool_ind)    
     pred = torch.sum(disparity_samples * prob, dim=1, keepdim=True)
-    return pred
+    return pred, prob
     
 
 

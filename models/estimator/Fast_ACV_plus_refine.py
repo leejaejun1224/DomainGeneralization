@@ -577,7 +577,7 @@ class Fast_ACVNet_plus_refine(nn.Module):
         if self.att_weights_only:
             return [pred_att_up * 4, pred_att * 4]
         
-        pred = regression_topk(cost.squeeze(1), disparity_sample_topk, 2)
+        pred, prob = regression_topk(cost.squeeze(1), disparity_sample_topk, 2)
         pred_up = context_upsample(pred, spx_pred)
         confidence_map, _ = att_prob.max(dim=1, keepdim=True)
         return [pred_up * 4, pred.squeeze(1) * 4, pred_att_up * 4, pred_att * 4], \
