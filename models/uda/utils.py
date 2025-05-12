@@ -22,6 +22,16 @@ def refine_disparity(data_batch, threshold):
     # print(result.max())
     return result, diff_mask
     
+def calc_confidence_entropy(data_batch, k=12, temperature=0.5):
+
+    last_confidence_map = data_batch['prob_s']
+    B, D, H, W = last_confidence_map.shape
+
+    last_confidence_map /= temperature
+
+    last_confidence_entropy = -torch.sum(last_confidence_map * torch.log(last_confidence_map), dim=1)
+
+    ## entropy map
 
 
 def calc_entropy(data_batch, threshold, k=12, temperature=0.5, eps=1e-6):
