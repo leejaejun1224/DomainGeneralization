@@ -13,6 +13,7 @@ def refine_disparity(data_batch, threshold):
     diff = torch.abs(top_one - pred_disp)
     diff_mask = diff <= threshold
     top_one = top_one * diff_mask
+
     diff_mask2 = diff > threshold
     pred_disp = pred_disp * diff_mask2
 
@@ -21,20 +22,36 @@ def refine_disparity(data_batch, threshold):
     result = torch.clamp(result, 0, 192-1)
     # print(result.max())
     return result, diff_mask
-    
+
+
 def calc_confidence_entropy(data_batch, k=12, temperature=0.5):
+    # Get the cost volume from the student model
+    last_confidence_map = data_batch['cost_s'].squeeze(1)
+    
+    # Sort values in descending order and get top-k indices
+    _, ind = last_confidence_map.sort(1, True)
+    pool_ind = ind[:, :k]
+    
+    # Gather top-k values from the cost volume
+    cost_topk = torch.gather(last_confidence_map, 1, pool_ind)
+    
+    # Apply temperature scaling
+    cost_topk = cost_topk / temperature
+    
+    # Convert to probability distribution using softmax
+    prob = F.softmax(cost_topk, 1)
+    
+    # Calculate entropy: -sum(p * log(p))
+    # Add small epsilon to avoid log(0)
+    entropy = -torch.sum(prob * torch.log(prob + 1e-10), dim=1)
+    
+    # Store the entropy map in the data batch
+    data_batch['confidence_entropy_map_s'] = entropy
+    
+    return data_batch
 
-    last_confidence_map = data_batch['prob_s']
-    B, D, H, W = last_confidence_map.shape
 
-    last_confidence_map /= temperature
-
-    last_confidence_entropy = -torch.sum(last_confidence_map * torch.log(last_confidence_map), dim=1)
-
-    ## entropy map
-
-
-def calc_entropy(data_batch, threshold, k=12, temperature=0.5, eps=1e-6):
+def calc_entropy(data_batch, threshold, k=6, temperature=0.5, eps=1e-6):
     for data in ['src', 'tgt']:
         for model in ['s', 't']:
             for i in range(1,3):
@@ -56,6 +73,11 @@ def calc_entropy(data_batch, threshold, k=12, temperature=0.5, eps=1e-6):
 
                 H_map = -(topk_p * torch.log(topk_p)).sum(dim=1, keepdim=True)  # [B,1,H,W]
                 H_map = H_map - 2.484
+                norm_map = H_map * -1.0
+                min_val = norm_map.min()
+                max_val = norm_map.max()
+                h_norm = (norm_map - min_val) / (max_val - min_val)
+
 
                 # 5) threshold mask
                 if isinstance(threshold, torch.Tensor) and threshold.shape[0] == B:
@@ -65,7 +87,7 @@ def calc_entropy(data_batch, threshold, k=12, temperature=0.5, eps=1e-6):
                 mask_bool = (H_map < thr)           # [B,1,H,W]
                 mask = mask_bool.float()
 
-                # 6) Straight-Through Hard Top-1
+                # 6) Straight-Through Hard Top-1 ->  maybe not a good idea..? just for check
                 top1_idx = torch.argmax(p_vol, dim=1, keepdim=True)            # [B,1,H,W]
                 hard_onehot = F.one_hot(top1_idx.squeeze(1), num_classes=D)    \
                                 .permute(0,3,1,2).float()                      # [B,D,H,W]
@@ -73,17 +95,15 @@ def calc_entropy(data_batch, threshold, k=12, temperature=0.5, eps=1e-6):
                 disp_vals = torch.arange(D, device=vol.device).view(1,D,1,1).float()
                 hard_disp = (p_hard * disp_vals).sum(dim=1, keepdim=True)       # [B,1,H,W]
 
-                # 7) hard_disp에 mask 직접 적용
+                # 7) hard_disp에 mask 직접 적용 -> 아닌거 다 날려
                 refined_disp = hard_disp * mask                                 # [B,1,H,W]
 
                 disp_vals = torch.arange(D, device=vol.device, dtype=vol.dtype) \
                                 .view(1, D, 1, 1)
                 disp_map = (F.softmax(vol, dim=1) * disp_vals).sum(dim=1, keepdim=True)
 
-
-                # 8) 결과 저장
                 data_batch[data + '_entropy_mask_'    + model + '_' + str(i)] = mask_bool
-                data_batch[data + '_entropy_map_'     + model + '_' + str(i)] = H_map
+                data_batch[data + '_entropy_map_'     + model + '_' + str(i)] = h_norm
                 data_batch[data + '_entropy_map_idx_' + model + '_' + str(i)] = refined_disp
 
     return data_batch

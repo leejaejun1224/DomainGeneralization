@@ -9,7 +9,7 @@ from models.estimator import __models__
 from models.decoder.mono import MonoDepthDecoder
 from models.uda.decorator import StereoDepthUDAInference
 
-from models.uda.utils import calc_entropy, refine_disparity
+from models.uda.utils import *
 from models.losses.loss import *
 from models.losses.photometric import photometric_loss, photometric_loss_low, photometric_loss_half
 import time
@@ -181,8 +181,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
         data_batch['tgt_corr_volume_s_2'] = map[3]
         data_batch['features_s'] = features[0]
         data_batch['attn_weights_s'] = features[1]
-        data_batch['prob_s'] = features[2]
-        print(data_batch['prob_s'].shape)
+        data_batch['cost_s'] = features[2]
         # data_batch['tgt_attn_loss_s'] = features[2]
         # data_batch['pos_encodings_s'] = features[2]
 
@@ -206,7 +205,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
         supervised_loss = calc_supervised_train_loss(data_batch, model='s')
         # pseudo_loss, true_ratio = calc_pseudo_loss(data_batch, threshold=0.2, model='s')
         calc_entropy(data_batch, threshold=0.00094)
-        
+        calc_confidence_entropy(data_batch, k=12, temperature=0.5)
         data_batch['tgt_refined_pred_disp_t'], diff_mask = refine_disparity(data_batch, threshold=2.0)
         # pseudo_loss, true_ratio = calc_pseudo_entropy_top1_loss(data_batch, model='s')
         # mask_loss = calc_mask_loss(data_batch) 

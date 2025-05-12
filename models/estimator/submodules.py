@@ -357,6 +357,7 @@ class Propagation_prob(nn.Module):
         
         
 def context_upsample(depth_low, up_weights):
+
     ###
     # cv (b,1,h,w)
     # sp (b,9,4*h,4*w)
@@ -379,7 +380,5 @@ def regression_topk(cost, disparity_samples, k):
     prob = F.softmax(cost, 1)
     disparity_samples = torch.gather(disparity_samples, 1, pool_ind)    
     pred = torch.sum(disparity_samples * prob, dim=1, keepdim=True)
-    return pred, prob
     
-
-
+    return pred, prob

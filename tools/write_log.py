@@ -32,6 +32,7 @@ class Logger:
         self.top_one_dir = os.path.join(self.save_dir, 'top_one')
         self.metrics_dir = os.path.join(self.save_dir, 'metrics')
         self.depth_dir = os.path.join(self.save_dir, 'depth')
+        self.error_dir = os.path.join(self.save_dir, 'error')
         os.makedirs(self.att_dir, exist_ok=True)
         os.makedirs(self.gt_dir_src, exist_ok=True)
         os.makedirs(self.gt_dir_tgt, exist_ok=True)
@@ -41,6 +42,7 @@ class Logger:
         os.makedirs(self.metrics_dir, exist_ok=True)
         os.makedirs(self.top_one_dir, exist_ok=True)
         os.makedirs(self.depth_dir, exist_ok=True)
+        os.makedirs(self.error_dir, exist_ok=True)
 
     def _save_image(self, data, filename, directory, cmap='gray'):
         plt.imsave(os.path.join(directory, filename), data, cmap=cmap)
@@ -73,6 +75,7 @@ class Logger:
         plt.axis('off')
         plt.savefig(os.path.join(self.depth_dir, filename), bbox_inches='tight', pad_inches=0.1)
         plt.close()
+
 
     def save_gt(self, data_batch):
         # Add colorbar with min=0, max=255 for source disparity
@@ -152,6 +155,7 @@ class Logger:
 
 
         entropy_map = data_batch['tgt_entropy_map_t_1']
+        # entropy_map = data_batch['confidence_entropy_map_s'].unsqueeze(1)
         entropy_map_resized = F.interpolate(entropy_map.float(), scale_factor=4, mode="nearest")
         entropy_map_resized = entropy_map_resized.squeeze(0).squeeze(0).cpu().numpy()       
         filename = data_batch['tgt_left_filename'].split('/')[-1]
@@ -165,7 +169,19 @@ class Logger:
         plt.close()
 
     
-    
+    def save_error_map(self, data_batch):
+        mask  = data_batch['src_disparity'] > 0
+        error_map = (data_batch['src_pred_disp_s'][0] - data_batch['src_disparity'])*mask
+        error_map = error_map.squeeze(0).squeeze(0).cpu().numpy()
+        filename = data_batch['src_left_filename'].split('/')[-1]
+        save_path = os.path.join(self.error_dir, filename)
+        plt.figure(figsize=(12, 8))
+        img = plt.imshow(error_map, cmap='jet')
+        cbar = plt.colorbar(img, fraction=0.015, pad=0.04)
+        cbar.ax.tick_params(labelsize=8)
+        plt.axis('off')
+        plt.savefig(save_path, bbox_inches='tight', pad_inches=0.1)
+        plt.close()
 
 
     def compute_metrics(self, data_batch):
@@ -224,3 +240,4 @@ class Logger:
         self.save_disparity(data_batch, log_vars)
         self.compute_metrics(data_batch)
         self.save_depth_map(data_batch)
+        self.save_error_map(data_batch)
