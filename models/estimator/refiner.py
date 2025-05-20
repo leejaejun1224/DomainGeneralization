@@ -160,3 +160,106 @@ class RefineNet(nn.Module):
 
         return refined
 
+
+
+# --------------------------------------------------------------
+# confmap.py
+# --------------------------------------------------------------
+import torch, torch.nn.functional as F
+import numpy as np
+from skimage.segmentation import slic           # pip install scikit-image
+import cv2
+
+# -------- Sobel 커널 (HWC → CHW 편의를 위해 1×1 conv weight로 사용) ----
+_k = torch.tensor([[1,  0, -1],
+                   [2,  0, -2],
+                   [1,  0, -1]], dtype=torch.float32)
+sobel_kernel = _k.view(1,1,3,3).repeat(1,1,1,1)  # [1,1,3,3]
+
+
+
+# ------------------------------------------
+def guided_filter(I, p, radius=7, eps=1e-3):
+    """
+    I: H×W×3 (0–1 float), p: H×W (0–1 float)
+    radius, eps: guidedFilter 파라미터
+    """
+    # OpenCV는 uint8 / [0,255] 를 기대하므로 변환
+    guide_uint8 = (I * 255).astype(np.uint8)
+    p_uint8     = (p * 255).astype(np.uint8)
+
+    try:
+        # opencv-contrib-python 설치 시
+        gf = cv2.ximgproc.guidedFilter(guide=guide_uint8,
+                                       src=p_uint8,
+                                       radius=radius,
+                                       eps=eps)
+        # 다시 [0,1] float32
+        return (gf.astype(np.float32) / 255.0)
+    except Exception:
+        # fallback: bilateralFilter 로 근사
+        # d=diameter, sigmaColor=eps*255, sigmaSpace=radius
+        bf = cv2.bilateralFilter(p_uint8,
+                                 d=radius*2+1,
+                                 sigmaColor=eps*255,
+                                 sigmaSpace=radius)
+        return (bf.astype(np.float32) / 255.0)
+# ------------------------------------------
+def compute_confidence(pred_up: torch.Tensor,
+                       prob:     torch.Tensor,
+                       rgb:      torch.Tensor,
+                       device    = "cuda"):
+    """
+    pred_up : [B,1,H,W], prob:[B,k,H,W], rgb:[B,3,H,W]  (0–1 range)
+    returns conf_final : [B,1,H,W]
+    """
+    B, _, H, W = pred_up.shape
+    k = prob.size(1)
+    # 1) gap + entropy
+    # p1, p2 = prob.topk(2, dim=1).values        
+    p1 = prob[:,0,:,:]
+    p2 = prob[:,1,:,:]               # [B,2,H,W]
+    gap     = (p1-p2).clamp_(0,1)                     # [B,H,W]
+    entropy = -(prob*prob.clamp_min(1e-8).log()).sum(1)         # [B,H,W]
+    conf0   = torch.sigmoid(  6*(gap-0.10) ) * torch.exp(-entropy)
+    conf0   = conf0.unsqueeze(1)                                # [B,1,H,W]
+
+    # 2) disparity gradient down-weight
+    grad = F.conv2d(pred_up, sobel_kernel.to(device),
+                    padding=1).abs().mean(1, keepdim=True)      # [B,1,H,W]
+    w_edge = torch.exp( -(grad/4.0)**2 )
+
+    conf1  = conf0 * w_edge                                     # [B,1,H,W]
+
+    # 3) superpixel 평균 + guided filter
+    conf_out = torch.zeros_like(conf1)
+    rgb_np = rgb.permute(0,2,3,1).cpu().numpy()                 # B,H,W,3
+    for b in range(B):
+        # SLIC
+        lbl = slic(rgb_np[b], n_segments=2000, compactness=10,
+                   start_label=0)                               # [H,W] int
+        lbl_t = torch.from_numpy(lbl).to(device).long()
+
+        # superpixel 평균
+        conf_sp = torch.zeros_like(conf1[b,0])
+        conf_sum = torch.zeros_like(conf_sp)
+        conf_cnt = torch.zeros_like(conf_sp)
+        conf_flat = conf1[b,0].flatten()
+        lbl_flat  = lbl_t.flatten()
+        conf_sum = conf_sum.flatten()
+        conf_cnt = conf_cnt.flatten()
+
+        conf_sum.index_add_(0, lbl_flat, conf_flat)
+        conf_cnt.index_add_(0, lbl_flat,
+                            torch.ones_like(conf_flat))
+        conf_mean = conf_sum / (conf_cnt + 1e-6)                # [N_sp]
+        conf_sp = conf_mean[lbl_t]                              # [H,W]
+
+        # guided filter (OpenCV requires CPU + numpy)
+        cf_sp_np = conf_sp.cpu().numpy()
+        cf_gf = guided_filter(rgb_np[b], cf_sp_np,
+                              radius=15, eps=1e-3)               # [H,W]
+        conf_out[b,0] = torch.from_numpy(cf_gf).to(device)
+
+    conf_final = conf_out.clamp_(0,1)
+    return conf_final

@@ -27,7 +27,7 @@ def parse_args():
     parser.add_argument('--seed', default=1, metavar='S', help='random seed(default = 1)')
     parser.add_argument('--log_dir', default='./log', help='log directory')
     parser.add_argument('--compute_metrics', default=True, help='compute metrics')
-    parser.add_argument('--checkpoint', default=None, help='load checkpoint')
+    parser.add_argument('--ckpt', default=None, help='load checkpoint')
     return parser.parse_args()
 
 def setup_environment(args):
@@ -136,8 +136,8 @@ def train_epoch(model, source_loader, target_loader, optimizer, threshold_manage
     model.train()
     current_lr = adjust_learning_rate(optimizer, epoch, cfg['lr'], cfg['adjust_lr'])
     
-    true_ratios, train_losses, train_supervised_losses, train_pseudo_losses, reconstruction_losses, depth_losses = [], [], [], [], [], []
-    average_threshold = []
+    true_ratios, train_losses, train_supervised_losses, train_pseudo_losses, reconstruction_losses, depth_losses, entropy_losses = [], [], [], [], [], [], []
+    average_threshold, consist_photo_loss = [], []
     for batch_idx, (source_batch, target_batch) in enumerate(zip(source_loader, target_loader)):
         data_batch = {}
         data_batch = process_batch(data_batch, source_batch, target_batch)
@@ -155,6 +155,8 @@ def train_epoch(model, source_loader, target_loader, optimizer, threshold_manage
             true_ratios.append(log_vars['true_ratio'])
             reconstruction_losses.append(log_vars['reconstruction_loss'])
             depth_losses.append(log_vars['depth_loss'])
+            entropy_losses.append(log_vars['entropy_loss'])
+            consist_photo_loss.append(log_vars['consist_loss'])
             threshold_manager.update_log(image_ids, log_vars['true_ratio'], log_vars['unsupervised_loss'], epoch)
             
             if args.compute_metrics:
@@ -171,9 +173,13 @@ def train_epoch(model, source_loader, target_loader, optimizer, threshold_manage
             'average_threshold': sum(average_threshold)/len(average_threshold),
             'reconstruction_loss': sum(reconstruction_losses)/len(reconstruction_losses),
             'depth_loss': sum(depth_losses)/len(depth_losses),
+            'entropy_loss': sum(entropy_losses)/len(entropy_losses),
+            'consist_photo_loss': sum(consist_photo_loss)/len(consist_photo_loss),
             'learning_rate': current_lr
         }
-    return {'train_loss': 0, 'true_ratio_train': 0, 'train_pseudo_loss': 0, 'reconstruction_loss': 0, 'learning_rate': current_lr, 'depth_loss': 0}
+    return {'train_loss': 0, 'true_ratio_train': 0, 'train_pseudo_loss': 0,\
+             'reconstruction_loss': 0, 'learning_rate': current_lr, 'depth_loss': 0, \
+                'entropy_loss': 0, 'consist_photo_loss':0}
 
 def validate(model, source_loader, target_loader):
     model.eval()
@@ -225,14 +231,14 @@ def main():
     
     model = __models__['StereoDepthUDA'](cfg)
     start_epoch = 0
-    if args.checkpoint is not None:
-        print("checkpoint", args.checkpoint)
-        checkpoint = torch.load(args.checkpoint)
+    if args.ckpt is not None:
+        print("checkpoint", args.ckpt)
+        checkpoint = torch.load(args.ckpt)
         model.student_model.load_state_dict(checkpoint['student_state_dict'], strict=False)
         model.teacher_model.load_state_dict(checkpoint['teacher_state_dict'], strict=False)
-        start_epoch = int(args.checkpoint.split('_')[-1].split('.')[0])
+        start_epoch = int(args.ckpt.split('_')[-1].split('.')[0])
         print("start_epoch", start_epoch)
-        log_dict['ckpt'] = args.checkpoint
+        log_dict['ckpt'] = args.ckpt
         log_dict['ckpt_epoch'] = start_epoch
 
     model.to('cuda:0')
@@ -250,7 +256,8 @@ def main():
     for epoch in range(start_epoch, start_epoch + cfg['epoch']):
         train_metrics = train_epoch(model, train_source_loader, train_target_loader, optimizer, threshold_manager, epoch, cfg, args)
         print(f'Epoch [{epoch + 1}/{start_epoch + cfg["epoch"]}] Average Loss: {train_metrics["train_loss"]:.4f}')
-        print(f'Epoch [{epoch + 1}/{start_epoch + cfg["epoch"]}] Average Depth Loss: {train_metrics["depth_loss"]:.4f}')
+        print(f'Epoch [{epoch + 1}/{start_epoch + cfg["epoch"]}] Average Consist Photo Loss: {train_metrics["consist_photo_loss"]:.4f}')
+        print(f'Epoch [{epoch + 1}/{start_epoch + cfg["epoch"]}] Average Entropy Loss: {train_metrics["entropy_loss"]:.4f}')
         if (epoch + 1) % cfg['val_interval'] == 0:
             val_metrics = validate(model, test_source_loader, test_target_loader)
             print(f'Validation Loss: {val_metrics["val_loss"]:.4f}')

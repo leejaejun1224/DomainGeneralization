@@ -244,184 +244,6 @@ PropagationNetLarge v2
     ‑ sigmoid → channel–wise weights → feature × weights
 * still takes a *soft* confidence map (entropy‑derived) as 1‑channel input.
 """
-
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-
-# ---------------------------------------------------------
-class _ResDilBlock(nn.Module):
-    """3×3 standard + 3×3 dilated conv for larger RF."""
-    def __init__(self, ch, dil=2):
-        super().__init__()
-        self.conv1 = nn.Sequential(
-            nn.Conv2d(ch, ch, 3, 1, 1, bias=False),
-            nn.BatchNorm2d(ch), nn.ReLU(inplace=True)
-        )
-        self.conv2 = nn.Sequential(
-            nn.Conv2d(ch, ch, 3, 1, padding=dil, dilation=dil, bias=False),
-            nn.BatchNorm2d(ch)
-        )
-        self.act = nn.ReLU(inplace=True)
-
-    def forward(self, x):
-        return self.act(x + self.conv2(self.conv1(x)))
-
-# ---------------------------------------------------------
-class _ASPP(nn.Module):
-    """Atrous Spatial Pyramid Pooling with custom rates."""
-    def __init__(self, ch, out=256, rates=(3, 6, 12, 24)):
-        super().__init__()
-        self.branches = nn.ModuleList([
-            nn.Sequential(
-                nn.Conv2d(ch, out // len(rates), 3, 1, padding=r, dilation=r,
-                          bias=False),
-                nn.BatchNorm2d(out // len(rates)), nn.ReLU(inplace=True)
-            ) for r in rates
-        ])
-        self.project = nn.Sequential(
-            nn.Conv2d(out, ch, 1, bias=False),
-            nn.BatchNorm2d(ch), nn.ReLU(inplace=True)
-        )
-
-    def forward(self, x):
-        y = torch.cat([b(x) for b in self.branches], dim=1)
-        return self.project(y)
-
-# ---------------------------------------------------------
-class _NonLocal(nn.Module):
-    """Simple Non‑Local block (embedded Gaussian)."""
-    def __init__(self, ch, red=2):
-        super().__init__()
-        self.theta = nn.Conv2d(ch, ch // red, 1, bias=False)
-        self.phi   = nn.Conv2d(ch, ch // red, 1, bias=False)
-        self.g     = nn.Conv2d(ch, ch // red, 1, bias=False)
-        self.out   = nn.Conv2d(ch // red, ch, 1, bias=False)
-
-    def forward(self, x):
-        B, C, H, W = x.shape
-        th = self.theta(x).reshape(B, -1, H * W)           # [B, C', N]
-        ph = self.phi(x).reshape(B, -1, H * W)             # [B, C', N]
-        g  = self.g(x).reshape(B, -1, H * W)               # [B, C', N]
-        attn = torch.softmax(torch.bmm(th.transpose(1, 2), ph), dim=-1)  # [B, N, N]
-        y = torch.bmm(g, attn.transpose(1, 2)).reshape(B, -1, H, W)      # [B, C', H, W]
-        return x + self.out(y)
-
-# ---------------------------------------------------------
-class DepthTextureAtt(nn.Module):
-    """
-    Texture‑hierarchy attention (논문 식 7–8)
-      depth_prob : [B, 32, H, W]  (channel‑softmax from depth branch)
-      feat       : [B, C,  H, W]
-    """
-    def __init__(self, feat_ch):
-        super().__init__()
-        self.feat_ch = feat_ch
-        self.conv = nn.Sequential(
-            nn.Conv2d(32, 32, 1, 1, 0, bias=False),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(32, 32, 1, 1, 0, bias=False),
-            nn.ReLU(inplace=True)
-            )
-    def forward(self, feat, depth_prob):
-        depth_prob = self.conv(depth_prob)
-        # sigmoid → channel weights A  (0–1)
-        A = torch.sigmoid(depth_prob)                  # [B,32,H,W]
-        # broadcast to match feat channels (32 bins ≥ feat_ch)
-        feat_w = feat * A[:, :self.feat_ch]            # element‑wise
-        return feat_w
-
-# ---------------------------------------------------------
-class PropagationNetLarge(nn.Module):
-    """
-    Args
-    ----
-      feat_ch : input feature channels (32 by default)
-
-    Inputs
-    ------
-      feat   : [B, feat_ch, H, W]
-      conf   : [B, 1,        H, W]   (soft confidence 0‑1)
-      depth_prob (optional) : [B,32,H,W]  – depth‑branch soft‑max
-
-    Output
-    ------
-      feat_ctx : [B, feat_ch, H, W]  (context‑enhanced feature)
-    """
-    def __init__(self, feat_ch: int = 32):
-        super().__init__()
-        in_ch = feat_ch + 1              # concatenate confidence map
-        base  = 128
-
-        # ---------- Encoder ----------
-        self.down1 = nn.Sequential(
-            nn.Conv2d(in_ch, base, 7, 1, 3, bias=False),
-            nn.BatchNorm2d(base), nn.ReLU(inplace=True)
-        )
-        self.res1 = _ResDilBlock(base, dil=2)
-
-        self.down2 = nn.Sequential(
-            nn.Conv2d(base, base * 2, 3, 2, 1, bias=False),
-            nn.BatchNorm2d(base * 2), nn.ReLU(inplace=True)
-        )
-        self.res2 = _ResDilBlock(base * 2, dil=4)
-
-        # ---------- Bottleneck ----------
-        self.aspp = _ASPP(base * 2, rates=(3, 6, 12, 24))
-        self.nl   = _NonLocal(base * 2)
-
-        # red‑dilated conv stack (1,2,4,8)
-        self.rd   = nn.Sequential(
-            _ResDilBlock(base * 2, dil=1),
-            _ResDilBlock(base * 2, dil=2),
-            _ResDilBlock(base * 2, dil=4),
-            _ResDilBlock(base * 2, dil=8),
-        )
-
-        # ---------- Decoder ----------
-        self.up1 = nn.Sequential(
-            nn.ConvTranspose2d(base * 2, base, 4, 2, 1, bias=False),
-            nn.BatchNorm2d(base), nn.ReLU(inplace=True)
-        )
-        self.iconv1 = _ResDilBlock(base, dil=2)
-
-        # depth‑aware texture attention
-        self.tex_att = DepthTextureAtt(feat_ch)
-
-        # ---------- Output ----------
-        self.out = nn.Conv2d(base, feat_ch, 3, 1, 1, bias=False)
-
-    # ---------------------------------
-    def forward(self, feat: torch.Tensor,
-                conf: torch.Tensor,
-                depth_prob = None):
-        # concat confidence map
-        x = torch.cat([feat, conf], dim=1)     # [B, feat_ch+1, H, W]
-
-        # encoder
-        x1 = self.res1(self.down1(x))          # [B,128,H,W]
-        x2 = self.res2(self.down2(x1))         # [B,256,H/2,W/2]
-
-        # bottleneck
-        x2 = self.rd(self.nl(self.aspp(x2)))   # ASPP → NL → RD
-
-        # decoder
-        up = self.up1(x2)                      # [B,128,H,W]
-        up = self.iconv1(up + x1)              # skip connection
-
-        # texture‑hierarchy attention
-        if depth_prob is not None:
-            # depth_prob expected at same (H,W) – resize if necessary
-            if depth_prob.shape[-2:] != up.shape[-2:]:
-                depth_prob = F.interpolate(depth_prob, size=up.shape[-2:],
-                                           mode='bilinear', align_corners=True)
-            up = self.tex_att(up, depth_prob)  # apply attention
-
-        return self.out(up)                    # [B, feat_ch, H, W]
-
-
-            
-    
 class Fast_ACVNet_plus(nn.Module):
     def __init__(self, maxdisp, att_weights_only):
         super(Fast_ACVNet_plus, self).__init__()
@@ -469,7 +291,7 @@ class Fast_ACVNet_plus(nn.Module):
         concat_volume = torch.cat((left_feature_map, right_feature_map), dim=1)
         return concat_volume
     # forward는 그대로 유지 (디버깅 print 문은 유지)
-    def forward(self, left, right):
+    def forward(self, left, right, mode):
         feature_left, attn_weights_left  = self.feature(left)
         feature_right, attn_weights_right = self.feature(right)
         features_left, features_right = self.feature_up(feature_left, feature_right)
@@ -486,7 +308,7 @@ class Fast_ACVNet_plus(nn.Module):
         match_left = self.desc(self.conv(features_left_cat))
         match_right = self.desc(self.conv(features_right_cat))
 
-        corr_volume_1 = build_norm_correlation_volume(match_left, match_right, self.maxdisp//4)
+        corr_volume_1 = build_norm_correlation_volume(match_left, match_right, self.maxdisp//4, mode=mode)
         corr_volume_2 = corr_volume_1
         corr_volume = self.corr_stem(corr_volume_1)
 
@@ -500,36 +322,15 @@ class Fast_ACVNet_plus(nn.Module):
         ind_k = ind_k.sort(2, False)[0]
         att_topk = torch.gather(att_weights_prob, 2, ind_k)
         disparity_sample_topk = ind_k.squeeze(1).float()
-
         if not self.att_weights_only:
-
-
-            ###
             concat_features_left = self.concat_feature(features_left_cat)
-            # concat_features_left = self.concat_feature(features_left_cat_ref)
             concat_features_right = self.concat_feature(features_right_cat)
-            # concat_features_right = self.concat_feature(features_right_cat_ref)
-            ###
-
-
-
             concat_volume = self.concat_volume_generator(concat_features_left, concat_features_right, disparity_sample_topk)
             volume = att_topk * concat_volume
             volume = self.concat_stem(volume)
-
-            ###
             volume = self.concat_feature_att_4(volume, features_left_cat)
-            # volume = self.concat_feature_att_4(volume, features_left_cat_ref)
-            ###
-            
             cost = self.hourglass(volume, features_left)
-
-
-            ###
             xspx = self.spx_4(features_left_cat)
-            # xspx = self.spx_4(features_left_cat_ref)
-            ###
-
             xspx = self.spx_2(xspx, stem_2x)
             spx_pred = self.spx(xspx)
             spx_pred = F.softmax(spx_pred, 1)    
@@ -543,11 +344,13 @@ class Fast_ACVNet_plus(nn.Module):
         if self.att_weights_only:
             return [pred_att_up * 4, pred_att * 4]
         
-        pred, _ = regression_topk(cost.squeeze(1), disparity_sample_topk, 2)
+        pred, prob = regression_topk(cost.squeeze(1), disparity_sample_topk, 2)
         pred_up = context_upsample(pred, spx_pred)
-        # pred_up = context_upsample(pred, spx_pred)
+        confidence = prob.sum(dim=1)
         confidence_map, _ = att_prob.max(dim=1, keepdim=True)
-        # return [pred_up * 4, pred.squeeze(1) * 4, pred_att_up * 4, pred_att * 4], [confidence_map, corr_volume_2, att_prob, corr_volume_2],  [feature_left, attn_weights_left, mask_loss]
+        confidence = att_prob.sum(dim=1, keepdim=True)
         return [pred_up * 4, pred.squeeze(1) * 4, pred_att_up * 4, pred_att * 4], \
-            [confidence_map, corr_volume_2, att_prob, corr_volume_2], \
+            [confidence_map, corr_volume_2, confidence_map, corr_volume_2], \
             [feature_left, attn_weights_left, cost]
+    
+

@@ -149,16 +149,26 @@ def norm_correlation(fea1, fea2):
     cost = torch.mean(((fea1/(torch.norm(fea1, 2, 1, True)+1e-05)) * (fea2/(torch.norm(fea2, 2, 1, True)+1e-05))), dim=1, keepdim=True)
     return cost
 
-def build_norm_correlation_volume(refimg_fea, targetimg_fea, maxdisp):
+def build_norm_correlation_volume(refimg_fea, targetimg_fea, maxdisp, mode='left'):
     B, C, H, W = refimg_fea.shape
     volume = refimg_fea.new_zeros([B, 1, maxdisp, H, W])
-    for i in range(maxdisp):
-        if i > 0:
-            volume[:, :, i, :, i:] = norm_correlation(refimg_fea[:, :, :, i:], targetimg_fea[:, :, :, :-i])
-        else:
-            volume[:, :, i, :, :] = norm_correlation(refimg_fea, targetimg_fea)
-    volume = volume.contiguous()
-    return volume
+    if mode == 'left':
+        for i in range(maxdisp):
+            if i > 0:
+                volume[:, :, i, :, i:] = norm_correlation(refimg_fea[:, :, :, i:], targetimg_fea[:, :, :, :-i])
+            else:
+                volume[:, :, i, :, :] = norm_correlation(refimg_fea, targetimg_fea)
+        volume = volume.contiguous()
+        return volume
+    
+    else:
+        for i in range(maxdisp):
+            if i > 0:
+                volume[:, :, i, :, i:] = norm_correlation(refimg_fea[:, :, :, :-i], targetimg_fea[:, :, :, i:])
+            else:
+                volume[:, :, i, :, :] = norm_correlation(refimg_fea, targetimg_fea) 
+        return volume
+
 
 def build_weighted_cost_volume(refimg_fea, targetimg_fea, mask_pred_L, mask_pred_R, maxdisp):
     B, C, H, W = refimg_fea.shape
@@ -358,27 +368,40 @@ class Propagation_prob(nn.Module):
         
 def context_upsample(depth_low, up_weights):
 
+
     ###
     # cv (b,1,h,w)
     # sp (b,9,4*h,4*w)
     ###
     b, c, h, w = depth_low.shape
-        
     depth_unfold = F.unfold(depth_low.reshape(b,c,h,w),3,1,1).reshape(b,-1,h,w)
     depth_unfold = F.interpolate(depth_unfold,(h*4,w*4),mode='nearest').reshape(b,9,h*4,w*4)
-
     depth = (depth_unfold*up_weights).sum(1)
     
+
     return depth
+
 
 
 def regression_topk(cost, disparity_samples, k):
 
     _, ind = cost.sort(1, True)
+    
+    ## 2개를 뽑아
     pool_ind = ind[:, :k]
+    
+    # 그 2개의 index에 해당하는 cost를 추출해.
     cost = torch.gather(cost, 1, pool_ind)
+
+    # 2개의 cost에 대해서 softmax로 prob를 추출해.
+    # 그러면 여기에는 나머지는 0이고 어떤 cost가 높은 부분에 해당하는 prob가 담겨 있을 것임.
     prob = F.softmax(cost, 1)
+
+    # 2개의 prob에 대해서 disparity sampling을 하고, 샘플링 된 disparity에 
+    # 확률을 곱해줘서 sum을 한다.
     disparity_samples = torch.gather(disparity_samples, 1, pool_ind)    
     pred = torch.sum(disparity_samples * prob, dim=1, keepdim=True)
-    
+
     return pred, prob
+
+

@@ -22,10 +22,11 @@ def calc_depth_loss(data_batch, model='s'):
     return depth_loss
 
 
-def calc_entropy_loss(source_entropy, target_entropy, mask):
+def calc_entropy_loss(source_entropy, mask):
+
     # entropy_loss = F.smooth_l1_loss(source_entropy[mask], target_entropy[mask], reduction='mean')
-    target = torch.zeros_like(source_entropy)
-    entropy_loss = F.smooth_l1_loss(source_entropy[mask], target[mask], reduction='mean') * 100
+    target = torch.ones_like(source_entropy)
+    entropy_loss = F.smooth_l1_loss(source_entropy[mask], target[mask], reduction='mean')
     return entropy_loss
 
 
@@ -56,7 +57,10 @@ def one_hot_entropy_ce_loss(data_batch,
     
     return loss
 
+
+
 def calc_hinge_loss(data_batch):
+
     before_ref = data_batch['tgt_entropy_map_s_1'].float()
     after_ref = data_batch['tgt_entropy_map_s_2'].float()
     hinge_loss = F.relu(before_ref.mean() - after_ref.mean())
@@ -89,6 +93,7 @@ def get_loss(disp_ests, disp_gts, img_masks, weights):
 
     for disp_est, disp_gt, img_mask, weight in zip(disp_ests, disp_gts, img_masks, weights):
         all_losses.append(weight * F.smooth_l1_loss(disp_est[img_mask], disp_gt[img_mask], reduction='mean'))
+    
     return sum(all_losses)
 
 # dont touch 
@@ -124,9 +129,12 @@ def calc_supervised_val_loss(data_batch, model='s'):
     return loss
 
 
-def calc_pseudo_loss(data_batch, threshold, model='s'):
+def calc_pseudo_loss(data_batch, diff_mask, threshold, model='s'):
     key = 'tgt_pred_disp_' + model
-    pred_disp, pseudo_disp, confidence_map = data_batch[key], data_batch['pseudo_disp'][1], data_batch['confidence_map']
+    pred_disp, pseudo_disp, confidence_map = data_batch[key], data_batch['pseudo_disp'], data_batch['confidence_map']
+
+    # pseudo_disp[2] = data_batch['tgt_refined_pred_disp_t'].squeeze(1)
+
     # print("confidence_map", confidence_map.shape)
     # print("pseudo_disp", pseudo_disp.shape)
     # print("pred_disp", pred_disp[1].shape)
@@ -134,17 +142,21 @@ def calc_pseudo_loss(data_batch, threshold, model='s'):
 
     ### only calculate loss for the index number one of output
     ### not the batch size!!!!!!!!!!!!!!! dont be confuse
-    pred_disp = pred_disp[1]
+    # pred_disp = pred_disp[1]
 
 
     ## oh shit it only think about the first index of the output 
     ## no consider the batch size
-    mask = (pseudo_disp > 0) & (pseudo_disp < 256) 
-    data_batch['pseudo_mask'] = mask
-    mask = mask.tolist()
-    weights = [1.0]
+    mask = (pseudo_disp[0] > 0) & (pseudo_disp[0] < 256) 
+    mask_low = (pseudo_disp[1] > 0) & (pseudo_disp[1] < 256) 
+
+    masks = [mask, mask_low, mask, mask_low]
+
+    weights = [1.0, 0.3, 0.5, 0.3]
     true_count = 0.0
-    pseudo_label_loss = get_loss(pred_disp, pseudo_disp, mask, weights)
+    pseudo_label_loss = get_loss(pred_disp, pseudo_disp, masks, weights)
+
+
     return pseudo_label_loss, true_count
 
 
@@ -159,9 +171,9 @@ def calc_pseudo_entropy_top1_loss(data_batch, model='s'):
 
     weights = [1.0]
     entropy_mask = [entropy_mask]
-    pseudo_label_loss = get_loss([data_batch['tgt_pred_disp_s'][1].unsqueeze(1)], 
-                                 [data_batch['tgt_refined_pred_disp_t']*4.0], 
-                                 entropy_mask, 
+    pseudo_label_loss = get_loss([data_batch['tgt_pred_disp_s'][1].unsqueeze(1)],
+                                 [data_batch['tgt_refined_pred_disp_t']*4.0],
+                                 entropy_mask,
                                  weights)
     return pseudo_label_loss, true_ratio
 

@@ -4,15 +4,18 @@ import torch.nn.functional as F
 
 def refine_disparity(data_batch, threshold):
     top_one = data_batch['tgt_entropy_map_idx_t_2']
-    pred_disp = data_batch['pseudo_disp'][1].unsqueeze(1) / 4.0
-    mask = (top_one > 0) & (top_one < 256)
+    # top_one = F.interpolate(top_one, scale_factor=4,mode='bilinear')
+    pred_disp = data_batch['pseudo_disp'][1].unsqueeze(1)
+    
+    
+    mask = (pred_disp > 0) & (pred_disp < 256)
 
     top_one = top_one * mask 
     pred_disp = pred_disp * mask
 
     diff = torch.abs(top_one - pred_disp)
     diff_mask = diff <= threshold
-    top_one = top_one * diff_mask
+    top_one = pred_disp * diff_mask
 
     diff_mask2 = diff > threshold
     pred_disp = pred_disp * diff_mask2
@@ -24,7 +27,7 @@ def refine_disparity(data_batch, threshold):
     return result, diff_mask
 
 
-def calc_confidence_entropy(data_batch, k=12, temperature=0.5):
+def calc_confidence_entropy(data_batch, k=12, temperature=0.2):
     # Get the cost volume from the student model
     last_confidence_map = data_batch['cost_s'].squeeze(1)
     
@@ -51,7 +54,7 @@ def calc_confidence_entropy(data_batch, k=12, temperature=0.5):
     return data_batch
 
 
-def calc_entropy(data_batch, threshold, k=6, temperature=0.5, eps=1e-6):
+def calc_entropy(data_batch, threshold, k=12, temperature=0.5, eps=1e-6):
     for data in ['src', 'tgt']:
         for model in ['s', 't']:
             for i in range(1,3):

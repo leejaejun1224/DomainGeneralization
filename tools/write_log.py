@@ -32,7 +32,7 @@ class Logger:
         self.top_one_dir = os.path.join(self.save_dir, 'top_one')
         self.metrics_dir = os.path.join(self.save_dir, 'metrics')
         self.depth_dir = os.path.join(self.save_dir, 'depth')
-        self.error_dir = os.path.join(self.save_dir, 'error')
+        self.error_dir = os.path.join(self.save_dir, 'error_map')
         os.makedirs(self.att_dir, exist_ok=True)
         os.makedirs(self.gt_dir_src, exist_ok=True)
         os.makedirs(self.gt_dir_tgt, exist_ok=True)
@@ -49,11 +49,14 @@ class Logger:
 
 
     def save_att(self, data_batch):
-        att_prob = data_batch['src_confidence_map_s']
-        att_prob = F.interpolate(att_prob, 
-                        scale_factor=4, 
-                        mode='bilinear', 
-                        align_corners=False)
+        # att_prob = data_batch['src_confidence_map_s']
+        
+        # att_prob = data_batch['confidence_entropy_map_s'].unsqueeze(1)
+        att_prob = data_batch['tgt_mask_pred_t']
+        # att_prob = F.interpolate(att_prob, 
+        #                 scale_factor=4, 
+        #                 mode='bilinear', 
+        #                 align_corners=False)
         att_prob = att_prob.squeeze().cpu().numpy()
         filename = data_batch['src_left_filename'].split('/')[-1]
         
@@ -66,7 +69,7 @@ class Logger:
         plt.close()
 
     def save_depth_map(self, data_batch):
-        depth_map = data_batch['tgt_refined_pred_disp_t'].squeeze().cpu().numpy()*4.0
+        depth_map = data_batch['tgt_pred_disp_s_reverse'].squeeze().cpu().numpy()
         filename = data_batch['src_left_filename'].split('/')[-1]
         plt.figure(figsize=(12, 8))
         img = plt.imshow(depth_map, cmap='jet', vmin=0, vmax=192)
@@ -140,8 +143,10 @@ class Logger:
 
 
     def save_entropy(self, data_batch):
-        top_one_map = data_batch['tgt_entropy_map_idx_t_1'] * 4
-        top_one_map_resized = F.interpolate(top_one_map.float(), scale_factor=4, mode="nearest")
+        # top_one_map = data_batch['tgt_entropy_map_idx_t_1'] * 4
+        # top_one_map_resized = F.interpolate(top_one_map.float(), scale_factor=4, mode="nearest")
+        
+        top_one_map_resized = data_batch['tgt_entropy_map_idx_t_1']
         top_one_map_resized = top_one_map_resized.squeeze(0).squeeze(0).cpu().numpy()
         filename = data_batch['tgt_left_filename'].split('/')[-1]
         save_path = os.path.join(self.top_one_dir, filename)
@@ -168,19 +173,50 @@ class Logger:
         plt.savefig(save_path, bbox_inches='tight', pad_inches=0.1)
         plt.close()
 
-    
-    def save_error_map(self, data_batch):
-        mask  = data_batch['src_disparity'] > 0
-        error_map = (data_batch['src_pred_disp_s'][0] - data_batch['src_disparity'])*mask
-        error_map = error_map.squeeze(0).squeeze(0).cpu().numpy()
-        filename = data_batch['src_left_filename'].split('/')[-1]
+    """
+    빨간색 : d1오차 해당 범위
+    초록색 : d1오차 이내 범위
+    회색 : d1오차 조건에 해당이 안되는 부분
+    검정 : gt 없는 부분
+    """
+
+
+    def save_error_map(self,
+                    data_batch,
+                    abs_thresh: float = 3.0,
+                    rel_thresh: float = 0.05,
+                    dilation: int = 3):
+        gt   = data_batch['src_disparity'].squeeze().detach().cpu()   # Tensor H×W
+        pred = data_batch['pseudo_disp'][0].squeeze().detach().cpu()   # Tensor H×W
+
+        valid = (gt > 0) & (pred > 0)
+
+        abs_err = (gt - pred).abs()
+        rel_err = abs_err / gt.clamp(min=1e-6)
+
+        bad = valid & (abs_err > abs_thresh) & (rel_err > rel_thresh)
+        good = valid & (abs_err < abs_thresh) & (rel_err < rel_thresh)
+
+        bad_np = bad.numpy().astype(np.uint8)
+        good_np = good.numpy().astype(np.uint8)
+        if dilation > 1:
+            kernel = np.ones((dilation, dilation), np.uint8)
+            bad_np = cv2.dilate(bad_np, kernel)
+
+        H, W = bad_np.shape
+        img = np.zeros((H, W, 3), dtype=np.uint8)
+        img[:, :, :] = 128
+        img[~valid.numpy()] = (0, 0, 0)
+        img[bad_np > 0] = (255, 0, 0)
+        img[good_np > 0] = (0, 255, 0)
+        filename  = os.path.basename(data_batch['src_left_filename'].split('/')[-1])
         save_path = os.path.join(self.error_dir, filename)
-        plt.figure(figsize=(12, 8))
-        img = plt.imshow(error_map, cmap='jet')
-        cbar = plt.colorbar(img, fraction=0.015, pad=0.04)
-        cbar.ax.tick_params(labelsize=8)
+
+        plt.figure(figsize=(12, 6), dpi=100)
+        plt.imshow(img)
         plt.axis('off')
-        plt.savefig(save_path, bbox_inches='tight', pad_inches=0.1)
+        plt.tight_layout(pad=0)
+        plt.savefig(save_path, bbox_inches='tight', pad_inches=0)
         plt.close()
 
 
@@ -202,7 +238,6 @@ class Logger:
             scalar_outputs["Thres2"] = [Thres_metric(data_batch['pseudo_disp'][0], data_batch['tgt_disparity'], self.max_disp, 2.0)]
             scalar_outputs["Thres3"] = [Thres_metric(data_batch['pseudo_disp'][0], data_batch['tgt_disparity'], self.max_disp, 3.0)]
             self.metrics_dict['target'][data_batch['tgt_left_filename']] = tensor2float(scalar_outputs)
-
 
     def save_metrics(self):
         # Calculate averages for both domains
