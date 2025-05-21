@@ -93,8 +93,9 @@ class StereoDepthUDA(StereoDepthUDAInference):
         data_batch['attn_weights_s'] = features[1]
 
 
-        tgt_pred, map, features = self.student_forward(data_batch['tgt_right'], data_batch['tgt_left'], mode='right')  
-        data_batch['tgt_pred_disp_s_reverse'] = tgt_pred
+        tgt_pred, map, features = self.student_forward(data_batch['src_right'], data_batch['src_left'], mode='right')  
+        data_batch['src_pred_disp_s_reverse'] = tgt_pred
+
 
         with torch.no_grad():
             pseudo_disp, map, features = self.teacher_forward(
@@ -120,7 +121,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
 
         if epoch < 150:
             mask_loss = 0.0
-        total_loss = 0.1*supervised_loss + 0.5*pseudo_loss + 0.5*consist_photo_loss['loss_total']
+        total_loss = consist_photo_loss['loss_total']
         # total_loss = 0.1 * supervised_loss + 0.5 * pseudo_loss
         
         # total_loss = consist_photo_loss['loss_total']
@@ -165,9 +166,8 @@ class StereoDepthUDA(StereoDepthUDAInference):
         data_batch['cost_s'] = features[2]
 
     
-
         tgt_pred, map, features = self.student_forward(data_batch['tgt_right'], data_batch['tgt_left'], mode='right')  
-        data_batch['tgt_pred_disp_s_reverse'] = tgt_pred[0]
+        data_batch['src_pred_disp_s_reverse'] = tgt_pred[0]
 
 
         with torch.no_grad():
@@ -193,7 +193,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
 
         entropy_loss = calc_entropy_loss(data_batch['tgt_mask_pred_s'], data_batch['tgt_entropy_mask_t_2'])
         pseudo_loss, true_ratio = calc_pseudo_loss(data_batch, diff_mask, threshold=0.2, model='s')
-        
+        consist_photo_loss = consistency_photometric_loss(data_batch)
 
         total_loss = 0.0 * supervised_loss + 1.0 * pseudo_loss + 0.1 * entropy_loss
         log_vars = {

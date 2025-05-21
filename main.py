@@ -43,7 +43,7 @@ def setup_train_loaders(cfg):
         datapath=cfg['dataset']['src_root'],
         list_filename=cfg['dataset']['src_filelist'],
         training=True, 
-        aug=True
+        aug=False
     )
     
     target_dataset = __datasets__[cfg['dataset']['tgt_type']](

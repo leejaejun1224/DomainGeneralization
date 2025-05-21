@@ -69,7 +69,7 @@ class Logger:
         plt.close()
 
     def save_depth_map(self, data_batch):
-        depth_map = data_batch['tgt_pred_disp_s_reverse'].squeeze().cpu().numpy()
+        depth_map = data_batch['src_pred_disp_s_reverse'].squeeze().cpu().numpy()
         filename = data_batch['src_left_filename'].split('/')[-1]
         plt.figure(figsize=(12, 8))
         img = plt.imshow(depth_map, cmap='jet', vmin=0, vmax=192)

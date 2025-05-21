@@ -2,7 +2,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 from typing import Dict, Tuple
-
+import cv2
 
 def _meshgrid(h: int, w: int, device):
     y, x = torch.meshgrid(
@@ -49,70 +49,71 @@ def ssim(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
     return torch.clamp((1 - ssim_n / ssim_d) / 2, 0, 1)
 
 
-# def consistency_photometric_loss(data_batch, w_photo = 1.0, w_consist=0.0):
+def consistency_photometric_loss(data_batch, w_photo = 0.5, w_consist = 0.5):
     
-#     disp_l = data_batch['tgt_pred_disp_s'][0]
-#     disp_r = data_batch['tgt_pred_disp_s_reverse'][0]
+    disp_l = data_batch['src_pred_disp_s'][0]
+    disp_r = data_batch['src_pred_disp_s_reverse'][0]
 
-#     mean = torch.tensor([0.485, 0.456, 0.406]).view(3,1,1).to(device='cuda:0')
-#     std = torch.tensor([0.229, 0.224, 0.225]).view(3,1,1).to(device='cuda:0')
+    mean = torch.tensor([0.485, 0.456, 0.406]).view(3,1,1).to(device='cuda:0')
+    std = torch.tensor([0.229, 0.224, 0.225]).view(3,1,1).to(device='cuda:0')
 
-#     img_l = (data_batch['tgt_left']*std + mean).clamp(0,1)
-#     img_r = (data_batch['tgt_right']*std + mean).clamp(0,1)
+    img_l = (data_batch['src_left']*std + mean).clamp(0,1)
+    img_r = (data_batch['src_right']*std + mean).clamp(0,1)
 
-#     warp_to_left = warp_image(img_r, disp_l, 'R->L')
-#     warp_to_right = warp_image(img_l, disp_r, 'L->R')
 
-#     l1_l = (img_l - warp_to_left).abs().mean()
-#     l1_r = (img_r - warp_to_right).abs().mean()
-
-#     ssim_l = ssim(img_l, warp_to_left).mean()
-#     ssim_r = ssim(img_r, warp_to_right).mean()
-
-#     photometric_loss = 0.85*(ssim_l + ssim_r) / 2.0 + 0.15*(l1_l + l1_r) / 2.0
-
-#     disp_warp = warp_image(disp_r.unsqueeze(1), disp_l.unsqueeze(1), 'R->L')
-#     consistency_loss = (disp_l - disp_warp).abs().mean()
-
-#     total_loss = w_photo * photometric_loss + w_consist * consistency_loss
-
-#     return {
-#         'loss_total':      total_loss,
-#         'loss_photo':      photometric_loss.detach(),
-#         'loss_lr':         consistency_loss.detach(),
-#     }
-
-def consistency_photometric_loss(data_batch, w_photo=1.0, w_consist=0.0, w_smooth=0.2):
-    # 예측된 left/right disparity
-    disp_l = data_batch['tgt_pred_disp_s'][0]               # (B, H, W)
-
-    # 정규화 값 복원
-    mean = torch.tensor([0.485, 0.456, 0.406], device=disp_l.device)[:, None, None]
-    std  = torch.tensor([0.229, 0.224, 0.225], device=disp_l.device)[:, None, None]
-
-    img_l = (data_batch['tgt_left']  * std + mean).clamp(0, 1)   # (B,3,H,W)
-    img_r = (data_batch['tgt_right'] * std + mean).clamp(0, 1)
-
-    # photometric loss: 오직 left 기준으로만 계산
-    # → 오른쪽 disparity disp_r는 photometric term에서 제거
-    # R→L warp: img_r 을 disp_l 로 왼쪽 좌표로 되돌림
     warp_to_left = warp_image(img_r, disp_l, 'R->L')
+    warp_to_right = warp_image(img_l, disp_r, 'L->R')
 
-    # L1 & SSIM (left only)
-    l1_l   = (img_l - warp_to_left).abs().mean()
-    ssim_l = ssim(img_l, warp_to_left).mean()
+    l1_l = (img_l - warp_to_left).abs().mean()
+    l1_r = (img_r - warp_to_right).abs().mean()
 
-    photometric_loss = 0.85 * ssim_l + 0.15 * l1_l
-    smooth_loss = disparity_smoothness_loss(data_batch)
-    # consistency loss (좌-우 일관성) 은 그대로 유지
-    # disp_warp shape → (B,1,H,W), squeeze back to (B,H,W)
+    ssim_l = ssim(img_l, warp_to_left).mean() 
+    ssim_r = ssim(img_r, warp_to_right).mean()
 
-    total_loss = w_photo * photometric_loss + w_smooth * smooth_loss
+    photometric_loss = 0.85 * (ssim_l + ssim_r) / 2.0 + 0.15 * (l1_l + l1_r) / 2.0
+
+    disp_warp = warp_image(disp_r.unsqueeze(1), disp_l.unsqueeze(1), 'R->L')
+    consistency_loss = (disp_l - disp_warp).abs().mean()
+
+    total_loss = w_photo * photometric_loss + w_consist * consistency_loss
 
     return {
-        'loss_total': total_loss,
-        'loss_photo': photometric_loss.detach()
+        'loss_total':      total_loss,
+        'loss_photo':      photometric_loss.detach(),
+        'loss_lr':         consistency_loss.detach(),
     }
+
+# def consistency_photometric_loss(data_batch, w_photo=1.0, w_consist=0.0, w_smooth=0.2):
+#     # 예측된 left/right disparity
+#     disp_l = data_batch['tgt_pred_disp_s'][0]               # (B, H, W)
+
+#     # 정규화 값 복원
+#     mean = torch.tensor([0.485, 0.456, 0.406], device=disp_l.device)[:, None, None]
+#     std  = torch.tensor([0.229, 0.224, 0.225], device=disp_l.device)[:, None, None]
+
+#     img_l = (data_batch['tgt_left']  * std + mean).clamp(0, 1)   # (B,3,H,W)
+#     img_r = (data_batch['tgt_right'] * std + mean).clamp(0, 1)
+
+#     # photometric loss: 오직 left 기준으로만 계산
+#     # → 오른쪽 disparity disp_r는 photometric term에서 제거
+#     # R→L warp: img_r 을 disp_l 로 왼쪽 좌표로 되돌림
+#     warp_to_left = warp_image(img_r, disp_l, 'R->L')
+
+#     # L1 & SSIM (left only)
+#     l1_l   = (img_l - warp_to_left).abs().mean()
+#     ssim_l = ssim(img_l, warp_to_left).mean()
+
+#     photometric_loss = 0.85 * ssim_l + 0.15 * l1_l
+#     smooth_loss = disparity_smoothness_loss(data_batch)
+#     # consistency loss (좌-우 일관성) 은 그대로 유지
+#     # disp_warp shape → (B,1,H,W), squeeze back to (B,H,W)
+
+#     total_loss = w_photo * photometric_loss + w_smooth * smooth_loss
+
+#     return {
+#         'loss_total': total_loss,
+#         'loss_photo': photometric_loss.detach()
+#     }
 
 def disparity_smoothness_loss(data_batch):
 
