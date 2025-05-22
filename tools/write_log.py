@@ -69,7 +69,7 @@ class Logger:
         plt.close()
 
     def save_depth_map(self, data_batch):
-        depth_map = data_batch['src_pred_disp_s_reverse'].squeeze().cpu().numpy()
+        depth_map = data_batch['valid_disp'].squeeze().cpu().numpy()
         filename = data_batch['src_left_filename'].split('/')[-1]
         plt.figure(figsize=(12, 8))
         img = plt.imshow(depth_map, cmap='jet', vmin=0, vmax=192)
@@ -173,13 +173,14 @@ class Logger:
         plt.savefig(save_path, bbox_inches='tight', pad_inches=0.1)
         plt.close()
 
+
+
     """
     빨간색 : d1오차 해당 범위
     초록색 : d1오차 이내 범위
     회색 : d1오차 조건에 해당이 안되는 부분
     검정 : gt 없는 부분
-    """
-
+    """ 
 
     def save_error_map(self,
                     data_batch,
@@ -187,7 +188,7 @@ class Logger:
                     rel_thresh: float = 0.05,
                     dilation: int = 3):
         gt   = data_batch['src_disparity'].squeeze().detach().cpu()   # Tensor H×W
-        pred = data_batch['pseudo_disp'][0].squeeze().detach().cpu()   # Tensor H×W
+        pred = data_batch['valid_disp'].squeeze().detach().cpu()   # Tensor H×W
 
         valid = (gt > 0) & (pred > 0)
 

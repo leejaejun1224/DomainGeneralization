@@ -395,6 +395,7 @@ def regression_topk(cost, disparity_samples, k):
 
     # 2개의 cost에 대해서 softmax로 prob를 추출해.
     # 그러면 여기에는 나머지는 0이고 어떤 cost가 높은 부분에 해당하는 prob가 담겨 있을 것임.
+
     prob = F.softmax(cost, 1)
 
     # 2개의 prob에 대해서 disparity sampling을 하고, 샘플링 된 disparity에 

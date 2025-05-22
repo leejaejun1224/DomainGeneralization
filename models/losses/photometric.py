@@ -4,6 +4,46 @@ from torch import nn
 from typing import Dict, Tuple
 import cv2
 
+def compute_photometric_error(data_batch, threshold):
+    """
+    img_left, img_right: (B, C, H, W), normalized [0,1]
+    disp:             (B, 1, H, W), disparities for right->left warp
+    returns:          (B, 1, H, W) photometric L1 error between img_left and warped img_right
+    """
+    mean = torch.tensor([0.485, 0.456, 0.406]).view(3,1,1).to(device='cuda:0')
+    std = torch.tensor([0.229, 0.224, 0.225]).view(3,1,1).to(device='cuda:0')
+
+    disp = data_batch['pseudo_disp'][0]  # (B, 1, H, W)
+    img_left = (data_batch['tgt_left'] * std + mean).clamp(0,1)
+    img_right = (data_batch['tgt_right'] * std + mean).clamp(0,1)
+    
+    B, C, H, W = img_left.shape
+
+    # meshgrid for sampling
+    y, x = torch.meshgrid(
+        torch.arange(H, device=img_left.device),
+        torch.arange(W, device=img_left.device),
+        indexing='ij'
+    )
+    # build sampling coords for grid_sample
+    x = x.unsqueeze(0).expand(B, -1, -1).float()
+    y = y.unsqueeze(0).expand(B, -1, -1).float()
+    # compute source x coords: x_src = x - disp
+    x_src = x - disp.squeeze(1)
+    # normalize to [-1,1] for grid_sample
+    x_norm = 2.0 * (x_src / (W - 1)) - 1.0
+    y_norm = 2.0 * (y     / (H - 1)) - 1.0
+    grid = torch.stack((x_norm, y_norm), dim=3)  # (B, H, W, 2)
+
+    # warp right image into left view
+    warped_right = F.grid_sample(img_right, grid, mode='bilinear', padding_mode='border', align_corners=True)
+    # photometric L1
+    photo_err = torch.abs(img_left - warped_right).mean(dim=1, keepdim=True)
+    
+    valid_mask = (photo_err <= threshold).float()
+    data_batch['valid_disp'] = disp*valid_mask
+    
+
 def _meshgrid(h: int, w: int, device):
     y, x = torch.meshgrid(
         torch.arange(h, device=device),
@@ -16,7 +56,6 @@ def _meshgrid(h: int, w: int, device):
 def warp_image(src_img: torch.Tensor,
                disp: torch.Tensor,
                direction: str = 'R->L') -> torch.Tensor:
-    """direction = 'R->L'  (오른쪽→왼쪽 재구성) 또는 'L->R'."""
     assert direction in ('R->L', 'L->R')
     B, C, H, W = src_img.shape
     y, x = _meshgrid(H, W, src_img.device)
@@ -51,14 +90,14 @@ def ssim(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
 
 def consistency_photometric_loss(data_batch, w_photo = 0.5, w_consist = 0.5):
     
-    disp_l = data_batch['src_pred_disp_s'][0]
-    disp_r = data_batch['src_pred_disp_s_reverse'][0]
+    disp_l = data_batch['tgt_pred_disp_s'][0]
+    disp_r = data_batch['tgt_pred_disp_s_reverse'][0]
 
     mean = torch.tensor([0.485, 0.456, 0.406]).view(3,1,1).to(device='cuda:0')
     std = torch.tensor([0.229, 0.224, 0.225]).view(3,1,1).to(device='cuda:0')
 
-    img_l = (data_batch['src_left']*std + mean).clamp(0,1)
-    img_r = (data_batch['src_right']*std + mean).clamp(0,1)
+    img_l = (data_batch['tgt_left'] * std + mean).clamp(0,1)
+    img_r = (data_batch['tgt_right'] * std + mean).clamp(0,1)
 
 
     warp_to_left = warp_image(img_r, disp_l, 'R->L')

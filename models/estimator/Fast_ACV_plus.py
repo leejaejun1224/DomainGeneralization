@@ -346,11 +346,12 @@ class Fast_ACVNet_plus(nn.Module):
         
         pred, prob = regression_topk(cost.squeeze(1), disparity_sample_topk, 2)
         pred_up = context_upsample(pred, spx_pred)
-        confidence = prob.sum(dim=1)
+        confidence_max, _ = prob.max(dim=1, keepdim=True)
+        confidence_min, _ = prob.min(dim=1, keepdim=True)
+        confidence = confidence_max 
         confidence_map, _ = att_prob.max(dim=1, keepdim=True)
-        confidence = att_prob.sum(dim=1, keepdim=True)
         return [pred_up * 4, pred.squeeze(1) * 4, pred_att_up * 4, pred_att * 4], \
-            [confidence_map, corr_volume_2, confidence_map, corr_volume_2], \
+            [confidence, corr_volume_2, confidence, corr_volume_2], \
             [feature_left, attn_weights_left, cost]
     
 
