@@ -25,7 +25,7 @@ def calc_depth_loss(data_batch, model='s'):
 def calc_entropy_loss(data_batch):
 
     # entropy_loss = F.smooth_l1_loss(source_entropy[mask], target_entropy[mask], reduction='mean')
-    mask = data_batch['confidence_map'] > 0.55
+    mask = (data_batch['valid_disp'] > 0).squeeze(1)
     confidence_map = data_batch['confidence_map']
     target = torch.ones_like(confidence_map) * 0.9
     entropy_loss = F.smooth_l1_loss(confidence_map[mask], target[mask], reduction='mean')
@@ -135,6 +135,10 @@ def calc_pseudo_loss(data_batch, diff_mask, threshold, model='s'):
     key = 'tgt_pred_disp_' + model
     pred_disp, pseudo_disp, confidence_map = data_batch[key], data_batch['pseudo_disp'], data_batch['confidence_map']
 
+    valid_mask = (data_batch['valid_disp'] > 0).squeeze(1)
+
+    pred_disp.append(pred_disp[0])
+    pseudo_disp.append(data_batch['valid_disp'].squeeze(1))
     # pseudo_disp[2] = data_batch['tgt_refined_pred_disp_t'].squeeze(1)
 
     # print("confidence_map", confidence_map.shape)
@@ -152,9 +156,10 @@ def calc_pseudo_loss(data_batch, diff_mask, threshold, model='s'):
     mask = (pseudo_disp[0] > 0) & (pseudo_disp[0] < 256) 
     mask_low = (pseudo_disp[1] > 0) & (pseudo_disp[1] < 256) 
 
-    masks = [mask, mask_low, mask, mask_low]
+    masks = [mask, mask_low, mask, mask_low, valid_mask]
 
-    weights = [1.0, 0.3, 0.5, 0.3]
+
+    weights = [0.5, 0.3, 0.5, 0.3, 1.0]
     true_count = 0.0
     pseudo_label_loss = get_loss(pred_disp, pseudo_disp, masks, weights)
 
