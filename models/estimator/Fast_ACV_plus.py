@@ -344,13 +344,13 @@ class Fast_ACVNet_plus(nn.Module):
         if self.att_weights_only:
             return [pred_att_up * 4, pred_att * 4]
         
-        pred, prob = regression_topk(cost.squeeze(1), disparity_sample_topk, 2)
-        prob, _ = prob.max(dim=1, keepdim=True)
+        pred, prob = regression_topk(cost.squeeze(1), disparity_sample_topk, 12)
         pred_up = context_upsample(pred, spx_pred)
-        prob_up = context_upsample(prob, spx_pred)
+        prob_up1 = context_upsample(prob[:,0,:,:].unsqueeze(1),spx_pred)
+        prob_up2 = context_upsample(prob[:,1,:,:].unsqueeze(1),spx_pred)
         
-        confidence = prob_up 
+        confidence = prob_up1 + prob_up2
         confidence_map, _ = att_prob.max(dim=1, keepdim=True)
         return [pred_up * 4, pred.squeeze(1) * 4, pred_att_up * 4, pred_att * 4], \
-            [confidence, corr_volume_2, confidence, corr_volume_2], \
+            [confidence, corr_volume_2, prob, corr_volume_2], \
             [feature_left, attn_weights_left, cost]

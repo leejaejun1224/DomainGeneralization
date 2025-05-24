@@ -27,7 +27,7 @@ def calc_entropy_loss(data_batch):
     # entropy_loss = F.smooth_l1_loss(source_entropy[mask], target_entropy[mask], reduction='mean')
     mask = (data_batch['valid_disp'] > 0).squeeze(1)
     confidence_map = data_batch['confidence_map']
-    target = torch.ones_like(confidence_map) * 0.9
+    target = torch.ones_like(confidence_map) * 0.95
     entropy_loss = F.smooth_l1_loss(confidence_map[mask], target[mask], reduction='mean')
     return entropy_loss
 

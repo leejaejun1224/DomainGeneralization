@@ -29,7 +29,7 @@ def refine_disparity(data_batch, threshold):
 
 def calc_confidence_entropy(data_batch, k=12, temperature=0.2):
     # Get the cost volume from the student model
-    last_confidence_map = data_batch['cost_s'].squeeze(1)
+    last_confidence_map = data_batch['tgt_mask_pred_t']
     
     # Sort values in descending order and get top-k indices
     _, ind = last_confidence_map.sort(1, True)

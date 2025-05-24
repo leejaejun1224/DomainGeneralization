@@ -51,8 +51,10 @@ class Logger:
     def save_att(self, data_batch):
         # att_prob = data_batch['src_confidence_map_s']
         
-        # att_prob = data_batch['confidence_entropy_map_s'].unsqueeze(1)
-        att_prob = data_batch['tgt_mask_pred_t']
+        att_prob = data_batch['confidence_entropy_map_s'].unsqueeze(1)
+        print(att_prob.shape)
+        mask = data_batch['valid_disp'] > 0
+        # att_prob = data_batch['src_confidence_map_s']
         # att_prob = F.interpolate(att_prob, 
         #                 scale_factor=4, 
         #                 mode='bilinear', 
@@ -61,7 +63,7 @@ class Logger:
         filename = data_batch['src_left_filename'].split('/')[-1]
         
         plt.figure(figsize=(12, 8))
-        img = plt.imshow(att_prob, cmap='jet',vmin=0,vmax=1)
+        img = plt.imshow(att_prob, cmap='jet')
         cbar = plt.colorbar(img, fraction=0.015, pad=0.04)
         cbar.ax.tick_params(labelsize=8)
         plt.axis('off')
@@ -184,11 +186,11 @@ class Logger:
 
     def save_error_map(self,
                     data_batch,
-                    abs_thresh: float = 3.0,
+                    abs_thresh: float = 2.0,
                     rel_thresh: float = 0.05,
                     dilation: int = 3):
         gt   = data_batch['src_disparity'].squeeze().detach().cpu()   # Tensor H×W
-        pred = data_batch['valid_disp'].squeeze().detach().cpu()   # Tensor H×W
+        pred = data_batch['src_pred_disp_s'][0].squeeze().detach().cpu()   # Tensor H×W
 
         valid = (gt > 0) & (pred > 0)
 

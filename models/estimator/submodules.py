@@ -9,6 +9,26 @@ import numpy as np
 import math
 
 
+
+class DomainNorm(nn.Module):
+    def __init__(self, channel, l2=True):
+        super(DomainNorm, self).__init__()
+        self.normalize = nn.InstanceNorm2d(channel, affine=False)
+        self.l2 = l2
+        self.weight = nn.Parameter(torch.ones(1, channel, 1, 1))
+        self.bias = nn.Parameter(torch.zeros(1, channel, 1, 1))
+        self.weight.requires_grad = True
+        self.bias.requires_grad = True
+    
+    def forward(self, x):
+        x = self.normalize(x)
+        if self.l2:
+           x = F.normalize(x, p=2, dim=1)
+        x = x * self.weight + self.bias
+        return x
+        
+         
+        
 class BasicConv(nn.Module):
 
     def __init__(self, in_channels, out_channels, deconv=False, is_3d=False, bn=True, relu=True, **kwargs):
@@ -27,7 +47,8 @@ class BasicConv(nn.Module):
                 self.conv = nn.ConvTranspose2d(in_channels, out_channels, bias=False, **kwargs)
             else:
                 self.conv = nn.Conv2d(in_channels, out_channels, bias=False, **kwargs)
-            self.bn = nn.BatchNorm2d(out_channels)
+            # self.bn = nn.BatchNorm2d(out_channels)
+            self.bn = DomainNorm(out_channels, l2=True)
 
     def forward(self, x):
         x = self.conv(x)
