@@ -87,10 +87,10 @@ class KITTI2015Dataset(Dataset):
                 left_img = torchvision.transforms.functional.adjust_contrast(left_img, random_contrast[0])
                 left_img = torchvision.transforms.functional.adjust_saturation(left_img, random_satur[0])
                 
-                right_img = torchvision.transforms.functional.adjust_brightness(right_img, random_brightness[1])
-                right_img = torchvision.transforms.functional.adjust_gamma(right_img, random_gamma[1])
-                right_img = torchvision.transforms.functional.adjust_contrast(right_img, random_contrast[1])
-                right_img = torchvision.transforms.functional.adjust_saturation(right_img, random_satur[1])
+                right_img = torchvision.transforms.functional.adjust_brightness(right_img, random_brightness[0])
+                right_img = torchvision.transforms.functional.adjust_gamma(right_img, random_gamma[0])
+                right_img = torchvision.transforms.functional.adjust_contrast(right_img, random_contrast[0])
+                right_img = torchvision.transforms.functional.adjust_saturation(right_img, random_satur[0])
 
 
 

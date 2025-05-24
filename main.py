@@ -234,7 +234,7 @@ def main():
     if args.ckpt is not None:
         print("checkpoint", args.ckpt)
         checkpoint = torch.load(args.ckpt)
-        # model.student_model.load_state_dict(checkpoint['student_state_dict'], strict=False)
+        model.student_model.load_state_dict(checkpoint['student_state_dict'], strict=False)
         model.teacher_model.load_state_dict(checkpoint['teacher_state_dict'], strict=False)
         start_epoch = int(args.ckpt.split('_')[-1].split('.')[0])
         print("start_epoch", start_epoch)

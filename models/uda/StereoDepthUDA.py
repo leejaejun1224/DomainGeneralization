@@ -111,18 +111,18 @@ class StereoDepthUDA(StereoDepthUDAInference):
             # data_batch['pos_encodings_t'] = features[2]
         supervised_loss = calc_supervised_train_loss(data_batch, model='s')
         calc_entropy(data_batch, temperature=temperature, threshold=0.00090)
-        calc_confidence_entropy(data_batch, k=12, temperature=0.5)
+        calc_confidence_entropy(data_batch,threshold=10, k=12, temperature=0.5)
         compute_photometric_error(data_batch, threshold=0.010)
 
         data_batch['tgt_refined_pred_disp_t'], diff_mask = refine_disparity(data_batch, threshold=1.0)
         pseudo_loss, true_ratio = calc_pseudo_loss(data_batch, diff_mask, threshold=0.2, model='s')
 
         consist_photo_loss = consistency_photometric_loss(data_batch)
-        entropy_loss = calc_entropy_loss(data_batch)
+        confidence_loss = calc_entropy_loss(data_batch)
 
         if epoch < 150:
             mask_loss = 0.0
-        total_loss = 1.0 * supervised_loss #+ 1.0 * pseudo_loss + 0.2 * entropy_loss #+ 0.1 * consist_photo_loss['loss_total'] 
+        total_loss = 1.0 * supervised_loss + 1.0 * pseudo_loss + 0.3 * confidence_loss #+ 0.5 * consist_photo_loss['loss_total'] #+ 0.1 * mask_loss
         
         # total_loss = consist_photo_loss['loss_total']
 
@@ -133,8 +133,8 @@ class StereoDepthUDA(StereoDepthUDAInference):
             'true_ratio': 0.0,
             'reconstruction_loss': 0.0,
             'depth_loss': 0.0,
-            'entropy_loss': entropy_loss.item(),
-            'consist_loss' : consist_photo_loss['loss_total'].item()
+            'entropy_loss': confidence_loss.item(),
+            'consist_loss' : 0.0
         }
 
         total_loss.backward()
@@ -166,8 +166,8 @@ class StereoDepthUDA(StereoDepthUDAInference):
         data_batch['cost_s'] = features[2]
 
     
-        tgt_pred, map, features = self.student_forward(data_batch['tgt_right'], data_batch['tgt_left'], mode='right')  
-        data_batch['tgt_pred_disp_s_reverse'] = tgt_pred
+        # tgt_pred, map, features = self.student_forward(data_batch['tgt_right'], data_batch['tgt_left'], mode='right')  
+        # data_batch['tgt_pred_disp_s_reverse'] = tgt_pred
 
 
         with torch.no_grad():
@@ -187,17 +187,17 @@ class StereoDepthUDA(StereoDepthUDAInference):
         
 
         supervised_loss = calc_supervised_train_loss(data_batch, model='s')
-        calc_entropy(data_batch, threshold=0.00089)
-        calc_confidence_entropy(data_batch, k=12, temperature=0.5)
-        compute_photometric_error(data_batch, threshold=0.011)
+        calc_entropy(data_batch, threshold=0.00090)
         data_batch['tgt_refined_pred_disp_t'], diff_mask = refine_disparity(data_batch, threshold=1.0)
+        calc_confidence_entropy(data_batch,threshold=10, k=12, temperature=0.2)
+        compute_photometric_error(data_batch, threshold=0.011)
 
-        entropy_loss = calc_entropy_loss(data_batch)
-        consist_photo_loss = consistency_photometric_loss(data_batch)
+        confidence_loss = calc_entropy_loss(data_batch)
+        # consist_photo_loss = consistency_photometric_loss(data_batch)
         pseudo_loss, true_ratio = calc_pseudo_loss(data_batch, diff_mask, threshold=0.2, model='s')
 
-        # total_loss = 0.0 * supervised_loss + 1.0 * pseudo_loss + 0.1 * entropy_loss
-        total_loss = 1.0 * supervised_loss 
+        total_loss = 0.1 * supervised_loss #+ 0.5 * pseudo_loss + 0.1 * entropy_loss
+        # total_loss = 1.0 * supervised_loss 
         log_vars = {
             'loss': total_loss.item(),
             'supervised_loss': supervised_loss.item(),
@@ -205,7 +205,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
             'true_ratio': 0.0,
             'reconstruction_loss': 0.0,
             'depth_loss': 0.0,
-            'entropy_loss': entropy_loss.item()
+            'entropy_loss': confidence_loss.item()
         }
         return log_vars
 

@@ -27,7 +27,7 @@ def refine_disparity(data_batch, threshold):
     return result, diff_mask
 
 
-def calc_confidence_entropy(data_batch, k=12, temperature=0.2):
+def calc_confidence_entropy(data_batch,threshold, k=12, temperature=0.2):
     # Get the cost volume from the student model
     last_confidence_map = data_batch['tgt_mask_pred_t']
     
@@ -50,7 +50,7 @@ def calc_confidence_entropy(data_batch, k=12, temperature=0.2):
     
     # Store the entropy map in the data batch
     data_batch['confidence_entropy_map_s'] = entropy
-    
+        
     return data_batch
 
 

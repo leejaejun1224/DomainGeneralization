@@ -51,8 +51,7 @@ class Logger:
     def save_att(self, data_batch):
         # att_prob = data_batch['src_confidence_map_s']
         
-        att_prob = data_batch['confidence_entropy_map_s'].unsqueeze(1)
-        print(att_prob.shape)
+        att_prob = data_batch['tgt_confidence_map_s'].unsqueeze(1)
         mask = data_batch['valid_disp'] > 0
         # att_prob = data_batch['src_confidence_map_s']
         # att_prob = F.interpolate(att_prob, 
@@ -148,7 +147,7 @@ class Logger:
         # top_one_map = data_batch['tgt_entropy_map_idx_t_1'] * 4
         # top_one_map_resized = F.interpolate(top_one_map.float(), scale_factor=4, mode="nearest")
         
-        top_one_map_resized = data_batch['tgt_entropy_map_idx_t_1']
+        top_one_map_resized = data_batch['tgt_refined_pred_disp_t']
         top_one_map_resized = top_one_map_resized.squeeze(0).squeeze(0).cpu().numpy()
         filename = data_batch['tgt_left_filename'].split('/')[-1]
         save_path = os.path.join(self.top_one_dir, filename)
@@ -161,9 +160,9 @@ class Logger:
         plt.close()
 
 
-        entropy_map = data_batch['tgt_entropy_map_t_1']
-        # entropy_map = data_batch['confidence_entropy_map_s'].unsqueeze(1)
-        entropy_map_resized = F.interpolate(entropy_map.float(), scale_factor=4, mode="nearest")
+        # entropy_map = data_batch['confidence_entropy_map_s']
+        entropy_map = data_batch['confidence_entropy_map_s'].unsqueeze(1)
+        entropy_map_resized = F.interpolate(entropy_map.float(), scale_factor=4, mode="bilinear")
         entropy_map_resized = entropy_map_resized.squeeze(0).squeeze(0).cpu().numpy()       
         filename = data_batch['tgt_left_filename'].split('/')[-1]
         save_path = os.path.join(self.entropy_dir, filename)
@@ -186,11 +185,11 @@ class Logger:
 
     def save_error_map(self,
                     data_batch,
-                    abs_thresh: float = 2.0,
+                    abs_thresh: float = 1.1,
                     rel_thresh: float = 0.05,
                     dilation: int = 3):
-        gt   = data_batch['src_disparity'].squeeze().detach().cpu()   # Tensor H×W
-        pred = data_batch['src_pred_disp_s'][0].squeeze().detach().cpu()   # Tensor H×W
+        gt   = data_batch['tgt_disparity'].squeeze().detach().cpu()   # Tensor H×W
+        pred = data_batch['pseudo_disp'][0].squeeze().detach().cpu()   # Tensor H×W
 
         valid = (gt > 0) & (pred > 0)
 

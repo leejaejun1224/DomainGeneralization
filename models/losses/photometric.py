@@ -87,40 +87,95 @@ def ssim(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
     ssim_d = (mu_x ** 2 + mu_y ** 2 + C1) * (sigma_x + sigma_y + C2)
     return torch.clamp((1 - ssim_n / ssim_d) / 2, 0, 1)
 
+def consistency_photometric_loss(data_batch, w_photo=0.5, w_consist=0.3, w_smooth_loss=0.3):
+    # 1) Disparities
+    disp_l = data_batch['tgt_pred_disp_s'][0]          # [B, H, W]
+    disp_r = data_batch['tgt_pred_disp_s_reverse'][0]  # [B, H, W]
 
-def consistency_photometric_loss(data_batch, w_photo = 0.5, w_consist = 0.5):
-    
-    disp_l = data_batch['tgt_pred_disp_s'][0]
-    disp_r = data_batch['tgt_pred_disp_s_reverse'][0]
-
-    mean = torch.tensor([0.485, 0.456, 0.406]).view(3,1,1).to(device='cuda:0')
-    std = torch.tensor([0.229, 0.224, 0.225]).view(3,1,1).to(device='cuda:0')
-
-    img_l = (data_batch['tgt_left'] * std + mean).clamp(0,1)
+    # 2) Denormalize images
+    device = disp_l.device
+    mean = torch.tensor([0.485, 0.456, 0.406], device=device).view(1,3,1,1)
+    std  = torch.tensor([0.229, 0.224, 0.225], device=device).view(1,3,1,1)
+    img_l = (data_batch['tgt_left']  * std + mean).clamp(0,1)  # [B,3,H,W]
     img_r = (data_batch['tgt_right'] * std + mean).clamp(0,1)
 
+    # 3) Reprojection (predicted disparity)
+    reproj_l = warp_image(img_r, disp_l, 'R->L')  # [B,3,H,W]
+    reproj_r = warp_image(img_l, disp_r, 'L->R')
 
-    warp_to_left = warp_image(img_r, disp_l, 'R->L')
-    warp_to_right = warp_image(img_l, disp_r, 'L->R')
+    # 4) Photometric error maps
+    l1_l   = (img_l - reproj_l).abs().mean(1, keepdim=True)      # [B,1,H,W]
+    l1_r   = (img_r - reproj_r).abs().mean(1, keepdim=True)
+    ssim_l = 1 - ssim(img_l, reproj_l)       # [B,1,H,W]
+    ssim_r = 1 - ssim(img_r, reproj_r)
+    reproj_loss_map_l = 0.85 * ssim_l + 0.15 * l1_l
+    reproj_loss_map_r = 0.85 * ssim_r + 0.15 * l1_r
 
-    l1_l = (img_l - warp_to_left).abs().mean()
-    l1_r = (img_r - warp_to_right).abs().mean()
+    # 5) Identity reprojection (disp=0)
+    zeros = torch.zeros_like(disp_l)
+    id_l = warp_image(img_r, zeros, 'R->L')
+    id_r = warp_image(img_l, zeros, 'L->R')
+    id_l1   = (img_l - id_l).abs().mean(1, keepdim=True)
+    id_r1   = (img_r - id_r).abs().mean(1, keepdim=True)
+    id_ssim_l = 1 - ssim(img_l, id_l)
+    id_ssim_r = 1 - ssim(img_r, id_r)
+    id_loss_map_l = 0.85 * id_ssim_l + 0.15 * id_l1
+    id_loss_map_r = 0.85 * id_ssim_r + 0.15 * id_r1
 
-    ssim_l = ssim(img_l, warp_to_left).mean() 
-    ssim_r = ssim(img_r, warp_to_right).mean()
+    # 6) Auto-masking via min(reproj, identity)
+    combined_l = torch.cat([reproj_loss_map_l, id_loss_map_l], dim=1)  # [B,2,H,W]
+    combined_r = torch.cat([reproj_loss_map_r, id_loss_map_r], dim=1)
+    min_l, _ = torch.min(combined_l, dim=1, keepdim=True)  # [B,1,H,W]
+    min_r, _ = torch.min(combined_r, dim=1, keepdim=True)
 
-    photometric_loss = 0.85 * (ssim_l + ssim_r) / 2.0 + 0.15 * (l1_l + l1_r) / 2.0
+    photometric_loss = (min_l.mean() + min_r.mean()) * 0.5
 
+    # 7) Left-right consistency
     disp_warp = warp_image(disp_r.unsqueeze(1), disp_l.unsqueeze(1), 'R->L')
-    consistency_loss = (disp_l - disp_warp).abs().mean()
-
-    total_loss = w_photo * photometric_loss + w_consist * consistency_loss
-
+    consistency_loss = (disp_l.unsqueeze(1) - disp_warp).abs().mean()
+    smooth_loss = disparity_smoothness_loss(data_batch)
+    # 8) Total
+    total_loss = w_photo * photometric_loss + w_consist * consistency_loss + w_smooth_loss * smooth_loss
+    
     return {
-        'loss_total':      total_loss,
-        'loss_photo':      photometric_loss.detach(),
-        'loss_lr':         consistency_loss.detach(),
+        'loss_total': total_loss,
+        'loss_photo': photometric_loss.detach(),
+        'loss_lr':    consistency_loss.detach(),
     }
+
+# def consistency_photometric_loss(data_batch, w_photo = 0.5, w_consist = 0.5):
+    
+#     disp_l = data_batch['tgt_pred_disp_s'][0]
+#     disp_r = data_batch['tgt_pred_disp_s_reverse'][0]
+
+#     mean = torch.tensor([0.485, 0.456, 0.406]).view(3,1,1).to(device='cuda:0')
+#     std = torch.tensor([0.229, 0.224, 0.225]).view(3,1,1).to(device='cuda:0')
+
+#     img_l = (data_batch['tgt_left'] * std + mean).clamp(0,1)
+#     img_r = (data_batch['tgt_right'] * std + mean).clamp(0,1)
+
+
+#     warp_to_left = warp_image(img_r, disp_l, 'R->L')
+#     warp_to_right = warp_image(img_l, disp_r, 'L->R')
+
+#     l1_l = (img_l - warp_to_left).abs().mean()
+#     l1_r = (img_r - warp_to_right).abs().mean()
+
+#     ssim_l = ssim(img_l, warp_to_left).mean() 
+#     ssim_r = ssim(img_r, warp_to_right).mean()
+
+#     photometric_loss = 0.85 * (ssim_l + ssim_r) / 2.0 + 0.15 * (l1_l + l1_r) / 2.0
+
+#     disp_warp = warp_image(disp_r.unsqueeze(1), disp_l.unsqueeze(1), 'R->L')
+#     consistency_loss = (disp_l - disp_warp).abs().mean()
+
+#     total_loss = w_photo * photometric_loss + w_consist * consistency_loss
+
+#     return {
+#         'loss_total':      total_loss,
+#         'loss_photo':      photometric_loss.detach(),
+#         'loss_lr':         consistency_loss.detach(),
+#     }
 
 # def consistency_photometric_loss(data_batch, w_photo=1.0, w_consist=0.0, w_smooth=0.2):
 #     # 예측된 left/right disparity
