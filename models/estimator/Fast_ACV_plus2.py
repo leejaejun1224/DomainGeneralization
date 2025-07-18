@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.utils.data
 from torch.autograd import Variable
 import torch.nn.functional as F
-from models.estimator.submodules import *
+from models.estimator.submodules2 import *
 from models.estimator.refiner import *
 import math
 import gc
@@ -36,9 +36,7 @@ class SubModule(nn.Module):
 class FeatureMiTPtr(SubModule):
     def __init__(self):
         super(FeatureMiTPtr, self).__init__()
-        
-        ## 이거 이러면 파라미터에 2번 등록이 되네. 전체랑 encoder만이랑 쒯
-        self.model = SegformerModel.from_pretrained('nvidia/segformer-b0-finetuned-cityscapes-512-1024')
+        self.model = SegformerModel.from_pretrained('nvidia/segformer-b0-finetuned-ade-512-512')
         self.encoder = self.model.encoder
 
     def forward(self, x):
@@ -236,9 +234,19 @@ class hourglass_att(nn.Module):
         return conv
     
 
-class Fast_ACVNet_plus(nn.Module):
+"""
+PropagationNetLarge v2
+----------------------
+* wider ASPP rates   : (3, 6, 12, 24)
+* red–dilated stack  : dilations = [1, 2, 4, 8]
+* depth‑aware texture–hierarchy attention
+    ‑ `depth_prob` (32‑bin soft‑max from EfficientNet depth branch)
+    ‑ sigmoid → channel–wise weights → feature × weights
+* still takes a *soft* confidence map (entropy‑derived) as 1‑channel input.
+"""
+class Fast_ACVNet_plus2(nn.Module):
     def __init__(self, maxdisp, att_weights_only):
-        super(Fast_ACVNet_plus, self).__init__()
+        super(Fast_ACVNet_plus2, self).__init__()
         self.maxdisp = maxdisp
         self.att_weights_only = att_weights_only
         # self.feature = FeatureMiT()
@@ -252,28 +260,20 @@ class Fast_ACVNet_plus(nn.Module):
         self.stem_2 = nn.Sequential(
             BasicConv(3, 32, kernel_size=3, stride=2, padding=1),
             nn.Conv2d(32, 32, 3, 1, 1, bias=False),
-            # nn.BatchNorm2d(32), nn.ReLU())
-            DomainNorm(32), nn.ReLU())
+            nn.BatchNorm2d(32), nn.ReLU())
         self.stem_4 = nn.Sequential(
             BasicConv(32, 48, kernel_size=3, stride=2, padding=1),
             nn.Conv2d(48, 48, 3, 1, 1, bias=False),
-            # nn.BatchNorm2d(48), nn.ReLU())
-            DomainNorm(48), nn.ReLU())
-        
+            nn.BatchNorm2d(48), nn.ReLU())
         self.spx = nn.Sequential(nn.ConvTranspose2d(2*32, 9, kernel_size=4, stride=2, padding=1))
         self.spx_2 = Conv2x(64, 32, True)
         self.spx_4 = nn.Sequential(
             BasicConv(80, 64, kernel_size=3, stride=1, padding=1),
             nn.Conv2d(64, 64, 3, 1, 1, bias=False),
-            # nn.BatchNorm2d(64), nn.ReLU())
-            DomainNorm(64), nn.ReLU())
-        
-        # self.conv = BasicConv(80, 80, kernel_size=3, padding=1, stride=1)
-        # self.desc = nn.Conv2d(80, 80, kernel_size=1, padding=0, stride=1)
+            nn.BatchNorm2d(64), nn.ReLU())
         self.conv = BasicConv(80, 48, kernel_size=3, padding=1, stride=1)
+        # self.conv1 = BasicConv(80, 48, kernel_size=3, padding=1, stride=1)
         self.desc = nn.Conv2d(48, 48, kernel_size=1, padding=0, stride=1)
-        
-        
         # self.desc1 = nn.Conv2d(48, 48, kernel_size=1, padding=0, stride=1)
         self.corr_stem = BasicConv(1, 8, is_3d=True, kernel_size=3, stride=1, padding=1)
         self.corr_feature_att_4 = channelAtt(8, 80)
@@ -285,29 +285,21 @@ class Fast_ACVNet_plus(nn.Module):
         self.concat_feature_att_4 = channelAtt(16, 80)
         self.hourglass = hourglass(16)
 
-
     def concat_volume_generator(self, left_input, right_input, disparity_samples):
-        
-        ## 여기서 right_feature_map은 오른쪽의 feature map을 disparity만큼 왼쪽 이미지에 맞게 이동을 시킨거임.
-        
         right_feature_map, left_feature_map = SpatialTransformer_grid(left_input,
                                                                        right_input, disparity_samples)
         concat_volume = torch.cat((left_feature_map, right_feature_map), dim=1)
         return concat_volume
-    
-    
     # forward는 그대로 유지 (디버깅 print 문은 유지)
     def forward(self, left, right, mode):
         feature_left, attn_weights_left  = self.feature(left)
         feature_right, attn_weights_right = self.feature(right)
         features_left, features_right = self.feature_up(feature_left, feature_right)
 
-
         stem_2x = self.stem_2(left)
         stem_4x = self.stem_4(stem_2x)
         stem_2y = self.stem_2(right)
         stem_4y = self.stem_4(stem_2y)
-
 
         features_left_cat = torch.cat((features_left[0], stem_4x), 1)
         features_right_cat = torch.cat((features_right[0], stem_4y), 1)
@@ -330,37 +322,19 @@ class Fast_ACVNet_plus(nn.Module):
         ind_k = ind_k.sort(2, False)[0]
         att_topk = torch.gather(att_weights_prob, 2, ind_k)
         disparity_sample_topk = ind_k.squeeze(1).float()
-        
-        
         if not self.att_weights_only:
             concat_features_left = self.concat_feature(features_left_cat)
             concat_features_right = self.concat_feature(features_right_cat)
-            
-            ## 이 concat volume에서는 right feature를 왼쪽으로 disparity 만큼 이동시킨거랑, left feature가 concat되어있음. 결국 반복인거지.
-            ## 그럼 차원은 [batch, 2*channel, disparity topk, h, w] 가 됨. 여기서는 곱하기 2 해서 32
             concat_volume = self.concat_volume_generator(concat_features_left, concat_features_right, disparity_sample_topk)
             volume = att_topk * concat_volume
             volume = self.concat_stem(volume)
-            
-            ## 여기는 volume에서 sigmoid로 각 채널마다 중요도를 계산을 하고 그걸 앞서 구한 features_left_cat에 곱함.
-            ## 그런데 여기는 1x1 convolution을 거치니까 여기서는 새로운 feature의 조합을 계산을 하지는 않는다.
-            ## sigmoid를 통해 채널의 중요도를 계산하고 volume에 attention을 주는 것 뿐이니까.
             volume = self.concat_feature_att_4(volume, features_left_cat)
-            
-            ## 근데 여기서 features_left는 stem을 거치지 않고 feature upsample만 feature map이다. 왜냐면 여기서는 장거리의 context를 반영을 하는 것이 목적인데
-            ## stem을 끼게 되면 local한 특징을 너무 많이 포함하게 된다. 근데 애초에 왜 hourglass가 위에서 말한 역할을 수행해야만 하는지는 잘 모르겠다.
             cost = self.hourglass(volume, features_left)
-            ### 여기까지가 1/4 사이즈 prediction하는거고
-            
-            
             xspx = self.spx_4(features_left_cat)
             xspx = self.spx_2(xspx, stem_2x)
             spx_pred = self.spx(xspx)
-            
             spx_pred = F.softmax(spx_pred, 1)    
             
-            ### 여기가 upsample할 때 필요한 context
-
         att_prob = torch.gather(att_weights, 2, ind_k).squeeze(1)
         att_prob = F.softmax(att_prob, dim=1)
 
@@ -370,12 +344,7 @@ class Fast_ACVNet_plus(nn.Module):
         if self.att_weights_only:
             return [pred_att_up * 4, pred_att * 4]
         
-        ## 그러면 여기서 cost에서 disparity의 probability를 구하고, 
-        ## 그거를 disparity sample topk에 weight sum해서 하나의 disparity를 결정
         pred, prob = regression_topk(cost.squeeze(1), disparity_sample_topk, 12)
-        
-        ## 고 다음에 주변과의 유사도를 다시 계산해서 주변 9개의 probability를 구해서
-        ## 또 똑같이 가중합을 해서 찐 최종을 구함.
         pred_up = context_upsample(pred, spx_pred)
         prob_up1 = context_upsample(prob[:,0,:,:].unsqueeze(1),spx_pred)
         prob_up2 = context_upsample(prob[:,1,:,:].unsqueeze(1),spx_pred)
@@ -384,4 +353,4 @@ class Fast_ACVNet_plus(nn.Module):
         confidence_map, _ = att_prob.max(dim=1, keepdim=True)
         return [pred_up * 4, pred.squeeze(1) * 4, pred_att_up * 4, pred_att * 4], \
             [confidence, corr_volume_2, prob, corr_volume_2], \
-            [feature_left, attn_weights_left, cost, match_left, match_right]
+            [feature_left, attn_weights_left, cost]

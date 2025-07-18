@@ -16,6 +16,7 @@ from experiment import prepare_cfg, adjust_learning_rate
 from tools.plot_loss import plot_loss_graph, plot_true_ratio, plot_threshold, plot_reconstruction_loss
 from tools.metrics import EPE_metric, D1_metric, Thres_metric
 from models.tools.threshold_manager import EntropyThresholdManager, ThresholdManager
+from transformers import SegformerModel
 
 cudnn.benchmark = True
 os.environ['CUDA_VISIBLE_DEVICES'] = '0, 1'
@@ -43,7 +44,7 @@ def setup_train_loaders(cfg):
         datapath=cfg['dataset']['src_root'],
         list_filename=cfg['dataset']['src_filelist'],
         training=True, 
-        aug=False
+        aug=True
     )
     
     target_dataset = __datasets__[cfg['dataset']['tgt_type']](
@@ -240,7 +241,15 @@ def main():
         print("start_epoch", start_epoch)
         log_dict['ckpt'] = args.ckpt
         log_dict['ckpt_epoch'] = start_epoch
-
+        
+    # segformer의 엔코더를 pretrained으로 두고 싶으면 주석 해제
+    fresh_segformer = SegformerModel.from_pretrained(
+        'nvidia/segformer-b0-finetuned-cityscapes-512-1024'
+    ).to('cuda:0')
+    fresh_sd = fresh_segformer.state_dict()
+    model.teacher_model.feature.model.load_state_dict(fresh_sd, strict=False)
+    model.student_model.feature.model.load_state_dict(fresh_sd, strict=False)
+    
     model.to('cuda:0')
     model.init_ema()
 

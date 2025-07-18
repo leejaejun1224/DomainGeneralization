@@ -6,7 +6,6 @@ training/image_2/000018_10.png training/image_3/000018_10.png training/disp_occ_
 training/image_2/000031_10.png training/image_3/000031_10.png training/disp_occ_0/000031_10.png
 training/image_2/000046_10.png training/image_3/000046_10.png training/disp_occ_0/000046_10.png
 training/image_2/000051_10.png training/image_3/000051_10.png training/disp_occ_0/000051_10.png
-training/image_2/000052_10.png training/image_3/000052_10.png training/disp_occ_0/000052_10.png
 training/image_2/000053_10.png training/image_3/000053_10.png training/disp_occ_0/000053_10.png
 training/image_2/000054_10.png training/image_3/000054_10.png training/disp_occ_0/000054_10.png
 training/image_2/000055_10.png training/image_3/000055_10.png training/disp_occ_0/000055_10.png
@@ -19,10 +18,14 @@ training/image_2/000106_10.png training/image_3/000106_10.png training/disp_occ_
 training/image_2/000107_10.png training/image_3/000107_10.png training/disp_occ_0/000107_10.png
 training/image_2/000108_10.png training/image_3/000108_10.png training/disp_occ_0/000108_10.png
 training/image_2/000121_10.png training/image_3/000121_10.png training/disp_occ_0/000121_10.png
+training/image_2/000125_10.png training/image_3/000125_10.png training/disp_occ_0/000125_10.png
 training/image_2/000126_10.png training/image_3/000126_10.png training/disp_occ_0/000126_10.png
 training/image_2/000128_10.png training/image_3/000128_10.png training/disp_occ_0/000128_10.png
+training/image_2/000129_10.png training/image_3/000129_10.png training/disp_occ_0/000129_10.png
+training/image_2/000131_10.png training/image_3/000131_10.png training/disp_occ_0/000131_10.png
 training/image_2/000144_10.png training/image_3/000144_10.png training/disp_occ_0/000144_10.png
 training/image_2/000147_10.png training/image_3/000147_10.png training/disp_occ_0/000147_10.png
+training/image_2/000163_10.png training/image_3/000163_10.png training/disp_occ_0/000163_10.png
 training/image_2/000183_10.png training/image_3/000183_10.png training/disp_occ_0/000183_10.png
 training/image_2/000189_10.png training/image_3/000189_10.png training/disp_occ_0/000189_10.png
 training/image_2/000067_10.png training/image_3/000067_10.png training/disp_occ_0/000067_10.png

@@ -10,9 +10,9 @@ import torch
 import torchvision
 import matplotlib.pyplot as plt
 from scipy.ndimage import gaussian_filter
+from datasets.transform import HFStereoV2
 
-
-class KITTI2012Dataset(Dataset):
+class KITTI2015Dataset(Dataset):
     def __init__(self, datapath, list_filename, training, max_len=None, aug=False):
         self.datapath = datapath
         self.left_filenames, self.right_filenames, self.disp_filenames = self.load_path(list_filename)

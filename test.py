@@ -18,6 +18,8 @@ from tools.metrics import EPE_metric, D1_metric, Thres_metric, tensor2float
 from tools.write_log import Logger
 from collections import OrderedDict
 from itertools import starmap
+from copy import deepcopy
+from transformers import SegformerModel
 
 cudnn.benchmark = True
 os.environ['CUDA_VISIBLE_DEVICES'] = '0, 1'
@@ -29,6 +31,7 @@ def setup_args():
     parser.add_argument('--seed', default=1, metavar='S', help='random seed(default = 1)')
     parser.add_argument('--log_dir', default='./log', help='log directory')
     parser.add_argument('--ckpt', default='', help='checkpoint')
+    parser.add_argument('--encoder_ckpt', default=None, help='checkpoint for encoder only')
     parser.add_argument('--compute_metrics', default=True, help='compute error')
     parser.add_argument('--save_disp', default=True, help='save disparity')
     parser.add_argument('--save_att', default=True, help='save attention')
@@ -38,13 +41,64 @@ def setup_args():
     parser.add_argument('--compare_costvolume', default=True, help='compare costvolume')
     return parser.parse_args()
 
-def setup_model(cfg, ckpt_path):
-    model = __models__['StereoDepthUDA'](cfg)
-    checkpoint = torch.load(ckpt_path)
-    model.student_model.load_state_dict(checkpoint['student_state_dict'])
-    model.teacher_model.load_state_dict(checkpoint['teacher_state_dict'])
-    model.to('cuda:0')
-    return model
+def setup_model(cfg, ckpt_path, encoder_ckpt_path=None):
+    model = __models__["StereoDepthUDA"](cfg)
+    sd = torch.load(ckpt_path)
+    model.student_model.load_state_dict(sd["student_state_dict"])
+    model.teacher_model.load_state_dict(sd["teacher_state_dict"])
+    # print(sd["student_state_dict"].keys())
+    changed = unchanged = 0                 # 집계용 카운터
+
+    if encoder_ckpt_path is not None:
+        enc_sd = torch.load(encoder_ckpt_path)
+        endocer_prefixes = (
+            "feature.model.", "feature.encoder.",
+            "feature_up.",   "stem_2.", "stem_4.",
+            "conv.",         "desc."
+        )
+        
+        
+        # decoder_prefixes = (
+        #     "hourglass_att", "hourglass", "spx_2", "spx_4",
+        #     "corr_stem", "corr_feature_att_4", "concat_feature",
+        #     "concat_stem", "concat_feature_att_4", 
+        # )
+        
+        
+        enc_keys = [
+            # k for k in enc_sd["teacher_state_dict"]
+            k for k in enc_sd["teacher_state_dict"]
+            
+            ## 여기서 인코더 디코더 바꿈.
+            if k.startswith(endocer_prefixes) and k in model.teacher_model.state_dict()
+        ]
+        
+        backup = {k: deepcopy(model.teacher_model.state_dict()[k]) for k in enc_keys}
+        for k in enc_keys:
+            # model.teacher_model.state_dict()[k].copy_(enc_sd["teacher_state_dict"][k])
+            model.teacher_model.state_dict()[k].copy_(enc_sd["teacher_state_dict"][k])
+        for k in enc_keys:
+            new_w = model.teacher_model.state_dict()[k]
+            if torch.allclose(backup[k], new_w):
+                unchanged += 1
+                
+            else:
+                changed += 1
+
+    print(f"[Encoder CKPT]  changed: {changed:>4d}   unchanged: {unchanged:>4d}"
+          f"   (total target: {changed+unchanged})")
+
+
+    # segformer의 엔코더를 pretrained으로 두고 싶으면 주석 해제
+    fresh_segformer = SegformerModel.from_pretrained(
+        'nvidia/segformer-b0-finetuned-cityscapes-512-1024'
+    ).to('cuda:0')
+    fresh_sd = fresh_segformer.state_dict()
+    model.teacher_model.feature.model.load_state_dict(fresh_sd, strict=False)
+    model.student_model.feature.model.load_state_dict(fresh_sd, strict=False)
+
+
+    return model.to('cuda:0')
 
 def process_batch(data_batch, source_batch, target_batch):
     for key in source_batch:
@@ -116,7 +170,7 @@ def main():
         drop_last=False
     )
 
-    model = setup_model(cfg, args.ckpt)
+    model = setup_model(cfg, args.ckpt, args.encoder_ckpt)
     model.eval()
     
     metrics_dict = {}

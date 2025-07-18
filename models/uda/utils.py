@@ -2,14 +2,13 @@ import torch
 import torch.nn.functional as F
 
 
-def refine_disparity(data_batch, threshold):
+def refine_disparity(data_batch, mask=None, threshold=3.0):
     top_one = data_batch['tgt_entropy_map_idx_t_2']*4.0
-    top_one = F.interpolate(top_one, scale_factor=4,mode='bilinear')
+    top_one = F.interpolate(top_one, scale_factor=4,mode='nearest')
     pred_disp = data_batch['pseudo_disp'][0].unsqueeze(1)
     
-    
-    mask = (pred_disp > 0) & (pred_disp < 256)
-
+    if mask is None:
+        mask = (pred_disp > 0) & (pred_disp < 192)
     top_one = top_one * mask 
     pred_disp = pred_disp * mask
 
@@ -30,6 +29,7 @@ def refine_disparity(data_batch, threshold):
 def calc_confidence_entropy(data_batch,threshold, k=12, temperature=0.2):
     # Get the cost volume from the student model
     last_confidence_map = data_batch['tgt_mask_pred_t']
+    pred = data_batch['pseudo_disp'][1].unsqueeze(1)  # [B, 1, H, W]
     
     # Sort values in descending order and get top-k indices
     _, ind = last_confidence_map.sort(1, True)
@@ -50,64 +50,64 @@ def calc_confidence_entropy(data_batch,threshold, k=12, temperature=0.2):
     
     # Store the entropy map in the data batch
     data_batch['confidence_entropy_map_s'] = entropy
-        
+    mask = entropy < threshold
+    data_batch['tgt_confidence_entropy_disp_t'] = pred * mask.float()
     return data_batch
 
 
 def calc_entropy(data_batch, threshold, k=12, temperature=0.5, eps=1e-6):
     for data in ['src', 'tgt']:
         for model in ['s', 't']:
-            for i in range(1,3):
+            for i in range(1, 3):
+                # ─────────────────────────────────────────────
                 # 1) cost volume 가져오기
-                key = data + '_corr_volume_' + model + '_' + str(i) 
+                # ─────────────────────────────────────────────
+                key = f"{data}_corr_volume_{model}_{i}"
                 if key not in data_batch:
                     continue
-                vol = data_batch[key].squeeze(1)       # [B, D, H, W]
+                vol = data_batch[key].squeeze(1)      # [B, D, H, W]
                 B, D, H, W = vol.shape
 
+                # ─────────────────────────────────────────────
                 # 2) temperature scaling & softmax
-                temp = (0.5 if model == 's' else temperature)
-                p_vol = F.softmax(vol / temp, dim=1)   # [B, D, H, W]
+                # ─────────────────────────────────────────────
+                temp = 0.5 if model == 's' else temperature
+                p_vol = F.softmax(vol / temp, dim=1)  # [B, D, H, W]
 
-                # 3) top-k 확률만 골라 정규화 → topk_p
-                topk_vals, _ = torch.topk(p_vol, k=k, dim=1)            # [B, k, H, W]
-                sum_topk = topk_vals.sum(dim=1, keepdim=True).clamp(min=eps)   # [B,1,H,W]
-                topk_p = topk_vals / sum_topk                                   # [B, k, H, W]
-
+                # ─────────────────────────────────────────────
+                # 3) top‑k 확률 정규화 후 entropy map
+                # ─────────────────────────────────────────────
+                topk_vals, _ = torch.topk(p_vol, k=k, dim=1)       # [B,k,H,W]
+                sum_topk = topk_vals.sum(dim=1, keepdim=True).clamp(min=eps)
+                topk_p = topk_vals / sum_topk
                 H_map = -(topk_p * torch.log(topk_p)).sum(dim=1, keepdim=True)  # [B,1,H,W]
-                H_map = H_map - 2.484
-                norm_map = H_map * -1.0
-                min_val = norm_map.min()
-                max_val = norm_map.max()
-                h_norm = (norm_map - min_val) / (max_val - min_val)
 
-
-                # 5) threshold mask
-                if isinstance(threshold, torch.Tensor) and threshold.shape[0] == B:
-                    thr = threshold.view(B,1,1,1)
-                else:
-                    thr = float(threshold)
-                mask_bool = (H_map < thr)           # [B,1,H,W]
+                # ─────────────────────────────────────────────
+                # 4) threshold mask
+                # ─────────────────────────────────────────────
+                thr = threshold.view(B,1,1,1) if torch.is_tensor(threshold) and threshold.shape[0]==B else float(threshold)
+                mask_bool = (H_map < thr)            # [B,1,H,W]
                 mask = mask_bool.float()
 
-                # 6) Straight-Through Hard Top-1 ->  maybe not a good idea..? just for check
-                top1_idx = torch.argmax(p_vol, dim=1, keepdim=True)            # [B,1,H,W]
-                hard_onehot = F.one_hot(top1_idx.squeeze(1), num_classes=D)    \
-                                .permute(0,3,1,2).float()                      # [B,D,H,W]
-                p_hard = hard_onehot - p_vol.detach() + p_vol                  # [B,D,H,W]
+                # ─────────────────────────────────────────────
+                # 5) Straight‑Through Hard Top‑1 + mask
+                # ─────────────────────────────────────────────
+                top1_idx = torch.argmax(p_vol, dim=1, keepdim=True)     # [B,1,H,W]
+                hard_onehot = F.one_hot(top1_idx.squeeze(1), num_classes=D) \
+                                .permute(0,3,1,2).float()              # [B,D,H,W]
+                p_hard = hard_onehot - p_vol.detach() + p_vol
                 disp_vals = torch.arange(D, device=vol.device).view(1,D,1,1).float()
-                hard_disp = (p_hard * disp_vals).sum(dim=1, keepdim=True)       # [B,1,H,W]
+                hard_disp = (p_hard * disp_vals).sum(dim=1, keepdim=True)  # [B,1,H,W]
+                refined_disp = hard_disp * mask                             # [B,1,H,W]
 
-                # 7) hard_disp에 mask 직접 적용 -> 아닌거 다 날려
-                refined_disp = hard_disp * mask                                 # [B,1,H,W]
+                # ─────────────────────────────────────────────
+                # ★ 6) 추가 블록 ★  (i == 1일 때만) - 누적 평균 업데이트
+                # ─────────────────────────────────────────────
 
-                disp_vals = torch.arange(D, device=vol.device, dtype=vol.dtype) \
-                                .view(1, D, 1, 1)
-                disp_map = (F.softmax(vol, dim=1) * disp_vals).sum(dim=1, keepdim=True)
 
-                data_batch[data + '_entropy_mask_'    + model + '_' + str(i)] = mask_bool
-                data_batch[data + '_entropy_map_'     + model + '_' + str(i)] = h_norm
-                data_batch[data + '_entropy_map_idx_' + model + '_' + str(i)] = refined_disp
+                data_batch[f"{data}_entropy_mask_{model}_{i}"] = mask_bool
+                data_batch[f"{data}_entropy_map_{model}_{i}"]  = H_map
+                data_batch[f"{data}_entropy_map_idx_{model}_{i}"] = refined_disp
 
     return data_batch
 

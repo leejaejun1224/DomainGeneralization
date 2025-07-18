@@ -87,61 +87,140 @@ def ssim(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
     ssim_d = (mu_x ** 2 + mu_y ** 2 + C1) * (sigma_x + sigma_y + C2)
     return torch.clamp((1 - ssim_n / ssim_d) / 2, 0, 1)
 
-def consistency_photometric_loss(data_batch, w_photo=0.5, w_consist=0.3, w_smooth_loss=0.3):
-    # 1) Disparities
-    disp_l = data_batch['tgt_pred_disp_s'][0]          # [B, H, W]
-    disp_r = data_batch['tgt_pred_disp_s_reverse'][0]  # [B, H, W]
-
-    # 2) Denormalize images
+def consistency_photometric_loss(
+        data_batch,
+        w_photo=0.8,        # photometric loss 가중치
+        w_consist=0.1,      # consistency loss 가중치
+        w_smooth_loss=0.1,
+        w_div_loss=0.05,
+        disp_thresh_px=3.0,  # occlusion 임계값 (논문에서 δ=3)
+        photo_thresh=0.3
+):
+    import torch
+    
+    # 예측 시차
+    disp_l = data_batch['tgt_pred_disp_s'][0]
+    disp_r = data_batch['tgt_pred_disp_s_reverse'][0]
+    
+    # 배치 차원 추가 (필요시)
+    if disp_l.dim() == 2:
+        disp_l = disp_l.unsqueeze(0)
+        disp_r = disp_r.unsqueeze(0)
+    
+    # 이미지 복원
     device = disp_l.device
-    mean = torch.tensor([0.485, 0.456, 0.406], device=device).view(1,3,1,1)
-    std  = torch.tensor([0.229, 0.224, 0.225], device=device).view(1,3,1,1)
-    img_l = (data_batch['tgt_left']  * std + mean).clamp(0,1)  # [B,3,H,W]
-    img_r = (data_batch['tgt_right'] * std + mean).clamp(0,1)
-
-    # 3) Reprojection (predicted disparity)
-    reproj_l = warp_image(img_r, disp_l, 'R->L')  # [B,3,H,W]
+    mean = torch.tensor([0.485, 0.456, 0.406], device=device)[:, None, None]
+    std  = torch.tensor([0.229, 0.224, 0.225], device=device)[:, None, None]
+    img_l = (data_batch['tgt_left'] * std + mean).clamp(0, 1)
+    img_r = (data_batch['tgt_right'] * std + mean).clamp(0, 1)
+    
+    # 재투영
+    reproj_l = warp_image(img_r, disp_l, 'R->L')
     reproj_r = warp_image(img_l, disp_r, 'L->R')
-
-    # 4) Photometric error maps
-    l1_l   = (img_l - reproj_l).abs().mean(1, keepdim=True)      # [B,1,H,W]
-    l1_r   = (img_r - reproj_r).abs().mean(1, keepdim=True)
-    ssim_l = 1 - ssim(img_l, reproj_l)       # [B,1,H,W]
-    ssim_r = 1 - ssim(img_r, reproj_r)
-    reproj_loss_map_l = 0.85 * ssim_l + 0.15 * l1_l
-    reproj_loss_map_r = 0.85 * ssim_r + 0.15 * l1_r
-
-    # 5) Identity reprojection (disp=0)
-    zeros = torch.zeros_like(disp_l)
-    id_l = warp_image(img_r, zeros, 'R->L')
-    id_r = warp_image(img_l, zeros, 'L->R')
-    id_l1   = (img_l - id_l).abs().mean(1, keepdim=True)
-    id_r1   = (img_r - id_r).abs().mean(1, keepdim=True)
-    id_ssim_l = 1 - ssim(img_l, id_l)
-    id_ssim_r = 1 - ssim(img_r, id_r)
-    id_loss_map_l = 0.85 * id_ssim_l + 0.15 * id_l1
-    id_loss_map_r = 0.85 * id_ssim_r + 0.15 * id_r1
-
-    # 6) Auto-masking via min(reproj, identity)
-    combined_l = torch.cat([reproj_loss_map_l, id_loss_map_l], dim=1)  # [B,2,H,W]
-    combined_r = torch.cat([reproj_loss_map_r, id_loss_map_r], dim=1)
-    min_l, _ = torch.min(combined_l, dim=1, keepdim=True)  # [B,1,H,W]
-    min_r, _ = torch.min(combined_r, dim=1, keepdim=True)
-
-    photometric_loss = (min_l.mean() + min_r.mean()) * 0.5
-
-    # 7) Left-right consistency
-    disp_warp = warp_image(disp_r.unsqueeze(1), disp_l.unsqueeze(1), 'R->L')
-    consistency_loss = (disp_l.unsqueeze(1) - disp_warp).abs().mean()
+    
+    # Occlusion 마스크 생성 (FCStereo 방식)
+    occlusion_mask = add_occlusion_mask(disp_l, disp_r, thresh=disp_thresh_px)
+    
+    # data_batch에 마스크 추가
+    data_batch['occlusion_mask_l'] = occlusion_mask
+    data_batch['occlusion_mask_r'] = occlusion_mask  # 대칭적으로 사용
+    
+    # Photometric loss (마스크 적용)
+    ssim_l = ssim(img_l, reproj_l)
+    ssim_r = ssim(img_r, reproj_r)
+    l1_l = (img_l - reproj_l).abs()
+    l1_r = (img_r - reproj_r).abs()
+    
+    # 마스크를 적용한 photometric loss
+    mask_expanded = occlusion_mask.unsqueeze(1)  # [B, 1, H, W]
+    
+    ssim_l_masked = (ssim_l * mask_expanded).sum() / (mask_expanded.sum() + 1e-7)
+    ssim_r_masked = (ssim_r * mask_expanded).sum() / (mask_expanded.sum() + 1e-7)
+    l1_l_masked = (l1_l * mask_expanded).sum() / (mask_expanded.sum() + 1e-7)
+    l1_r_masked = (l1_r * mask_expanded).sum() / (mask_expanded.sum() + 1e-7)
+    
+    photometric_loss = 0.85 * (ssim_l_masked + ssim_r_masked) / 2.0 + \
+                      0.15 * (l1_l_masked + l1_r_masked) / 2.0
+    
+    # Consistency loss (마스크 적용)
+    disp_r_warp = warp_image(disp_r.unsqueeze(1), disp_l.unsqueeze(1), 'R->L')
+    consistency_diff = (disp_l.unsqueeze(1) - disp_r_warp).abs()
+    
+    # 마스크를 적용한 consistency loss
+    consistency_loss = (consistency_diff * mask_expanded).sum() / (mask_expanded.sum() + 1e-7)
+    
+    # Smoothness losses
     smooth_loss = disparity_smoothness_loss(data_batch)
-    # 8) Total
-    total_loss = w_photo * photometric_loss + w_consist * consistency_loss + w_smooth_loss * smooth_loss
+    div_loss = disparity_div_smoothness_loss(data_batch)
+    
+    # 전체 loss 조합
+    total_loss = (w_photo * photometric_loss + 
+                  w_consist * consistency_loss +
+                  w_smooth_loss * smooth_loss + 
+                  w_div_loss * div_loss)
     
     return {
-        'loss_total': total_loss,
-        'loss_photo': photometric_loss.detach(),
-        'loss_lr':    consistency_loss.detach(),
+        "loss_total": total_loss,
+        "loss_photo": photometric_loss.detach(),
+        "loss_consist": consistency_loss.detach(),
+        "loss_smooth": smooth_loss.detach(),
+        "loss_div": div_loss.detach(),
+        "occlusion_ratio": (1.0 - occlusion_mask.mean()).detach()  # 추가 정보
     }
+
+def add_occlusion_mask(disp_l, disp_r, thresh=3.0):
+    """
+    FCStereo 논문의 left-right geometric consistency check 구현
+    
+    Args:
+        disp_l: 왼쪽 disparity map [B, H, W]
+        disp_r: 오른쪽 disparity map [B, H, W]  
+        thresh: 일관성 임계값 (논문에서 δ=3 사용)
+    
+    Returns:
+        mask: occlusion mask [B, H, W] (1: valid, 0: occluded)
+    """
+    import torch
+    
+    B, H, W = disp_l.shape
+    device = disp_l.device
+    
+    # 격자 좌표 생성
+    grid_y, grid_x = torch.meshgrid(
+        torch.arange(H, device=device), 
+        torch.arange(W, device=device),
+        indexing='ij'
+    )
+    grid_x = grid_x.float()
+    grid_y = grid_y.float()
+    
+    # 오른쪽 disparity를 왼쪽으로 warp
+    src_x = grid_x - disp_r[0]  # disparity만큼 이동
+    src_y = grid_y
+    
+    # normalized 좌표 생성 ([-1,1] 범위)
+    src_x_norm = 2.0 * (src_x / (W - 1)) - 1.0
+    src_y_norm = 2.0 * (src_y / (H - 1)) - 1.0
+    
+    grid_norm = torch.stack((src_x_norm, src_y_norm), dim=2)  # [H, W, 2]
+    grid_norm = grid_norm.unsqueeze(0).repeat(B, 1, 1, 1)  # [B, H, W, 2]
+    
+    # grid_sample을 사용한 warping
+    disp_r_1c = disp_r.unsqueeze(1)  # [B, 1, H, W]
+    disp_r_warped = torch.nn.functional.grid_sample(
+        disp_r_1c, grid_norm, 
+        mode='bilinear', 
+        padding_mode='border', 
+        align_corners=True
+    ).squeeze(1)  # [B, H, W]
+    
+    # 재투영 오차 계산 (논문의 R 값)
+    reprojection_error = torch.abs(disp_l - disp_r_warped)
+    
+    # 마스크 생성 (임계값 이하면 valid)
+    mask = (reprojection_error < thresh).float()
+    
+    return mask
 
 # def consistency_photometric_loss(data_batch, w_photo = 0.5, w_consist = 0.5):
     
@@ -236,3 +315,43 @@ def disparity_smoothness_loss(data_batch):
     loss = (smooth_x.sum() + smooth_y.sum())/(smooth_x.numel() + smooth_y.numel() + 1e-8)
 
     return loss
+def disparity_div_smoothness_loss(
+        data_batch,
+        alpha: float = 10.0,
+        clip_value: float = 2.0,
+        eps: float = 1e-8,
+):
+    """
+    DIV-D : 클램프된 2차(edge-aware) 평활 손실
+    """
+    device = data_batch['tgt_left'].device
+    mean = torch.tensor([0.485, 0.456, 0.406], device=device)[:, None, None]
+    std  = torch.tensor([0.229, 0.224, 0.225], device=device)[:, None, None]
+
+    # ─── 0. 입력 복원 ───────────────────────────────────────────
+    img  = (data_batch['tgt_left'] * std + mean).clamp(0, 1)        # [B,3,H,W]
+    disp = data_batch['tgt_pred_disp_s'][0].unsqueeze(1)            # [B,1,H,W]
+
+    # ─── 1. 2차 차분(중앙 차분) ────────────────────────────────
+    dxx = disp[:, :, :, :-2] - 2.0 * disp[:, :, :, 1:-1] + disp[:, :, :, 2:]   # [B,1,H,W-2]
+    dyy = disp[:, :, :-2, :] - 2.0 * disp[:, :, 1:-1, :] + disp[:, :, 2:, :]   # [B,1,H-2,W]
+
+    dxx = torch.clamp(dxx, -clip_value, clip_value)
+    dyy = torch.clamp(dyy, -clip_value, clip_value)
+
+    # ─── 2. 엣지-가중치(크기 정합) ─────────────────────────────
+    # 1-차 밝기 gradient
+    gx = torch.abs(img[:, :, :, 1:] - img[:, :, :, :-1])             # [B,3,H,W-1]
+    gy = torch.abs(img[:, :, 1:, :] - img[:, :, :-1, :])             # [B,3,H-1,W]
+
+    # dxx 위치(열 1~W-2)의 엣지값 = 인접 두 gradient 평균
+    gx_c = 0.5 * (gx[:, :, :, :-1] + gx[:, :, :, 1:])               # [B,3,H,W-2]
+    gy_c = 0.5 * (gy[:, :, :-1, :] + gy[:, :, 1:, :])               # [B,3,H-2,W]
+
+    wx = torch.exp(-alpha * gx_c.mean(1, keepdim=True))             # [B,1,H,W-2]
+    wy = torch.exp(-alpha * gy_c.mean(1, keepdim=True))             # [B,1,H-2,W]
+
+    # ─── 3. 손실 계산 ──────────────────────────────────────────
+    loss_num = (torch.abs(dxx) * wx).sum() + (torch.abs(dyy) * wy).sum()
+    loss_den = dxx.numel() + dyy.numel() + eps
+    return loss_num / loss_den

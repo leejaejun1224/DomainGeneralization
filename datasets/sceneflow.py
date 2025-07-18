@@ -20,6 +20,7 @@ class FlyingThingDataset(Dataset):
         self.data_len = len(self.left_filenames)
         self.max_len = max_len
         self.aug = aug
+        self.erase_low = True  # Erase low disparity values
         if self.training:
             assert self.disp_filenames is not None
 
@@ -57,6 +58,10 @@ class FlyingThingDataset(Dataset):
         dy_imgL = cv2.Sobel(left_img_np,cv2.CV_32F,0,1,ksize=3)
         dxy_imgL=np.sqrt(np.sum(np.square(dx_imgL),axis=-1)+np.sum(np.square(dy_imgL),axis=-1))
         dxy_imgL = dxy_imgL/(np.max(dxy_imgL)+1e-5)
+
+        if self.erase_low:
+            disparity[disparity > -2] = 0  # Erase low disparity values
+
 
         if self.training:
             if self.aug:

@@ -27,7 +27,7 @@ def calc_entropy_loss(data_batch):
     # entropy_loss = F.smooth_l1_loss(source_entropy[mask], target_entropy[mask], reduction='mean')
     mask = (data_batch['tgt_refined_pred_disp_t'] > 0).squeeze(1)
     confidence_map = data_batch['tgt_confidence_map_s']
-    target = torch.ones_like(confidence_map) * 0.99
+    target = torch.ones_like(confidence_map)
     entropy_loss = F.smooth_l1_loss(confidence_map[mask], target[mask], reduction='mean')
     return entropy_loss
 
@@ -159,7 +159,7 @@ def calc_pseudo_loss(data_batch, diff_mask, threshold, model='s'):
     masks = [mask, mask_low, mask, mask_low, valid_mask]
 
 
-    weights = [1.0, 0.3, 0.5, 0.3, 1.0]
+    weights = [0.8, 0.3, 0.5, 0.3, 1.0]
     true_count = 0.0
     pseudo_label_loss = get_loss(pred_disp, pseudo_disp, masks, weights)
 
@@ -291,3 +291,51 @@ def compute_ssim(img1, img2, window_size=3, channel=3):
     ssim_map = ((2*mean1*mean2 + C1)*(2*sigma12 + C2)) / ((mean1_sq + mean2_sq + C1)*(sigma1_sq + sigma2_sq + C2))
     
     return ssim_map.mean(dim=(1,2,3))
+
+class JINOLoss(nn.Module):
+    def __init__(self, temp: float = 0.07, max_disp: int = 80):
+        super().__init__()
+        self.T = temp
+        self.max_disp = max_disp
+
+    def forward(
+        self,
+        fs: torch.Tensor,  # (B,C,Hf,Wf) 학생
+        ft: torch.Tensor,  # (B,C,Hf,Wf) 교사
+        ps: int = 4,       # patch_size
+        stride: int = 4,
+    ) -> torch.Tensor:
+        B, C, Hf, Wf = fs.shape
+        Cp = C * ps * ps
+        Hs = Hf - ps + 1
+        Ws = Wf - ps + 1
+
+        all_loss = []
+        for b in range(B):
+            s_unf = F.unfold(fs[b : b + 1], kernel_size=(ps, ps))  # (1, Cp, L)
+            patch_vec = s_unf[0].T                                 # (L, Cp)
+            patch_vec = F.normalize(patch_vec, dim=1)              # (L, Cp)
+            patch_vec_reshaped = patch_vec.view(Hs, Ws, Cp)        # (Hs, Ws, Cp)
+
+            t_unf = F.unfold(ft[b : b + 1], (ps, ps)).view(Cp, Hs, Ws)
+            t_unf = t_unf.permute(1, 2, 0)                        # (Hs, Ws, Cp)
+            t_unf = F.normalize(t_unf, dim=2)
+
+            max_shift = self.max_disp // stride
+
+            logits = torch.bmm(t_unf, patch_vec_reshaped.permute(0, 2, 1)) / self.T  # (Hs, Ws, Ws)
+
+            coords = torch.arange(Ws, device=fs.device).view(1, -1)
+            coords_row = coords.repeat(Hs, 1)  # (Hs, Ws)
+            delta = coords_row.unsqueeze(2) - coords_row.unsqueeze(1)  # (Hs, Ws, Ws)
+            mask = (delta >= 0) & (delta <= max_shift)  # (Hs, Ws, Ws)
+
+            logits = logits.masked_fill(~mask, float('-1e9'))
+
+            targets = torch.arange(Ws, device=fs.device).repeat(Hs)  # (Hs*Ws)
+            logits_flat = logits.view(Hs * Ws, Ws)
+
+            loss = F.cross_entropy(logits_flat, targets)
+            all_loss.append(loss)
+
+        return torch.stack(all_loss).mean()
