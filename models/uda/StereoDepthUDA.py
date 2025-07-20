@@ -94,11 +94,11 @@ class StereoDepthUDA(StereoDepthUDAInference):
     def freeze_specific_modules(self):
         modules_to_freeze = [
             self.student_model.feature,
-            self.student_model.feature_up,
-            self.student_model.stem_2,
-            self.student_model.stem_4,
-            self.student_model.conv,  # self.conf가 실제로는 self.conv인 것 같습니다
-            self.student_model.desc
+            # self.student_model.feature_up,
+            # self.student_model.stem_2,
+            # self.student_model.stem_4,
+            # self.student_model.conv,  # self.conf가 실제로는 self.conv인 것 같습니다
+            # self.student_model.desc
         ]
         
         for module in modules_to_freeze:
@@ -108,11 +108,11 @@ class StereoDepthUDA(StereoDepthUDAInference):
     def unfreeze_specific_modules(self):
         modules_to_unfreeze = [
             self.student_model.feature,
-            self.student_model.feature_up,
-            self.student_model.stem_2,
-            self.student_model.stem_4,
-            self.student_model.conv,
-            self.student_model.desc
+            # self.student_model.feature_up,
+            # self.student_model.stem_2,
+            # self.student_model.stem_4,
+            # self.student_model.conv,
+            # self.student_model.desc
         ]
         
         for module in modules_to_unfreeze:
