@@ -268,10 +268,10 @@ class Fast_ACVNet_plus(nn.Module):
             # nn.BatchNorm2d(64), nn.ReLU())
             DomainNorm(64), nn.ReLU())
         
-        # self.conv = BasicConv(80, 80, kernel_size=3, padding=1, stride=1)
-        # self.desc = nn.Conv2d(80, 80, kernel_size=1, padding=0, stride=1)
-        self.conv = BasicConv(80, 48, kernel_size=3, padding=1, stride=1)
-        self.desc = nn.Conv2d(48, 48, kernel_size=1, padding=0, stride=1)
+        self.conv = BasicConv(80, 80, kernel_size=3, padding=1, stride=1)
+        self.desc = nn.Conv2d(80, 80, kernel_size=1, padding=0, stride=1)
+        # self.conv = BasicConv(80, 48, kernel_size=3, padding=1, stride=1)
+        # self.desc = nn.Conv2d(48, 48, kernel_size=1, padding=0, stride=1)
         
         
         # self.desc1 = nn.Conv2d(48, 48, kernel_size=1, padding=0, stride=1)
@@ -322,7 +322,13 @@ class Fast_ACVNet_plus(nn.Module):
 
         cost_att = self.corr_feature_att_4(corr_volume, features_left_cat)
 
-        att_weights = self.hourglass_att(cost_att, features_left)
+        ## left feature는 여기에서는 업데이트가 없도록 함. 
+        ## 여기를 잘 맞추기위한 left feature 학습이 없도록 하기 위해
+        ## 즉 분리를 하겠다는 거임
+        features_left_for_att = [feat.detach() if self.training else feat for feat in features_left]
+        att_weights = self.hourglass_att(cost_att, features_left_for_att)
+        
+        
         att_weights_prob = F.softmax(att_weights, dim=2)
         _, ind = att_weights_prob.sort(2, True)
         k = 24
@@ -349,7 +355,10 @@ class Fast_ACVNet_plus(nn.Module):
             
             ## 근데 여기서 features_left는 stem을 거치지 않고 feature upsample만 feature map이다. 왜냐면 여기서는 장거리의 context를 반영을 하는 것이 목적인데
             ## stem을 끼게 되면 local한 특징을 너무 많이 포함하게 된다. 근데 애초에 왜 hourglass가 위에서 말한 역할을 수행해야만 하는지는 잘 모르겠다.
-            cost = self.hourglass(volume, features_left)
+            
+            ## 여기도 마찬가지 분리를 위해서 떨어뜨려놓음
+            features_left_for_hg = [feat.detach() if self.training else feat for feat in features_left]
+            cost = self.hourglass(volume, features_left_for_hg)
             ### 여기까지가 1/4 사이즈 prediction하는거고
             
             
