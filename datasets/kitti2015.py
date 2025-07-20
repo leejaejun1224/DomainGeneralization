@@ -13,7 +13,7 @@ from scipy.ndimage import gaussian_filter
 from datasets.transform import HFStereoV2
 
 class KITTI2015Dataset(Dataset):
-    def __init__(self, datapath, list_filename, training, max_len=None, aug=False):
+    def __init__(self, datapath, list_filename, training, max_len=None, aug=False, prior=None):
         self.datapath = datapath
         self.left_filenames, self.right_filenames, self.disp_filenames = self.load_path(list_filename)
         self.training = training
@@ -21,6 +21,7 @@ class KITTI2015Dataset(Dataset):
         self.max_len = max_len
         self.aug = aug
         self.hf_transform = HFStereoV2(use_edge_enhancement=True)
+        self.prior_path = prior
         if self.training:
             assert self.disp_filenames is not None
 
@@ -44,7 +45,18 @@ class KITTI2015Dataset(Dataset):
         data = Image.open(filename)
         data = np.array(data, dtype=np.float32) / 256.
         return data
-
+    
+    def load_prior(self):
+        if self.prior_path is not None:
+            prior_path = os.path.expanduser(self.prior_path)
+            if not os.path.exists(os.path.expanduser(prior_path)):
+                raise FileNotFoundError(f"Prior file {prior_path} does not exist.")
+            prior_data = np.load(prior_path)
+        else:
+            prior_data = 0.0
+        
+        return prior_data
+    
     def __len__(self):
         return self.max_len if self.max_len is not None else self.data_len
 
@@ -107,6 +119,8 @@ class KITTI2015Dataset(Dataset):
             left_img_low = processed(left_img_low)
             right_img_low = processed(right_img_low)
 
+            prior_data = self.load_prior()
+
             # 🔥 Disparity도 crop 없이 전체 사용
             # disparity = disparity[y1:y1 + crop_h, x1:x1 + crop_w]
             # disparity_low = cv2.resize(disparity, (crop_w//4, crop_h//4), interpolation=cv2.INTER_NEAREST)
@@ -145,7 +159,8 @@ class KITTI2015Dataset(Dataset):
                 "depth_map": depth_map,
                 "textureless_score": textureless_score,
                 "left_filename": self.left_filenames[idx],
-                "right_filename": self.right_filenames[idx]
+                "right_filename": self.right_filenames[idx],
+                "prior": prior_data
             }
 
 

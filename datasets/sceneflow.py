@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 import torchvision
 
 class FlyingThingDataset(Dataset):
-    def __init__(self, datapath, list_filename, training, max_len=None, aug=False):
+    def __init__(self, datapath, list_filename, training, max_len=None, aug=False, prior=None):
         self.datapath = datapath
         self.left_filenames, self.right_filenames, self.disp_filenames = self.load_path(list_filename)
         self.training = training
@@ -21,6 +21,7 @@ class FlyingThingDataset(Dataset):
         self.max_len = max_len
         self.aug = aug
         self.erase_low = True  # Erase low disparity values
+        self.prior_path = prior
         if self.training:
             assert self.disp_filenames is not None
 
@@ -38,6 +39,17 @@ class FlyingThingDataset(Dataset):
     def load_image(self, filename):
         filename = os.path.expanduser(filename)
         return Image.open(filename).convert('RGB')
+
+    def load_prior(self):
+        if self.prior_path is not None:
+            prior_path = os.path.expanduser(self.prior_path)
+            if not os.path.exists(os.path.expanduser(prior_path)):
+                raise FileNotFoundError(f"Prior file {prior_path} does not exist.")
+            prior_data = np.load(prior_path)
+        else:
+            prior_data = 0.0
+        
+        return prior_data
 
     def load_disp(self, filename):
         filename = os.path.expanduser(filename)
@@ -62,7 +74,8 @@ class FlyingThingDataset(Dataset):
         if self.erase_low:
             disparity[disparity > -2] = 0  # Erase low disparity values
 
-
+        prior_data = self.load_prior()
+            
         if self.training:
             if self.aug:
                 random_brightness = np.random.uniform(0.5, 2.0, 2)
@@ -109,7 +122,8 @@ class FlyingThingDataset(Dataset):
                     "disparity_low":disparity_low*-1,
                     "disparity_low_r8":disparity_low_r8*-1,
                     "left_filename": self.left_filenames[index],
-                    "right_filename": self.right_filenames[index]}
+                    "right_filename": self.right_filenames[index],
+                    "prior": prior_data}
         else:
             w, h = left_img.size
             crop_w, crop_h = 960, 512
@@ -133,7 +147,7 @@ class FlyingThingDataset(Dataset):
                         "gradient_map":gradient_map,
                         "disparity_low":disparity_low*-1,
                         "left_filename": self.left_filenames[index],
-                        "right_filename": self.right_filenames[index]}
+                        "right_filename": self.right_filenames[index],}
             
             else:
                 return {"left": left_img,

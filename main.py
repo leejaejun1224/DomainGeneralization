@@ -40,18 +40,22 @@ def setup_environment(args):
     return save_dir
 
 def setup_train_loaders(cfg):
+    
     source_dataset = __datasets__[cfg['dataset']['src_type']](
         datapath=cfg['dataset']['src_root'],
         list_filename=cfg['dataset']['src_filelist'],
         training=True, 
-        aug=True
+        aug=True,
+        prior=cfg['dataset']['src_prior']
     )
+    
     
     target_dataset = __datasets__[cfg['dataset']['tgt_type']](
         datapath=cfg['dataset']['tgt_root'],
         list_filename=cfg['dataset']['tgt_filelist'],
         training=True,
-        aug=False
+        aug=False,
+        prior=cfg['dataset']['tgt_prior']
     )
 
     max_len = max(len(source_dataset), len(target_dataset))
@@ -140,7 +144,8 @@ def train_epoch(model, source_loader, target_loader, optimizer, threshold_manage
     true_ratios, train_losses, train_supervised_losses, train_pseudo_losses, reconstruction_losses, depth_losses, entropy_losses = [], [], [], [], [], [], []
     average_threshold, consist_photo_loss = [], []
     for batch_idx, (source_batch, target_batch) in enumerate(zip(source_loader, target_loader)):
-        data_batch = {}
+        
+        data_batch = {"warm_up" : cfg['warm_up']}
         data_batch = process_batch(data_batch, source_batch, target_batch)
         image_ids = data_batch['tgt_left_filename']
         threshold_manager.initialize_log(image_ids)

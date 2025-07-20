@@ -3,6 +3,8 @@ import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
 from sklearn.cluster import DBSCAN
+from models.tools.prior_setting import *
+
 
 def sceneflow_supervised_loss(data_batch):
     src_disparity_map = data_batch['src_disparity']
@@ -88,6 +90,28 @@ def calc_pre_hourglass_loss(data_batch, model='s'):
                                  weights)
     return costvolume_topone_loss
 
+def apply_prior_weighting(disp_est, disp_gt, img_mask, prior_ratio, eps=1e-8):
+    disp_indices = torch.round(disp_gt).long()
+    disp_indices = torch.clamp(disp_indices, 0, len(prior_ratio) - 1)
+    
+    prior_ratio = prior_ratio.to(disp_gt.device)
+    
+    # prior_ratio를 1차원으로 보장
+    if prior_ratio.dim() > 1:
+        prior_ratio = prior_ratio.squeeze()
+    
+    # 간단한 벡터화 인덱싱
+    flat_indices = disp_indices.flatten()
+    flat_weights = prior_ratio[flat_indices]
+    pixel_weights = flat_weights.reshape(disp_gt.shape)
+    
+    base_loss = F.smooth_l1_loss(disp_est[img_mask], disp_gt[img_mask], reduction='none')
+    weighted_loss = base_loss * pixel_weights[img_mask]
+    
+    return weighted_loss.mean()
+
+
+
 
 def get_loss(disp_ests, disp_gts, img_masks, weights):
 
@@ -98,8 +122,25 @@ def get_loss(disp_ests, disp_gts, img_masks, weights):
     
     return sum(all_losses)
 
+def get_loss_with_prior(disp_ests, disp_gts, img_masks, weights, prior_ratio=None):
+
+    all_losses = []
+    
+    for disp_est, disp_gt, img_mask, scale_weight in zip(disp_ests, disp_gts, img_masks, weights):
+        if prior_ratio is not None:
+            weighted_loss = apply_prior_weighting(disp_est, disp_gt, img_mask, prior_ratio)
+        else:
+            weighted_loss = F.smooth_l1_loss(disp_est[img_mask], disp_gt[img_mask], reduction='mean')
+        
+        all_losses.append(scale_weight * weighted_loss)
+    
+    return sum(all_losses)
+
+
 # dont touch 
-def calc_supervised_train_loss(data_batch, model='s'):
+def calc_supervised_train_loss(data_batch, model='s', epoch=0):
+    
+
     key = 'src_pred_disp_' + model
     pred_disp, gt_disp, gt_disp_low = data_batch[key], data_batch['src_disparity'], data_batch['src_disparity_low']
     
@@ -110,8 +151,20 @@ def calc_supervised_train_loss(data_batch, model='s'):
     masks = [mask, mask_low, mask, mask_low]
     gt_disps = [gt_disp, gt_disp_low, gt_disp, gt_disp_low]
     # scale별 weight 예시
-    weights = [1.0, 0.3, 0.5, 0.3]
-    loss = get_loss(pred_disp, gt_disps, masks, weights)
+    weights = [1.0, 0.5, 1.0, 0.5]
+    
+    if epoch < data_batch['warm_up']:
+        if 'src_prior' in data_batch:
+            prior_ratio = calc_prior(data_batch)
+            loss = get_loss_with_prior(pred_disp, gt_disps, masks, weights, prior_ratio=prior_ratio)
+            print("warming up", epoch)
+        else:
+            loss = get_loss(pred_disp, gt_disps, masks, weights)
+    else:    
+        print("warm up done", epoch)
+        loss = get_loss(pred_disp, gt_disps, masks, weights)
+    
+    
     return loss
 
 

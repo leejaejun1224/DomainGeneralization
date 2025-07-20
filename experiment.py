@@ -52,8 +52,12 @@ def prepare_cfg(arg, mode='train'):
             src_root = train_source['data_root'],
             tgt_root = train_target['data_root'],
             src_filelist = train_source['file_list'],
-            tgt_filelist = train_target['file_list']
+            tgt_filelist = train_target['file_list'],
+            src_prior = train_source['prior'],
+            tgt_prior = train_target['prior'],
         ),
+        
+        warm_up = uda_config.data['train']['warm_up'],
         batch_size = uda_config.data['train']['batch_size'],
         num_workers = uda_config.data['train']['num_workers'],
         model = uda_config.depth_model['name'],

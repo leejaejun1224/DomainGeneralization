@@ -28,6 +28,7 @@ name_dataset = 'cityscapes_to_kitti2015'
 
 data = dict(
     train = dict(
+        warm_up = 50,
         epoch = 200,
         batch_size = 2,
         num_workers = 2,

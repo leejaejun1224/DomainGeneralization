@@ -16,6 +16,7 @@ from models.losses.loss import *
 import time
 from models.losses.monoloss import MonoDepthLoss
 from models.losses.photometric import *
+from models.tools.prior_setting import *
 ### if student => model = 's'
 ### if teacher => model = 't'
 
@@ -218,8 +219,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
             data_batch['tgt_right_feature_t'] = features[4]
         
 
-            
-        supervised_loss = calc_supervised_train_loss(data_batch, model='s')
+        supervised_loss = calc_supervised_train_loss(data_batch, model='s', epoch=epoch)
         calc_entropy(data_batch, temperature=temperature, threshold=self.entropy_threshold)
         calc_confidence_entropy(data_batch,threshold=10, k=12, temperature=0.5)
         compute_photometric_error(data_batch, threshold=0.010)

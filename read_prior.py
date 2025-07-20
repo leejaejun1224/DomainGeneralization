@@ -6,7 +6,7 @@ from datasets.sceneflow import FlyingThingDataset
 import numpy as np
 from collections import defaultdict
 
-def calculate_mean_disparity_distribution_per_image(dataset, max_disparity=192):
+def calculate_mean_disparity_distribution_per_image(dataset, max_disparity=300):
     """
     각 이미지에서 0~192 사이의 disparity 분포를 계산하고, 
     모든 이미지에 대해서 평균을 계산합니다.
@@ -105,7 +105,7 @@ def main():
     # Initialize dataset (you'll need to provide the actual paths)
     dataset = KITTI2015Dataset(
         datapath="/home/jaejun/dataset/kitti_2015",
-        list_filename="/home/jaejun/DomainGeneralization/filenames/target/kitti_2015_train copy.txt",
+        list_filename="/home/jaejun/DomainGeneralization/filenames/target/kitti_2015_train.txt",
         training=True,  # Set to True to get disparity ground truth
         max_len=None,   # Process all samples
         aug=False
@@ -120,14 +120,14 @@ def main():
     # )
     
     
-    mean_distribution, stats = calculate_mean_disparity_distribution_per_image(dataset, max_disparity=192)
+    mean_distribution, stats = calculate_mean_disparity_distribution_per_image(dataset, max_disparity=300)
     
     if mean_distribution is not None:
         # 결과 출력
         print_distribution_results(mean_distribution, stats, top_k=30)
         
         # 결과 저장
-        np.save('mean_disparity_distribution.npy', mean_distribution)
+        np.save('mean_disparity_distribution_kitti.npy', mean_distribution)
         np.save('distribution_stats.npy', stats)
         print("\nResults saved to 'mean_disparity_distribution.npy' and 'distribution_stats.npy'")
         
