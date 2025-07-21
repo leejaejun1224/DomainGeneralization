@@ -157,7 +157,6 @@ def calc_supervised_train_loss(data_batch, model='s', epoch=0):
         if 'src_prior' in data_batch:
             prior_ratio = calc_prior(data_batch)
             loss = get_loss_with_prior(pred_disp, gt_disps, masks, weights, prior_ratio=prior_ratio)
-            print("warming up", epoch)
         else:
             loss = get_loss(pred_disp, gt_disps, masks, weights)
     else:    
