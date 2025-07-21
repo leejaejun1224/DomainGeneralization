@@ -268,40 +268,40 @@ class Logger:
         gt   = data_batch['tgt_disparity'].squeeze().detach().cpu()   # Tensor H×W
         pred = data_batch['pseudo_disp'][0].squeeze().detach().cpu()   # Tensor H×W
         
-        # 디스패리티 마스크 로드 및 적용
-        if disparity_path is not None:
-            # 파일명에서 _disparity.png 파일 경로 생성
-            filename = os.path.basename(data_batch['tgt_left_filename'].split('/')[-1])
-            base_name = os.path.splitext(filename)[0]  # 확장자 제거
-            disparity_filename = f"{base_name}_disparity.png"
-            full_disparity_path = os.path.join(disparity_path, disparity_filename)
+        # # 디스패리티 마스크 로드 및 적용
+        # if disparity_path is not None:
+        #     # 파일명에서 _disparity.png 파일 경로 생성
+        #     filename = os.path.basename(data_batch['tgt_left_filename'].split('/')[-1])
+        #     base_name = os.path.splitext(filename)[0]  # 확장자 제거
+        #     disparity_filename = f"{base_name}_disparity.png"
+        #     full_disparity_path = os.path.join(disparity_path, disparity_filename)
             
-            # 디스패리티 이미지 로드
-            if os.path.exists(full_disparity_path):
-                disparity_img = Image.open(full_disparity_path).convert('L')  # 그레이스케일로 로드
-                disparity_arr = np.array(disparity_img)
+        #     # 디스패리티 이미지 로드
+        #     if os.path.exists(full_disparity_path):
+        #         disparity_img = Image.open(full_disparity_path).convert('L')  # 그레이스케일로 로드
+        #         disparity_arr = np.array(disparity_img)
                 
-                # pred와 같은 크기로 리사이즈 (필요한 경우)
-                if disparity_arr.shape != pred.shape:
-                    disparity_img_resized = Image.fromarray(disparity_arr).resize(
-                        (pred.shape[1], pred.shape[0]), Image.NEAREST
-                    )
-                    disparity_arr = np.array(disparity_img_resized)
+        #         # pred와 같은 크기로 리사이즈 (필요한 경우)
+        #         if disparity_arr.shape != pred.shape:
+        #             disparity_img_resized = Image.fromarray(disparity_arr).resize(
+        #                 (pred.shape[1], pred.shape[0]), Image.NEAREST
+        #             )
+        #             disparity_arr = np.array(disparity_img_resized)
                 
-                # 0보다 큰 부분만 마스크로 생성
-                mask = disparity_arr > 0
-                mask_tensor = torch.from_numpy(mask).to(pred.device)
-                pred = pred * mask_tensor  # 마스크를 pred에 적용
-                print(f"Applied disparity mask from: {full_disparity_path}")
-            else:
-                print(f"Warning: Disparity file not found: {full_disparity_path}")
-                # 기본 마스크 사용
-                mask = data_batch['tgt_refined_pred_disp_t'].squeeze().detach().cpu() > 0
-                pred = pred * mask
-        else:
-            # 기본 마스크 사용
-            mask = data_batch['tgt_refined_pred_disp_t'].squeeze().detach().cpu() > 0
-            pred = pred * mask
+        #         # 0보다 큰 부분만 마스크로 생성
+        #         mask = disparity_arr > 0
+        #         mask_tensor = torch.from_numpy(mask).to(pred.device)
+        #         pred = pred * mask_tensor  # 마스크를 pred에 적용
+        #         print(f"Applied disparity mask from: {full_disparity_path}")
+        #     else:
+        #         print(f"Warning: Disparity file not found: {full_disparity_path}")
+        #         # 기본 마스크 사용
+        #         mask = data_batch['tgt_refined_pred_disp_t'].squeeze().detach().cpu() > 0
+        #         pred = pred * mask
+        # else:
+        #     # 기본 마스크 사용
+        mask = data_batch['tgt_refined_pred_disp_t'].squeeze().detach().cpu() > 0
+        # pred = pred * mask
         
         valid = (gt > 0) & (pred > 0)
 

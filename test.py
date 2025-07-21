@@ -184,7 +184,7 @@ def main():
 
             data_batch = {}
             data_batch = process_batch(data_batch, source_batch, target_batch)
-            log_vars = model.forward_test(data_batch)
+            log_vars = model.forward_test(data_batch, 0.0)
             for i in range(cfg['test_batch_size']):
                 batch = split_batch(data_batch, i)
                 logger.log(batch, log_vars)
