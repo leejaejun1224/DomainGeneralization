@@ -161,7 +161,6 @@ def calc_supervised_train_loss(data_batch, model='s', epoch=0):
         else:
             loss = get_loss(pred_disp, gt_disps, masks, weights)
     else:    
-        print("warm up done", epoch)
         loss = get_loss(pred_disp, gt_disps, masks, weights)
     
     return loss
