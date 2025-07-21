@@ -34,7 +34,7 @@ data = dict(
         num_workers = 2,
         shuffle = True,
         pin_memory = True,
-        val_interval = 5,
+        val_interval = 2,
         save_interval = 5
     ),
     test = dict(

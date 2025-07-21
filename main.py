@@ -187,7 +187,7 @@ def train_epoch(model, source_loader, target_loader, optimizer, threshold_manage
              'reconstruction_loss': 0, 'learning_rate': current_lr, 'depth_loss': 0, \
                 'entropy_loss': 0, 'consist_photo_loss':0}
 
-def validate(model, source_loader, target_loader):
+def validate(model, source_loader, target_loader, epoch):
     model.eval()
     val_losses, val_supervised_losses, val_pseudo_losses, true_ratios, reconstruction_losses, depth_losses = [], [], [], [], [], []
     
@@ -195,7 +195,7 @@ def validate(model, source_loader, target_loader):
         for source_batch, target_batch in zip(source_loader, target_loader):
             data_batch = {}
             data_batch = process_batch(data_batch, source_batch, target_batch)
-            log_vars = model.forward_test(data_batch)
+            log_vars = model.forward_test(data_batch, epoch)
             
             if not math.isnan(log_vars['loss']):
                 val_losses.append(log_vars['loss'])
@@ -273,7 +273,7 @@ def main():
         print(f'Epoch [{epoch + 1}/{start_epoch + cfg["epoch"]}] Average Consist Photo Loss: {train_metrics["consist_photo_loss"]:.4f}')
         print(f'Epoch [{epoch + 1}/{start_epoch + cfg["epoch"]}] Average Entropy Loss: {train_metrics["entropy_loss"]:.4f}')
         if (epoch + 1) % cfg['val_interval'] == 0:
-            val_metrics = validate(model, test_source_loader, test_target_loader)
+            val_metrics = validate(model, test_source_loader, test_target_loader, epoch)
             print(f'Validation Loss: {val_metrics["val_loss"]:.4f}')
             print(f'Validation Depth Loss: {val_metrics["depth_loss"]:.4f}')
             if (epoch + 1) % cfg['save_interval'] == 0:

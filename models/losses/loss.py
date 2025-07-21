@@ -153,7 +153,7 @@ def calc_supervised_train_loss(data_batch, model='s', epoch=0):
     # scale별 weight 예시
     weights = [1.0, 0.5, 1.0, 0.5]
     
-    if epoch < data_batch['warm_up']:
+    if 'warm_up' in data_batch and epoch < data_batch['warm_up']:
         if 'src_prior' in data_batch:
             prior_ratio = calc_prior(data_batch)
             loss = get_loss_with_prior(pred_disp, gt_disps, masks, weights, prior_ratio=prior_ratio)
@@ -163,7 +163,6 @@ def calc_supervised_train_loss(data_batch, model='s', epoch=0):
     else:    
         print("warm up done", epoch)
         loss = get_loss(pred_disp, gt_disps, masks, weights)
-    
     
     return loss
 

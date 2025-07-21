@@ -265,7 +265,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
 
     # automatically make model's training member variable False
     @torch.no_grad()
-    def forward_test(self, data_batch):
+    def forward_test(self, data_batch, epoch):
         src_pred, map, features = self.student_forward(data_batch['src_left'], data_batch['src_right'])
         data_batch['src_pred_disp_s'] = src_pred
         data_batch['src_confidence_map_s'] = map[0]
@@ -309,7 +309,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
 
         # data_batch['depth_map_s'] = self.decode_forward(data_batch['features_s'])
         
-        supervised_loss = calc_supervised_train_loss(data_batch, model='s')
+        supervised_loss = calc_supervised_train_loss(data_batch, model='s', epoch=epoch)
         calc_entropy(data_batch, threshold=self.entropy_threshold)
         data_batch['tgt_refined_pred_disp_t'], diff_mask = refine_disparity(data_batch, threshold=1.0)
         calc_confidence_entropy(data_batch,threshold=1.3, k=12, temperature=0.2)
