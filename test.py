@@ -51,11 +51,11 @@ def setup_model(cfg, ckpt_path, encoder_ckpt_path=None):
 
     if encoder_ckpt_path is not None:
         enc_sd = torch.load(encoder_ckpt_path)
-        endocer_prefixes = (
-            "feature.model.", "feature.encoder.",
-            "feature_up.",   "stem_2.", "stem_4.",
-            "conv.",         "desc."
-        )
+        # endocer_prefixes = (
+        #     "feature.model.", "feature.encoder.",
+        #     "feature_up.",   "stem_2.", "stem_4.",
+        #     "conv.",         "desc."
+        # )
         
         
         # decoder_prefixes = (
@@ -64,19 +64,31 @@ def setup_model(cfg, ckpt_path, encoder_ckpt_path=None):
         #     "concat_stem", "concat_feature_att_4", 
         # )
         
+        decoder_prefixes = (
+            "spx_4", "spx_2", "spx"
+        )
+        
         
         enc_keys = [
             # k for k in enc_sd["teacher_state_dict"]
             k for k in enc_sd["teacher_state_dict"]
             
             ## 여기서 인코더 디코더 바꿈.
-            if k.startswith(endocer_prefixes) and k in model.teacher_model.state_dict()
+            if k.startswith(decoder_prefixes) and k in model.teacher_model.state_dict()
         ]
         
         backup = {k: deepcopy(model.teacher_model.state_dict()[k]) for k in enc_keys}
         for k in enc_keys:
+            src = enc_sd["teacher_state_dict"][k]
+            dst = model.teacher_model.state_dict()[k]
+            if src.shape == dst.shape:    # 같을 때만 복사
+                dst.copy_(src)
+            else:
+                print(f"Shape mismatch for {k}: {src.shape} vs {dst.shape}")
+                # print(f"Shape mismatch for {k}: {src.shape} vs {dst.shape}")
+                # raise ValueError(f"Shape mismatch for {k}: {src.shape} vs {dst.shape}")
             # model.teacher_model.state_dict()[k].copy_(enc_sd["teacher_state_dict"][k])
-            model.teacher_model.state_dict()[k].copy_(enc_sd["teacher_state_dict"][k])
+        
         for k in enc_keys:
             new_w = model.teacher_model.state_dict()[k]
             if torch.allclose(backup[k], new_w):

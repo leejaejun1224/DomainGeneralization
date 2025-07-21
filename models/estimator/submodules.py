@@ -9,7 +9,6 @@ import numpy as np
 import math
 
 
-
 class DomainNorm(nn.Module):
     def __init__(self, channel, l2=True):
         super(DomainNorm, self).__init__()
@@ -59,6 +58,7 @@ class BasicConv(nn.Module):
         return x
 
 
+
 class Conv2x(nn.Module):
 
     def __init__(self, in_channels, out_channels, deconv=False, is_3d=False, concat=True, keep_concat=True, bn=True, relu=True, keep_dispc=False):
@@ -99,6 +99,7 @@ class Conv2x(nn.Module):
             x = x + rem
         x = self.conv2(x)
         return x
+
 
 
 def disparity_regression(x, maxdisp):

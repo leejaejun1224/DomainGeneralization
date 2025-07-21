@@ -85,13 +85,12 @@ class KITTI2015Dataset(Dataset):
         self.aug = False
         
         if self.training:
-            # 🔥 Random crop 제거 - 전체 이미지 사용
-            # w, h = left_img.size
-            # crop_w, crop_h = 512, 256
-            # x1 = random.randint(0, w - crop_w)
-            # y1 = random.randint(int(0.3 * h), h - crop_h)
-            # left_img = left_img.crop((x1, y1, x1 + crop_w, y1 + crop_h))
-            # right_img = right_img.crop((x1, y1, x1 + crop_w, y1 + crop_h))
+            w, h = left_img.size
+            crop_w, crop_h = 512, 256
+            x1 = random.randint(0, w - crop_w)
+            y1 = random.randint(int(0.3 * h), h - crop_h)
+            left_img = left_img.crop((x1, y1, x1 + crop_w, y1 + crop_h))
+            right_img = right_img.crop((x1, y1, x1 + crop_w, y1 + crop_h))
             
             # 전체 이미지를 1248×384로 리사이즈 또는 패딩
             w, h = left_img.size
@@ -104,8 +103,8 @@ class KITTI2015Dataset(Dataset):
             # 이미 HFStereoV2에서 패딩 처리됨
             
             # 🔥 전체 이미지에 transform 적용
-            left_weak, left_strong = self.hf_transform(left_img)    # [3,384,1248]
-            right_weak, right_strong = self.hf_transform(right_img)  # [3,384,1248]
+            # left_weak, left_strong = self.hf_transform(left_img)    # [3,384,1248]
+            # right_weak, right_strong = self.hf_transform(right_img)  # [3,384,1248]
             
             # Multi-scale images
             left_img_half = left_img.resize((w//2, h//2), Image.BICUBIC)
@@ -114,6 +113,8 @@ class KITTI2015Dataset(Dataset):
             right_img_low = right_img.resize((w//4, h//4), Image.BICUBIC)
             
             processed = get_transform()
+            left_img = processed(left_img)
+            right_img = processed(right_img)
             left_img_half = processed(left_img_half)
             right_img_half = processed(right_img_half)
             left_img_low = processed(left_img_low)
@@ -121,14 +122,10 @@ class KITTI2015Dataset(Dataset):
 
             prior_data = self.load_prior()
 
-            # 🔥 Disparity도 crop 없이 전체 사용
-            # disparity = disparity[y1:y1 + crop_h, x1:x1 + crop_w]
-            # disparity_low = cv2.resize(disparity, (crop_w//4, crop_h//4), interpolation=cv2.INTER_NEAREST)
-            # disparity_half = cv2.resize(disparity, (crop_w//2, crop_h//2), interpolation=cv2.INTER_NEAREST)
+            disparity = disparity[y1:y1 + crop_h, x1:x1 + crop_w]
+            disparity_low = cv2.resize(disparity, (crop_w//4, crop_h//4), interpolation=cv2.INTER_NEAREST)
+            disparity_half = cv2.resize(disparity, (crop_w//2, crop_h//2), interpolation=cv2.INTER_NEAREST)
             
-            # 전체 disparity 사용
-            disparity_low = cv2.resize(disparity, (w//4, h//4), interpolation=cv2.INTER_NEAREST)
-            disparity_half = cv2.resize(disparity, (w//2, h//2), interpolation=cv2.INTER_NEAREST)
 
             # Depth map 계산 (기존과 동일)
             valid_mask = disparity > 0
@@ -145,10 +142,10 @@ class KITTI2015Dataset(Dataset):
                 depth_map = disparity.copy()
 
             return {
-                "left": left_weak,                    # [3,384,1248] - 전체 이미지
-                "right": right_weak,                  # [3,384,1248] - 전체 이미지
-                "left_strong_aug": left_strong,       # [3,384,1248] - 전체 이미지
-                "right_strong_aug": right_strong,     # [3,384,1248] - 전체 이미지
+                "left": left_img,                    # [3,384,1248] - 전체 이미지
+                "right": right_img,                  # [3,384,1248] - 전체 이미지
+                "left_strong_aug": left_img,       # [3,384,1248] - 전체 이미지
+                "right_strong_aug": right_img,     # [3,384,1248] - 전체 이미지
                 "left_low": left_img_low,
                 "right_low": right_img_low,
                 "left_half": left_img_half,
