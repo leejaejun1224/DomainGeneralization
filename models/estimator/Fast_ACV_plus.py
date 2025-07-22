@@ -253,21 +253,21 @@ class Fast_ACVNet_plus(nn.Module):
         self.stem_2 = nn.Sequential(
             BasicConv(3, 32, kernel_size=3, stride=2, padding=1),
             nn.Conv2d(32, 32, 3, 1, 1, bias=False),
-            nn.BatchNorm2d(32), nn.ReLU())
-            # DomainNorm(32), nn.ReLU())
+            # nn.BatchNorm2d(32), nn.ReLU())
+            DomainNorm(32), nn.ReLU())
         self.stem_4 = nn.Sequential(
             BasicConv(32, 48, kernel_size=3, stride=2, padding=1),
             nn.Conv2d(48, 48, 3, 1, 1, bias=False),
-            nn.BatchNorm2d(48), nn.ReLU())
-            # DomainNorm(48), nn.ReLU())
+            # nn.BatchNorm2d(48), nn.ReLU())
+            DomainNorm(48), nn.ReLU())
         
         self.spx = nn.Sequential(nn.ConvTranspose2d(2*32, 9, kernel_size=4, stride=2, padding=1))
         self.spx_2 = Conv2x(64, 32, True)
         self.spx_4 = nn.Sequential(
             BasicConv(80, 64, kernel_size=3, stride=1, padding=1),
             nn.Conv2d(64, 64, 3, 1, 1, bias=False),
-            nn.BatchNorm2d(64), nn.ReLU())
-            # DomainNorm(64), nn.ReLU())
+            # nn.BatchNorm2d(64), nn.ReLU())
+            DomainNorm(64), nn.ReLU())
         
         self.conv = BasicConv(80, 80, kernel_size=3, padding=1, stride=1)
         self.desc = nn.Conv2d(80, 80, kernel_size=1, padding=0, stride=1)
