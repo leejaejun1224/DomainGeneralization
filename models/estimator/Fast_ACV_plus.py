@@ -109,7 +109,8 @@ class FeatUp(SubModule):
         y4 = self.conv4(y4)
         return [x4, x8, x16, x32], [y4, y8, y16, y32]
 
-
+## 여기서 channel attention을 해서 중요한 부분을 스스로 뽑을텐데 이 부분이 
+## 새로운 도메인을 만나면 뭐가 중요한지 학습을 하기 어려울 듯 함.
 class channelAtt(SubModule):
     def __init__(self, cv_chan, im_chan):
         super(channelAtt, self).__init__()
@@ -316,8 +317,11 @@ class Fast_ACVNet_plus(nn.Module):
         match_left = self.desc(self.conv(features_left_cat))
         match_right = self.desc(self.conv(features_right_cat))
 
+        ## shape [batch, 1, max_disparity//4, h, w]
         corr_volume_1 = build_norm_correlation_volume(match_left, match_right, self.maxdisp//4, mode=mode)
         corr_volume_2 = corr_volume_1
+
+        ## shape [batch, 8, max_disparity//4, h, w]
         corr_volume = self.corr_stem(corr_volume_1)
 
         cost_att = self.corr_feature_att_4(corr_volume, features_left_cat)

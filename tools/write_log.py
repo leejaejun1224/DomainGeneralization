@@ -260,51 +260,18 @@ class Logger:
     """ 
 
     def save_error_map(self,
-                        data_batch,
-                        abs_thresh: float = 1.1,
-                        rel_thresh: float = 0.05,
-                        dilation: int = 1):
+                   data_batch,
+                   abs_thresh: float = 1.1,
+                   rel_thresh: float = 0.05,
+                   dilation: int = 1,
+                   bins: int = 50):
         disparity_path = None
-        gt   = data_batch['tgt_disparity'].squeeze().detach().cpu()   # Tensor H×W
-        pred = data_batch['pseudo_disp'][0].squeeze().detach().cpu()   # Tensor H×W
+        gt   = data_batch['tgt_disparity'].squeeze().detach().cpu()
+        pred = data_batch['pseudo_disp'][0].squeeze().detach().cpu()
         
-        # # 디스패리티 마스크 로드 및 적용
-        # if disparity_path is not None:
-        #     # 파일명에서 _disparity.png 파일 경로 생성
-        #     filename = os.path.basename(data_batch['tgt_left_filename'].split('/')[-1])
-        #     base_name = os.path.splitext(filename)[0]  # 확장자 제거
-        #     disparity_filename = f"{base_name}_disparity.png"
-        #     full_disparity_path = os.path.join(disparity_path, disparity_filename)
-            
-        #     # 디스패리티 이미지 로드
-        #     if os.path.exists(full_disparity_path):
-        #         disparity_img = Image.open(full_disparity_path).convert('L')  # 그레이스케일로 로드
-        #         disparity_arr = np.array(disparity_img)
-                
-        #         # pred와 같은 크기로 리사이즈 (필요한 경우)
-        #         if disparity_arr.shape != pred.shape:
-        #             disparity_img_resized = Image.fromarray(disparity_arr).resize(
-        #                 (pred.shape[1], pred.shape[0]), Image.NEAREST
-        #             )
-        #             disparity_arr = np.array(disparity_img_resized)
-                
-        #         # 0보다 큰 부분만 마스크로 생성
-        #         mask = disparity_arr > 0
-        #         mask_tensor = torch.from_numpy(mask).to(pred.device)
-        #         pred = pred * mask_tensor  # 마스크를 pred에 적용
-        #         print(f"Applied disparity mask from: {full_disparity_path}")
-        #     else:
-        #         print(f"Warning: Disparity file not found: {full_disparity_path}")
-        #         # 기본 마스크 사용
-        #         mask = data_batch['tgt_refined_pred_disp_t'].squeeze().detach().cpu() > 0
-        #         pred = pred * mask
-        # else:
-        #     # 기본 마스크 사용
         mask = data_batch['tgt_refined_pred_disp_t'].squeeze().detach().cpu() > 0
-        # pred = pred * mask
         
         valid = (gt > 0) & (pred > 0)
-
         abs_err = (gt - pred).abs()
         rel_err = abs_err / gt.clamp(min=1e-6)
 
@@ -313,25 +280,98 @@ class Logger:
 
         bad_np = bad.numpy().astype(np.uint8)
         good_np = good.numpy().astype(np.uint8)
+        
         if dilation > 1:
             kernel = np.ones((dilation, dilation), np.uint8)
             bad_np = cv2.dilate(bad_np, kernel)
 
+        # 에러맵 이미지 생성
         H, W = bad_np.shape
         img = np.zeros((H, W, 3), dtype=np.uint8)
         img[:, :, :] = (255, 0, 0)
         img[~valid.numpy()] = (0, 0, 0)
         img[bad_np > 0] = (255, 0, 0)
         img[good_np > 0] = (0, 255, 0)
-        filename  = os.path.basename(data_batch['tgt_left_filename'].split('/')[-1])
+        
+        # 히스토그램 데이터 계산 (카운트 기반)
+        bin_centers, counts_total, counts_bad = self.compute_gt_and_bad_counts(
+            gt.numpy(), bad.numpy(), bins
+        )
+        
+        # 에러맵과 히스토그램을 함께 플롯
+        filename = os.path.basename(data_batch['tgt_left_filename'].split('/')[-1])
         save_path = os.path.join(self.error_dir, filename)
+        
+        self.plot_error_map_with_count_histogram(img, bin_centers, counts_total, counts_bad, save_path)
 
-        plt.figure(figsize=(12, 6), dpi=100)
+    def compute_gt_and_bad_counts(self, gt_np, bad_np, bins=10):
+        """GT disparity 값별 총 카운트와 에러 카운트를 계산"""
+        # 유효한 GT 값만 필터링 (gt > 0)
+        valid_mask = gt_np > 0
+        gt_valid = gt_np[valid_mask]
+        bad_valid = bad_np[valid_mask]
+
+        if len(gt_valid) == 0:
+            return np.array([]), np.array([]), np.array([])
+
+        # bins 경계 생성
+        bin_edges = np.linspace(0.0, 80.0, bins + 1)
+
+        # 각 bin별 총 픽셀 수
+        counts_total, _ = np.histogram(gt_valid, bins=bin_edges)
+
+        # 각 bin별 에러 픽셀 수
+        counts_bad, _ = np.histogram(gt_valid[bad_valid.astype(bool)], bins=bin_edges)
+
+        # bin 중앙값
+        bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+
+        return bin_centers, counts_total, counts_bad
+
+    def plot_error_map_with_count_histogram(self, img, bin_centers, counts_total, counts_bad, save_path):
+        """에러맵과 카운트 히스토그램을 함께 플롯"""
+        plt.figure(figsize=(16, 6), dpi=100)
+        
+        # 에러맵 서브플롯
+        plt.subplot(1, 2, 1)
         plt.imshow(img)
         plt.axis('off')
-        plt.tight_layout(pad=0)
-        plt.savefig(save_path, bbox_inches='tight', pad_inches=0)
+        plt.title('Error Map', fontsize=14)
+        
+        # 히스토그램 서브플롯 (그룹 막대 그래프)
+        plt.subplot(1, 2, 2)
+        if len(bin_centers) > 0:
+            # 막대 너비와 위치 설정
+            bar_width = (bin_centers[1] - bin_centers[0]) * 0.35 if len(bin_centers) > 1 else 0.35
+            x_pos = np.arange(len(bin_centers))
+            
+            # 그룹 막대 그래프 생성
+            plt.bar(x_pos - bar_width/2, counts_total, bar_width, 
+                label='Total GT Count', color='blue', alpha=0.7)
+            plt.bar(x_pos + bar_width/2, counts_bad, bar_width, 
+                label='Bad Count', color='red', alpha=0.7)
+            
+            # X축 라벨 설정
+            plt.xticks(x_pos, [f'{center:.1f}' for center in bin_centers], rotation=45)
+            plt.xlabel('GT Disparity Value', fontsize=12)
+            plt.ylabel('Count', fontsize=12)
+            plt.title('GT Count and Bad Count by Disparity Bin', fontsize=14)
+            plt.legend()
+            plt.grid(True, alpha=0.3)
+            
+            # 막대 위에 수치 표시
+            for i, (total, bad) in enumerate(zip(counts_total, counts_bad)):
+                if total > 0:
+                    plt.text(i - bar_width/2, total + max(counts_total) * 0.01, 
+                            str(total), ha='center', va='bottom', fontsize=9)
+                if bad > 0:
+                    plt.text(i + bar_width/2, bad + max(counts_total) * 0.01, 
+                            str(bad), ha='center', va='bottom', fontsize=9)
+        
+        plt.tight_layout()
+        plt.savefig(save_path, bbox_inches='tight', pad_inches=0.1)
         plt.close()
+
 
     def compute_metrics(self, data_batch):
         if 'src_disparity' in data_batch.keys():

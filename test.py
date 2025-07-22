@@ -59,14 +59,16 @@ def setup_model(cfg, ckpt_path, encoder_ckpt_path=None):
         
         
         decoder_prefixes = (
-            "hourglass_att", "hourglass", "spx_2", "spx_4", "spx",
-            "corr_stem", "corr_feature_att_4", "concat_feature",
-            "concat_stem", "concat_feature_att_4", 
-        )
-        
-        # decoder_prefixes = (
-        #     "spx_4", "spx_2", "spx"
-        # )
+            "corr_feature_att_4","concat_feature",
+            "corr_stem",
+            "concat_stem", "concat_feature_att_4"
+            "hourglass_att", "hourglass")
+            # , "spx_2", "spx_4", "spx",
+            #    , 
+            # )
+            # decoder_prefixes = (
+            #     "spx_4", "spx_2", "spx"
+            # )
         
         
         enc_keys = [

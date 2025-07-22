@@ -103,21 +103,21 @@ def print_distribution_results(mean_distribution, stats, top_k=20):
 
 def main():
     # Initialize dataset (you'll need to provide the actual paths)
-    dataset = KITTI2015Dataset(
-        datapath="/home/jaejun/dataset/kitti_2015",
-        list_filename="/home/jaejun/DomainGeneralization/filenames/target/kitti_2015_train.txt",
-        training=True,  # Set to True to get disparity ground truth
-        max_len=None,   # Process all samples
-        aug=False
-    )
-    
-    # dataset = FlyingThingDataset(
-    #     datapath="/home/jaejun/dataset/flyingthing",
-    #     list_filename="/home/jaejun/DomainGeneralization/filenames/source/flyingthing_train.txt",
+    # dataset = KITTI2015Dataset(
+    #     datapath="/home/jaejun/dataset/kitti_2015",
+    #     list_filename="/home/jaejun/DomainGeneralization/filenames/target/kitti_2015_train.txt",
     #     training=True,  # Set to True to get disparity ground truth
     #     max_len=None,   # Process all samples
     #     aug=False
     # )
+    
+    dataset = FlyingThingDataset(
+        datapath="/home/jaejun/dataset/flyingthing",
+        list_filename="/home/jaejun/DomainGeneralization/filenames/source/flyingthing_train.txt",
+        training=True,  # Set to True to get disparity ground truth
+        max_len=None,   # Process all samples
+        aug=False
+    )
     
     
     mean_distribution, stats = calculate_mean_disparity_distribution_per_image(dataset, max_disparity=300)
