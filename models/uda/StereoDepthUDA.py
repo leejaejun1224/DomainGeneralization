@@ -172,7 +172,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
     "forward propagation"
     def forward_train(self, data_batch, epoch, temperature=0.5):
         
-        self.freeze_specific_modules()
+        # self.freeze_specific_modules()
         
         src_pred, map, features = self.student_forward(data_batch['src_left'], data_batch['src_right'])
         data_batch['src_pred_disp_s'] = src_pred
