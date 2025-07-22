@@ -46,8 +46,8 @@ class BasicConv(nn.Module):
                 self.conv = nn.ConvTranspose2d(in_channels, out_channels, bias=False, **kwargs)
             else:
                 self.conv = nn.Conv2d(in_channels, out_channels, bias=False, **kwargs)
-            # self.bn = nn.BatchNorm2d(out_channels)
-            self.bn = DomainNorm(out_channels, l2=True)
+            self.bn = nn.BatchNorm2d(out_channels)
+            # self.bn = DomainNorm(out_channels, l2=True)
 
     def forward(self, x):
         x = self.conv(x)
