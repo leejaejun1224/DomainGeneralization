@@ -151,7 +151,7 @@ def calc_supervised_train_loss(data_batch, model='s', epoch=0):
     masks = [mask, mask_low, mask, mask_low]
     gt_disps = [gt_disp, gt_disp_low, gt_disp, gt_disp_low]
     # scale별 weight 예시
-    weights = [1.0, 0.5, 1.0, 0.5]
+    weights = [1.0, 0.3, 0.5, 0.3]
     
     if 'warm_up' in data_batch and epoch < data_batch['warm_up']:
         if 'src_prior' in data_batch:
