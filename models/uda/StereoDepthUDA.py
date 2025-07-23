@@ -304,14 +304,22 @@ class StereoDepthUDA(StereoDepthUDAInference):
             data_batch['attn_weights_t'] = features[1]
             data_batch['cost_t'] = features[2]
             
+            pseudo_disp, map, features = self.teacher_forward(
+                data_batch['tgt_left_random_1'], data_batch['tgt_right_random_1'])
+            data_batch['pseudo_disp_random_1'] = pseudo_disp
+            
+            pseudo_disp, map, features = self.teacher_forward(
+                data_batch['tgt_left_random_2'], data_batch['tgt_right_random_2'])
+            data_batch['pseudo_disp_random_2'] = pseudo_disp
             # data_batch['tgt_attn_loss_t'] = features[2]
             # data_batch['pos_encodings_t'] = features[2]
 
         # data_batch['depth_map_s'] = self.decode_forward(data_batch['features_s'])
         
         supervised_loss = calc_supervised_train_loss(data_batch, model='s', epoch=epoch)
-        calc_entropy(data_batch, threshold=self.entropy_threshold)
-        data_batch['tgt_refined_pred_disp_t'], diff_mask = refine_disparity(data_batch, threshold=1.0)
+        # calc_entropy(data_batch, threshold=self.entropy_threshold)
+        calc_entropy(data_batch, threshold=2.5)
+        data_batch['tgt_refined_pred_disp_t'], diff_mask = refine_disparity(data_batch, threshold=20.0)
         calc_confidence_entropy(data_batch,threshold=1.3, k=12, temperature=0.2)
         compute_photometric_error(data_batch, threshold=0.03)
 

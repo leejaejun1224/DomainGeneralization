@@ -14,13 +14,13 @@ def refine_disparity(data_batch, mask=None, threshold=3.0):
 
     diff = torch.abs(top_one - pred_disp)
     diff_mask = diff <= threshold
-    top_one = pred_disp * diff_mask
+    # top_one = pred_disp * diff_mask
 
     diff_mask2 = diff > threshold
-    pred_disp = pred_disp * diff_mask2
+    pred_disp = pred_disp * diff_mask
 
     # result = top_one + pred_disp
-    result = top_one
+    result = pred_disp
     result = torch.clamp(result, 0, 192-1)
     # print(result.max())
     return result, diff_mask

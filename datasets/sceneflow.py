@@ -94,7 +94,10 @@ class FlyingThingDataset(Dataset):
                 right_img = torchvision.transforms.functional.adjust_saturation(right_img, random_satur[1])
 
             w, h = left_img.size
-            crop_w, crop_h = 512, 256
+            crop_list = [[512,128],[512,256],[768,256],[768,512]]
+            num = random.randint(0,3)
+            
+            crop_w, crop_h = crop_list[num][0], crop_list[num][1]
 
             x1 = random.randint(0, w - crop_w)
             y1 = random.randint(0, h - crop_h)

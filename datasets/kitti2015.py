@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 from scipy.ndimage import gaussian_filter
 from datasets.transform import HFStereoV2
 
+
 class KITTI2015Dataset(Dataset):
     def __init__(self, datapath, list_filename, training, max_len=None, aug=False, prior=None):
         self.datapath = datapath
@@ -57,6 +58,23 @@ class KITTI2015Dataset(Dataset):
         
         return prior_data
     
+    def calculate_overlap(self, x1_1, y1_1, x1_2, y1_2, crop_w, crop_h):
+        """Calculate overlap region between two crops"""
+        x_overlap_start = max(x1_1, x1_2)
+        y_overlap_start = max(y1_1, y1_2)
+        x_overlap_end = min(x1_1 + crop_w, x1_2 + crop_w)
+        y_overlap_end = min(y1_1 + crop_h, y1_2 + crop_h)
+        
+        overlap_w = max(0, x_overlap_end - x_overlap_start)
+        overlap_h = max(0, y_overlap_end - y_overlap_start)
+        
+        return {
+            'x': x_overlap_start,
+            'y': y_overlap_start,
+            'width': overlap_w,
+            'height': overlap_h
+        }
+    
     def __len__(self):
         return self.max_len if self.max_len is not None else self.data_len
 
@@ -95,17 +113,6 @@ class KITTI2015Dataset(Dataset):
             # 전체 이미지를 1248×384로 리사이즈 또는 패딩
             w, h = left_img.size
             
-            # Option 1: 리사이즈 (비율 변경됨)
-            # left_img = left_img.resize((1248, 384), Image.BICUBIC)
-            # right_img = right_img.resize((1248, 384), Image.BICUBIC)
-            
-            # Option 2: 패딩 유지 (비율 보존)
-            # 이미 HFStereoV2에서 패딩 처리됨
-            
-            # 🔥 전체 이미지에 transform 적용
-            # left_weak, left_strong = self.hf_transform(left_img)    # [3,384,1248]
-            # right_weak, right_strong = self.hf_transform(right_img)  # [3,384,1248]
-            
             # Multi-scale images
             left_img_half = left_img.resize((w//2, h//2), Image.BICUBIC)
             right_img_half = right_img.resize((w//2, h//2), Image.BICUBIC)
@@ -125,7 +132,6 @@ class KITTI2015Dataset(Dataset):
             disparity = disparity[y1:y1 + crop_h, x1:x1 + crop_w]
             disparity_low = cv2.resize(disparity, (crop_w//4, crop_h//4), interpolation=cv2.INTER_NEAREST)
             disparity_half = cv2.resize(disparity, (crop_w//2, crop_h//2), interpolation=cv2.INTER_NEAREST)
-            
 
             # Depth map 계산 (기존과 동일)
             valid_mask = disparity > 0
@@ -142,15 +148,15 @@ class KITTI2015Dataset(Dataset):
                 depth_map = disparity.copy()
 
             return {
-                "left": left_img,                    # [3,384,1248] - 전체 이미지
-                "right": right_img,                  # [3,384,1248] - 전체 이미지
-                "left_strong_aug": left_img,       # [3,384,1248] - 전체 이미지
-                "right_strong_aug": right_img,     # [3,384,1248] - 전체 이미지
+                "left": left_img,
+                "right": right_img,
+                "left_strong_aug": left_img,
+                "right_strong_aug": right_img,
                 "left_low": left_img_low,
                 "right_low": right_img_low,
                 "left_half": left_img_half,
                 "right_half": right_img_half,
-                "disparity": disparity,               # 전체 disparity
+                "disparity": disparity,
                 "disparity_low": disparity_low,
                 "disparity_half": disparity_half,
                 "depth_map": depth_map,
@@ -160,9 +166,25 @@ class KITTI2015Dataset(Dataset):
                 "prior": prior_data
             }
 
-
         else:
             w, h = left_img.size
+            # crop_w, crop_h = 512, 256
+            crop_w, crop_h = 1120, 332
+            
+            # Generate two random crop coordinates
+            x1_1 = random.randint(0, w - crop_w)
+            y1_1 = random.randint(0, h - crop_h)
+            x1_2 = random.randint(0, w - crop_w)
+            y1_2 = random.randint(0, h - crop_h)
+            
+            # Create random crops
+            left_random_1 = left_img.crop((x1_1, y1_1, x1_1 + crop_w, y1_1 + crop_h))
+            right_random_1 = right_img.crop((x1_1, y1_1, x1_1 + crop_w, y1_1 + crop_h))
+            left_random_2 = left_img.crop((x1_2, y1_2, x1_2 + crop_w, y1_2 + crop_h))
+            right_random_2 = right_img.crop((x1_2, y1_2, x1_2 + crop_w, y1_2 + crop_h))
+            
+            # Calculate overlap region
+            overlap_coords = self.calculate_overlap(x1_1, y1_1, x1_2, y1_2, crop_w, crop_h)
 
             # normalize
             processed = get_transform()
@@ -170,6 +192,13 @@ class KITTI2015Dataset(Dataset):
             right_img_half = right_img.resize((1248//2, 384//2), Image.BICUBIC)
             left_img_low = left_img.resize((1248//4, 384//4), Image.BICUBIC)
             right_img_low = right_img.resize((1248//4, 384//4), Image.BICUBIC)
+            
+            # Process random crops
+            left_random_1 = processed(left_random_1).numpy()
+            right_random_1 = processed(right_random_1).numpy()
+            left_random_2 = processed(left_random_2).numpy()
+            right_random_2 = processed(right_random_2).numpy()
+            
             left_img = processed(left_img).numpy()
             right_img = processed(right_img).numpy()
             left_img_low = processed(left_img_low).numpy()
@@ -195,38 +224,60 @@ class KITTI2015Dataset(Dataset):
                 if np.any(valid_mask):
                     disp_min = np.min(disparity[valid_mask])
                     disp_max = np.max(disparity[valid_mask])
-                    # 유효한 값이 모두 동일하지 않을 때
                     if disp_max != disp_min:
                         depth_map = np.zeros_like(disparity)
                         depth_map[valid_mask] = 1e-4 + (disparity[valid_mask] - disp_min) / (disp_max - disp_min)
                     else:
-                        # 모든 유효 값이 동일하다면, 논리적으로 scaling이 어려우므로 기본값 1로 설정 (0이 아닌 부분만)
                         depth_map = np.ones_like(disparity)
                         depth_map[~valid_mask] = 0
                 else:
                     depth_map = disparity.copy()
 
             if disparity is not None:
-                return {"left": left_img,
-                        "right": right_img,
-                        "left_half": left_img_half,
-                        "right_half": right_img_half,
-                        "left_low": left_img_low,
-                        "right_low": right_img_low,
-                        "textureless_score": textureless_score,
-                        "disparity": disparity,
-                        "disparity_low": disparity_low,
-                        "disparity_half": disparity_half,
-                        "depth_map": depth_map,
-                        "left_filename": self.left_filenames[idx],
-                        "right_filename": self.right_filenames[idx]}
+                return {
+                    "left": left_img,
+                    "right": right_img,
+                    "left_half": left_img_half,
+                    "right_half": right_img_half,
+                    "left_low": left_img_low,
+                    "right_low": right_img_low,
+                    "textureless_score": textureless_score,
+                    "disparity": disparity,
+                    "disparity_low": disparity_low,
+                    "disparity_half": disparity_half,
+                    "depth_map": depth_map,
+                    "left_filename": self.left_filenames[idx],
+                    "right_filename": self.right_filenames[idx],
+                    # Random crops
+                    "random_coord_1" : (x1_1, y1_1),
+                    "left_random_1": left_random_1,
+                    "right_random_1": right_random_1,
+                    
+                    "random_coord_2" : (x1_2, y1_2),
+                    "left_random_2": left_random_2,
+                    "right_random_2": right_random_2,
+                    # Overlap coordinates
+                    "overlap_coords": overlap_coords
+                }
             else:
-                return {"left": left_img,
-                        "right": right_img,
-                        "left_half": left_img_half,
-                        "right_half": right_img_half,
-                        "left_low": left_img_low,
-                        "right_low": right_img_low, 
-                        "textureless_score": textureless_score,
-                        "left_filename": self.left_filenames[idx],
-                        "right_filename": self.right_filenames[idx]}
+                return {
+                    "left": left_img,
+                    "right": right_img,
+                    "left_half": left_img_half,
+                    "right_half": right_img_half,
+                    "left_low": left_img_low,
+                    "right_low": right_img_low, 
+                    "textureless_score": textureless_score,
+                    "left_filename": self.left_filenames[idx],
+                    "right_filename": self.right_filenames[idx],
+                    # Random crops
+                    "random_coord_1" : (x1_1, y1_1),
+                    "left_random_1": left_random_1,
+                    "right_random_1": right_random_1,
+                    
+                    "random_coord_2" : (x1_2, y1_2),
+                    "left_random_2": left_random_2,
+                    "right_random_2": right_random_2,
+                    # Overlap coordinates
+                    "overlap_coords": overlap_coords
+                }

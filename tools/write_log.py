@@ -258,51 +258,107 @@ class Logger:
     회색 : d1오차 조건에 해당이 안되는 부분
     검정 : gt 없는 부분
     """ 
-
     def save_error_map(self,
-                   data_batch,
-                   abs_thresh: float = 1.1,
-                   rel_thresh: float = 0.05,
-                   dilation: int = 1,
-                   bins: int = 50):
-        disparity_path = None
-        gt   = data_batch['tgt_disparity'].squeeze().detach().cpu()
+                    data_batch,
+                    x1_1: int = None,
+                    y1_1: int = None, 
+                    x1_2: int = None,
+                    y1_2: int = None,
+                    abs_thresh: float = 1.1,
+                    rel_thresh: float = 0.05,
+                    dilation: int = 1,
+                    bins: int = 50):
+        x1_1 = data_batch['tgt_random_coord_1'][0]
+        y1_1 = data_batch['tgt_random_coord_1'][1]
+        x1_2 = data_batch['tgt_random_coord_2'][0]
+        y1_2 = data_batch['tgt_random_coord_2'][1]
+        # Helper function to compute error map for any prediction
+        def compute_error_data(gt_crop, pred_crop):
+            valid = (gt_crop > 0) & (pred_crop > 0)
+            abs_err = (gt_crop - pred_crop).abs()
+            rel_err = abs_err / gt_crop.clamp(min=1e-6)
+            
+            bad = valid & (abs_err >= abs_thresh) & (rel_err >= rel_thresh)
+            good = valid & (abs_err <= abs_thresh) & (rel_err <= rel_thresh)
+            
+            bad_np = bad.numpy().astype(np.uint8)
+            good_np = good.numpy().astype(np.uint8)
+            
+            if dilation > 1:
+                kernel = np.ones((dilation, dilation), np.uint8)
+                bad_np = cv2.dilate(bad_np, kernel)
+                
+            return valid, bad_np, good_np, bad
+        
+        # Helper function to create error map image
+        def create_error_image(valid, bad_np, good_np, H, W):
+            img = np.zeros((H, W, 3), dtype=np.uint8)
+            img[:, :, :] = (255, 0, 0)  # Default red
+            img[~valid.numpy()] = (0, 0, 0)  # Invalid pixels black
+            img[bad_np > 0] = (255, 0, 0)    # Bad pixels red
+            img[good_np > 0] = (0, 255, 0)   # Good pixels green
+            return img
+
+        # Load main data
+        gt = data_batch['tgt_disparity'].squeeze().detach().cpu()
         pred = data_batch['pseudo_disp'][0].squeeze().detach().cpu()
         
-        mask = data_batch['tgt_refined_pred_disp_t'].squeeze().detach().cpu() > 0
+        # Process main prediction
+        valid_main, bad_np_main, good_np_main, bad_main = compute_error_data(gt, pred)
+        H, W = bad_np_main.shape
+        img_main = create_error_image(valid_main, bad_np_main, good_np_main, H, W)
         
-        valid = (gt > 0) & (pred > 0)
-        abs_err = (gt - pred).abs()
-        rel_err = abs_err / gt.clamp(min=1e-6)
-
-        bad = valid & (abs_err >= abs_thresh) & (rel_err >= rel_thresh)
-        good = valid & (abs_err <= abs_thresh) & (rel_err <= rel_thresh)
-
-        bad_np = bad.numpy().astype(np.uint8)
-        good_np = good.numpy().astype(np.uint8)
-        
-        if dilation > 1:
-            kernel = np.ones((dilation, dilation), np.uint8)
-            bad_np = cv2.dilate(bad_np, kernel)
-
-        # 에러맵 이미지 생성
-        H, W = bad_np.shape
-        img = np.zeros((H, W, 3), dtype=np.uint8)
-        img[:, :, :] = (255, 0, 0)
-        img[~valid.numpy()] = (0, 0, 0)
-        img[bad_np > 0] = (255, 0, 0)
-        img[good_np > 0] = (0, 255, 0)
-        
-        # 히스토그램 데이터 계산 (카운트 기반)
-        bin_centers, counts_total, counts_bad = self.compute_gt_and_bad_counts(
-            gt.numpy(), bad.numpy(), bins
+        # Compute histogram for main prediction
+        bin_centers_main, counts_total_main, counts_bad_main = self.compute_gt_and_bad_counts(
+            gt.numpy(), bad_main.numpy(), bins
         )
         
-        # 에러맵과 히스토그램을 함께 플롯
+        # Check if random crops exist and coordinates are provided
+        has_random_crops = (
+            'pseudo_disp_random_1' in data_batch and 
+            'pseudo_disp_random_2' in data_batch and
+            all(coord is not None for coord in [x1_1, y1_1, x1_2, y1_2])
+        )
+        
         filename = os.path.basename(data_batch['tgt_left_filename'].split('/')[-1])
         save_path = os.path.join(self.error_dir, filename)
         
-        self.plot_error_map_with_count_histogram(img, bin_centers, counts_total, counts_bad, save_path)
+        if has_random_crops:
+            # Process random crop 1
+            pred_r1 = data_batch['pseudo_disp_random_1'][0].squeeze().detach().cpu()
+            crop_h, crop_w = pred_r1.shape
+            gt_crop1 = gt[y1_1:y1_1+crop_h, x1_1:x1_1+crop_w]
+            valid_r1, bad_np_r1, good_np_r1, bad_r1 = compute_error_data(gt_crop1, pred_r1)
+            img_r1 = create_error_image(valid_r1, bad_np_r1, good_np_r1, crop_h, crop_w)
+            
+            bin_centers_r1, counts_total_r1, counts_bad_r1 = self.compute_gt_and_bad_counts(
+                gt_crop1.numpy(), bad_r1.numpy(), bins
+            )
+            
+            # Process random crop 2
+            pred_r2 = data_batch['pseudo_disp_random_2'][0].squeeze().detach().cpu()
+            gt_crop2 = gt[y1_2:y1_2+crop_h, x1_2:x1_2+crop_w]
+            
+            valid_r2, bad_np_r2, good_np_r2, bad_r2 = compute_error_data(gt_crop2, pred_r2)
+            img_r2 = create_error_image(valid_r2, bad_np_r2, good_np_r2, crop_h, crop_w)
+            
+            bin_centers_r2, counts_total_r2, counts_bad_r2 = self.compute_gt_and_bad_counts(
+                gt_crop2.numpy(), bad_r2.numpy(), bins
+            )
+            
+            # Plot all three together
+            self.plot_error_map_with_count_histogram_multi(
+                [img_main, img_r1, img_r2],
+                [bin_centers_main, bin_centers_r1, bin_centers_r2],
+                [counts_total_main, counts_total_r1, counts_total_r2],
+                [counts_bad_main, counts_bad_r1, counts_bad_r2],
+                ['Full Prediction', f'Random Crop 1 ({x1_1},{y1_1})', f'Random Crop 2 ({x1_2},{y1_2})'],
+                save_path
+            )
+        else:
+            # Plot only main prediction
+            self.plot_error_map_with_count_histogram(img_main, bin_centers_main, counts_total_main, counts_bad_main, save_path)
+
 
     def compute_gt_and_bad_counts(self, gt_np, bad_np, bins=10):
         """GT disparity 값별 총 카운트와 에러 카운트를 계산"""
@@ -327,6 +383,7 @@ class Logger:
         bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
 
         return bin_centers, counts_total, counts_bad
+
 
     def plot_error_map_with_count_histogram(self, img, bin_centers, counts_total, counts_bad, save_path):
         """에러맵과 카운트 히스토그램을 함께 플롯"""
@@ -371,6 +428,55 @@ class Logger:
         plt.tight_layout()
         plt.savefig(save_path, bbox_inches='tight', pad_inches=0.1)
         plt.close()
+
+
+    def plot_error_map_with_count_histogram_multi(self, imgs, bin_centers_list, counts_total_list, counts_bad_list, titles, save_path):
+        """Multiple error maps and histograms side by side"""
+        n_plots = len(imgs)
+        plt.figure(figsize=(8 * n_plots, 12), dpi=100)
+        
+        for i in range(n_plots):
+            # Error map
+            plt.subplot(2, n_plots, i + 1)
+            plt.imshow(imgs[i])
+            plt.axis('off')
+            plt.title(f'{titles[i]} - Error Map', fontsize=14)
+            
+            # Histogram
+            plt.subplot(2, n_plots, i + 1 + n_plots)
+            bin_centers = bin_centers_list[i]
+            counts_total = counts_total_list[i]
+            counts_bad = counts_bad_list[i]
+            
+            if len(bin_centers) > 0:
+                bar_width = (bin_centers[1] - bin_centers[0]) * 0.35 if len(bin_centers) > 1 else 0.35
+                x_pos = np.arange(len(bin_centers))
+                
+                plt.bar(x_pos - bar_width/2, counts_total, bar_width, 
+                    label='Total GT Count', color='blue', alpha=0.7)
+                plt.bar(x_pos + bar_width/2, counts_bad, bar_width, 
+                    label='Bad Count', color='red', alpha=0.7)
+                
+                plt.xticks(x_pos, [f'{center:.1f}' for center in bin_centers], rotation=45)
+                plt.xlabel('GT Disparity Value', fontsize=12)
+                plt.ylabel('Count', fontsize=12)
+                plt.title(f'{titles[i]} - Histogram', fontsize=14)
+                plt.legend()
+                plt.grid(True, alpha=0.3)
+                
+                # Add count labels on bars
+                for j, (total, bad) in enumerate(zip(counts_total, counts_bad)):
+                    if total > 0:
+                        plt.text(j - bar_width/2, total + max(counts_total) * 0.01, 
+                                str(total), ha='center', va='bottom', fontsize=9)
+                    if bad > 0:
+                        plt.text(j + bar_width/2, bad + max(counts_total) * 0.01, 
+                                str(bad), ha='center', va='bottom', fontsize=9)
+        
+        plt.tight_layout()
+        plt.savefig(save_path, bbox_inches='tight', pad_inches=0.1)
+        plt.close()
+
 
 
     def compute_metrics(self, data_batch):
