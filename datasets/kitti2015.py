@@ -169,7 +169,7 @@ class KITTI2015Dataset(Dataset):
         else:
             w, h = left_img.size
             # crop_w, crop_h = 512, 256
-            crop_w, crop_h = 1120, 332
+            crop_w, crop_h = 1152, 320
             
             # Generate two random crop coordinates
             x1_1 = random.randint(0, w - crop_w)
