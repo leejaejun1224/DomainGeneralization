@@ -95,7 +95,7 @@ class LoRAResidualModule(nn.Module):
             # Note: This assumes concat_volume input, you'll need to pass it from main forward
             pass  # Will be handled in main forward function
         
-        return residual_att_weights * self.att_scale, residual_corr_volume
+        return residual_att_weights, residual_corr_volume
     
     def process_concat_volume(self, concat_volume):
         """Process concat volume with LoRA residual"""
@@ -106,4 +106,4 @@ class LoRAResidualModule(nn.Module):
         res_cost_conv2 = self.residual_cost_conv2(res_cost_conv1)
         residual_cost = self.residual_cost_up(res_cost_conv2)
         
-        return residual_cost * self.cost_scale
+        return residual_cost
