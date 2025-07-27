@@ -19,7 +19,7 @@ uda = dict(
 optimizer = dict(
     optimizer = "Adam",
     lr = 1e-4,
-    adjust_lr = "200,400,1000:10"
+    adjust_lr = "350,500,1000:10"
 )
 
 # name_dataset = 'kitti2015_to_kitti2012'
@@ -34,8 +34,8 @@ data = dict(
         num_workers = 2,
         shuffle = True,
         pin_memory = True,
-        val_interval = 50,
-        save_interval = 50
+        val_interval = 1,
+        save_interval = 1
     ),
     test = dict(
         batch_size = 1,

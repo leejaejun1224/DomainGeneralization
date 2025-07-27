@@ -6,6 +6,7 @@ from torch.autograd import Variable
 import torch.nn.functional as F
 from models.estimator.submodules import *
 from models.estimator.refiner import *
+from models.estimator.adaptor import *
 import math
 import gc
 import time
@@ -246,6 +247,8 @@ class Fast_ACVNet_plus(nn.Module):
         self.feature = FeatureMiTPtr()
         self.feature_up = FeatUp()
         chans = [32, 64, 160, 256]
+        self.enable_lora = True
+        lora_rank = 16
         # self.module = RefineCostVolume(feat_ch=32, max_disp=maxdisp)
         # self.propagation_net = PropagationNetLarge(feat_ch=chans[0])
 
@@ -286,6 +289,9 @@ class Fast_ACVNet_plus(nn.Module):
         self.concat_feature_att_4 = channelAtt(16, 80)
         self.hourglass = hourglass(16)
 
+        if self.enable_lora:
+            self.lora_module = LoRAResidualModule(rank=lora_rank, maxdisp=maxdisp)
+
 
     def concat_volume_generator(self, left_input, right_input, disparity_samples):
         
@@ -321,7 +327,9 @@ class Fast_ACVNet_plus(nn.Module):
         corr_volume_1 = build_norm_correlation_volume(match_left, match_right, self.maxdisp//4, mode=mode)
         corr_volume_2 = corr_volume_1
 
+        #### 여기부터
         ## shape [batch, 8, max_disparity//4, h, w]
+        ## 이 놈이 위 아래를 연결해주는 핵심부가 됨. 결과는 노션에 정리
         corr_volume = self.corr_stem(corr_volume_1)
 
         cost_att = self.corr_feature_att_4(corr_volume, features_left_cat)
@@ -332,6 +340,12 @@ class Fast_ACVNet_plus(nn.Module):
         features_left_for_att = [feat.detach() if self.training else feat for feat in features_left]
         att_weights = self.hourglass_att(cost_att, features_left_for_att)
         
+        if self.enable_lora:
+            residual_att_weights, _ = self.lora_module(corr_volume_1, features_left_cat, self.att_weights_only)
+            # Add residual to original attention weights
+            att_weights = att_weights + residual_att_weights
+        
+        ##### 여기까지 한 뭉탱이
         
         att_weights_prob = F.softmax(att_weights, dim=2)
         _, ind = att_weights_prob.sort(2, True)
@@ -365,6 +379,9 @@ class Fast_ACVNet_plus(nn.Module):
             cost = self.hourglass(volume, features_left_for_hg)
             ### 여기까지가 1/4 사이즈 prediction하는거고
             
+            if self.enable_lora:
+                residual_cost = self.lora_module.process_concat_volume(volume)
+                cost = cost + residual_cost
             
             xspx = self.spx_4(features_left_cat)
             xspx = self.spx_2(xspx, stem_2x)
@@ -398,3 +415,14 @@ class Fast_ACVNet_plus(nn.Module):
         return [pred_up * 4, pred.squeeze(1) * 4, pred_att_up * 4, pred_att * 4], \
             [confidence, corr_volume_2, prob, corr_volume_2], \
             [feature_left, attn_weights_left, cost, match_left, match_right]
+    
+    
+    def freeze_original_network(self):
+        for name, param in self.named_parameters():
+            if 'lora_module' not in name:
+                param.requires_grad = False
+    
+    
+    def unfreeze_all(self):
+        for param in self.parameters():
+            param.requires_grad = True

@@ -248,12 +248,12 @@ def main():
         log_dict['ckpt_epoch'] = start_epoch
         
     # segformer의 엔코더를 pretrained으로 두고 싶으면 주석 해제
-    fresh_segformer = SegformerModel.from_pretrained(
-        'nvidia/segformer-b0-finetuned-cityscapes-512-1024'
-    ).to('cuda:0')
-    fresh_sd = fresh_segformer.state_dict()
-    model.teacher_model.feature.model.load_state_dict(fresh_sd, strict=False)
-    model.student_model.feature.model.load_state_dict(fresh_sd, strict=False)
+    # fresh_segformer = SegformerModel.from_pretrained(
+    #     'nvidia/segformer-b0-finetuned-cityscapes-512-1024'
+    # ).to('cuda:0')
+    # fresh_sd = fresh_segformer.state_dict()
+    # model.teacher_model.feature.model.load_state_dict(fresh_sd, strict=False)
+    # model.student_model.feature.model.load_state_dict(fresh_sd, strict=False)
     
     model.to('cuda:0')
     model.init_ema()
