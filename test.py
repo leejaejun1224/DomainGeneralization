@@ -118,6 +118,7 @@ def setup_model(cfg, ckpt_path, encoder_ckpt_path=None):
 
     return model.to('cuda:0')
 
+
 def process_batch(data_batch, source_batch, target_batch):
     for key in source_batch:
         if isinstance(source_batch[key], torch.Tensor):
@@ -130,6 +131,7 @@ def process_batch(data_batch, source_batch, target_batch):
         else:
             data_batch['tgt_' + key] = target_batch[key]
     return data_batch
+
 
 def split_batch(data_batch, batch_idx):
     batch = {}

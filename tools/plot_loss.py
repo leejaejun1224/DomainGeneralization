@@ -191,6 +191,51 @@ def plot_reconstruction_loss(loss_dict, output_image_path):
     # 이미지 파일로 저장
     plt.savefig(output_image_path)
     plt.close()
+    
+    
+def plot_target_valid_loss(loss_dict, output_image_path):
+
+    epochs = []
+    target_valid_loss_student = []
+    target_valid_loss_teacher = []
+
+    epoch_keys = [k for k in loss_dict.keys() if k.startswith("epoch")]
+    sorted_keys = sorted(epoch_keys, key=lambda k: int(k.split('_')[1]))
+
+    
+    for key in sorted_keys:
+        # "epoch_1" -> 1 추출
+        epoch_num = int(key.split('_')[1])
+        epochs.append(epoch_num)
+
+        # 각 epoch의 데이터 가져오기
+        epoch_data = loss_dict[key]
+        student_loss = epoch_data.get("target_valid_loss_student")
+        teacher_loss = epoch_data.get("target_valid_loss_teacher")
+        
+
+        if isinstance(student_loss, str) and student_loss.lower() == "nan":
+            student_loss = float('nan')
+        if isinstance(teacher_loss, str) and teacher_loss.lower() == "nan":
+            teacher_loss = float('nan')
+
+
+        target_valid_loss_student.append(student_loss)
+        target_valid_loss_teacher.append(teacher_loss)
+        
+    # 그래프 그리기
+    plt.figure(figsize=(20, 10))
+    plt.plot(epochs, target_valid_loss_student, label='target_valid_loss_student', marker='o', linestyle='-')
+    plt.plot(epochs, target_valid_loss_teacher, label='target_valid_loss_teacher', marker='s', linestyle='-')    
+    plt.xlabel('Epoch')
+    plt.ylabel('Student-Teacher Valid Loss')
+    plt.title('Student-Teacher Valid Loss vs Epoch')
+    plt.legend()
+    plt.grid(True)
+
+    # 이미지 파일로 저장
+    plt.savefig(output_image_path)
+    plt.close()
 
 # if __name__ == "__main__":
 #     parser = argparse.ArgumentParser()

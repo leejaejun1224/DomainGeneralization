@@ -13,7 +13,7 @@ from datasets import __datasets__
 from torch.utils.data import DataLoader
 from datasets.dataloader import PrepareDataset
 from experiment import prepare_cfg, adjust_learning_rate
-from tools.plot_loss import plot_loss_graph, plot_true_ratio, plot_threshold, plot_reconstruction_loss
+from tools.plot_loss import *
 from tools.metrics import EPE_metric, D1_metric, Thres_metric
 from models.tools.threshold_manager import EntropyThresholdManager, ThresholdManager
 from transformers import SegformerModel
@@ -143,6 +143,7 @@ def train_epoch(model, source_loader, target_loader, optimizer, threshold_manage
     
     true_ratios, train_losses, train_supervised_losses, train_pseudo_losses, reconstruction_losses, depth_losses, entropy_losses = [], [], [], [], [], [], []
     average_threshold, consist_photo_loss = [], []
+    target_valid_loss_student, target_valid_loss_teacher = [], []
     for batch_idx, (source_batch, target_batch) in enumerate(zip(source_loader, target_loader)):
         
         data_batch = {"warm_up" : cfg['warm_up']}
@@ -164,7 +165,8 @@ def train_epoch(model, source_loader, target_loader, optimizer, threshold_manage
             entropy_losses.append(log_vars['entropy_loss'])
             consist_photo_loss.append(log_vars['consist_loss'])
             threshold_manager.update_log(image_ids, log_vars['true_ratio'], log_vars['unsupervised_loss'], epoch)
-            
+            target_valid_loss_student.append(log_vars['target_valid_loss_student'])
+            target_valid_loss_teacher.append(log_vars['target_valid_loss_teacher'])
             if args.compute_metrics:
                 scalar_outputs = compute_metrics_dict(data_batch)
 
@@ -181,11 +183,13 @@ def train_epoch(model, source_loader, target_loader, optimizer, threshold_manage
             'depth_loss': sum(depth_losses)/len(depth_losses),
             'entropy_loss': sum(entropy_losses)/len(entropy_losses),
             'consist_photo_loss': sum(consist_photo_loss)/len(consist_photo_loss),
-            'learning_rate': current_lr
+            'learning_rate': current_lr,
+            'target_valid_loss_student': sum(target_valid_loss_student)/len(target_valid_loss_student),
+            'target_valid_loss_teacher': sum(target_valid_loss_teacher)/len(target_valid_loss_teacher)
         }
     return {'train_loss': 0, 'true_ratio_train': 0, 'train_pseudo_loss': 0,\
              'reconstruction_loss': 0, 'learning_rate': current_lr, 'depth_loss': 0, \
-                'entropy_loss': 0, 'consist_photo_loss':0}
+                'entropy_loss': 0, 'consist_photo_loss':0, 'target_valid_loss_student': 0, 'target_valid_loss_teacher': 0}
 
 def validate(model, source_loader, target_loader, epoch):
     model.eval()
@@ -289,6 +293,7 @@ def main():
     plot_loss_graph(log_dict, f'{save_dir}/loss_graph.png')
     plot_true_ratio(log_dict, f'{save_dir}/true_ratio_graph.png')
     plot_reconstruction_loss(log_dict, f'{save_dir}/reconstruction_loss_graph.png')
+    plot_target_valid_loss(log_dict, f'{save_dir}/student_teacher_loss_graph.png')
     
     return 0
 
