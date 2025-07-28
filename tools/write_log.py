@@ -637,7 +637,50 @@ class Logger:
         plt.tight_layout()
         plt.savefig(save_path, bbox_inches='tight', pad_inches=0.1)
         plt.close()
+        
+    def plot_error_map_with_count_histogram(self, img, bin_centers, counts_total, counts_bad, save_path):
+        """에러맵과 카운트 히스토그램을 함께 플롯"""
+        plt.figure(figsize=(16, 6), dpi=100)
 
+        # 에러맵 서브플롯
+        plt.subplot(1, 2, 1)
+        plt.imshow(img)
+        plt.axis('off')
+        plt.title('Error Map', fontsize=14)
+
+        # 히스토그램 서브플롯 (그룹 막대 그래프)
+        plt.subplot(1, 2, 2)
+        if len(bin_centers) > 0:
+            # 막대 너비와 위치 설정
+            bar_width = (bin_centers[1] - bin_centers[0]) * 0.35 if len(bin_centers) > 1 else 0.35
+            x_pos = np.arange(len(bin_centers))
+
+        # 그룹 막대 그래프 생성
+        plt.bar(x_pos - bar_width/2, counts_total, bar_width,
+        label='Total GT Count', color='blue', alpha=0.7)
+        plt.bar(x_pos + bar_width/2, counts_bad, bar_width,
+        label='Bad Count', color='red', alpha=0.7)
+
+        # X축 라벨 설정
+        plt.xticks(x_pos, [f'{center:.1f}' for center in bin_centers], rotation=45)
+        plt.xlabel('GT Disparity Value', fontsize=12)
+        plt.ylabel('Count', fontsize=12)
+        plt.title('GT Count and Bad Count by Disparity Bin', fontsize=14)
+        plt.legend()
+        plt.grid(True, alpha=0.3)
+
+        # 막대 위에 수치 표시
+        for i, (total, bad) in enumerate(zip(counts_total, counts_bad)):
+            if total > 0:
+                plt.text(i - bar_width/2, total + max(counts_total) * 0.01,
+                str(total), ha='center', va='bottom', fontsize=9)
+            if bad > 0:
+                plt.text(i + bar_width/2, bad + max(counts_total) * 0.01,
+                str(bad), ha='center', va='bottom', fontsize=9)
+
+        plt.tight_layout()
+        plt.savefig(save_path, bbox_inches='tight', pad_inches=0.1)
+        plt.close()
         
     def compute_gt_and_bad_counts(self, gt_np, bad_np, bins=10):
             """GT disparity 값별 총 카운트와 에러 카운트를 계산"""

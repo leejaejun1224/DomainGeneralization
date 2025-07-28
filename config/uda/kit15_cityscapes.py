@@ -47,5 +47,5 @@ data = dict(
 
 lora = dict(
     student_lora = True,
-    teacher_lora = True,
+    teacher_lora = False,
 )
