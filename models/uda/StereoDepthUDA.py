@@ -318,7 +318,6 @@ class StereoDepthUDA(StereoDepthUDAInference):
             data_batch['cost_t'] = features[2]
             
             for i in range(0, 9):
-                
                 pseudo_disp, map, features = self.teacher_forward(
                     data_batch[f'tgt_left_random_{i+1}'], data_batch[f'tgt_right_random_{i+1}'])
                 data_batch[f'pseudo_disp_random_{i+1}'] = pseudo_disp

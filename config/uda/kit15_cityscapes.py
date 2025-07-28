@@ -44,3 +44,8 @@ data = dict(
         pin_memory = True
     )
 )
+
+lora = dict(
+    student_lora = True,
+    teacher_lora = True,
+)

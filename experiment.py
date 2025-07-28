@@ -77,7 +77,9 @@ def prepare_cfg(arg, mode='train'):
         test_num_workers = uda_config.data['test']['num_workers'],
         test_shuffle = uda_config.data['test']['shuffle'],
         test_pin_memory = uda_config.data['test']['pin_memory'],
-        adjust_lr = uda_config.optimizer['adjust_lr']
+        adjust_lr = uda_config.optimizer['adjust_lr'],
+        student_lora = uda_config.lora['student_lora'],
+        teacher_lora = uda_config.lora['teacher_lora'],
     )
 
     return cfg

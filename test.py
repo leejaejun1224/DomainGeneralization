@@ -45,7 +45,7 @@ def setup_model(cfg, ckpt_path, encoder_ckpt_path=None):
     model = __models__["StereoDepthUDA"](cfg)
     sd = torch.load(ckpt_path)
     model.student_model.load_state_dict(sd["student_state_dict"])
-    model.teacher_model.load_state_dict(sd["teacher_state_dict"])
+    model.teacher_model.load_state_dict(sd["teacher_state_dict"], strict=False)
     # print(sd["student_state_dict"].keys())
     changed = unchanged = 0                 # 집계용 카운터
 

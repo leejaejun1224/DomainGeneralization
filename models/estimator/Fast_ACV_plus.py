@@ -239,7 +239,7 @@ class hourglass_att(nn.Module):
     
 
 class Fast_ACVNet_plus(nn.Module):
-    def __init__(self, maxdisp, att_weights_only):
+    def __init__(self, maxdisp, att_weights_only, enable_lora=True):
         super(Fast_ACVNet_plus, self).__init__()
         self.maxdisp = maxdisp
         self.att_weights_only = att_weights_only
@@ -247,7 +247,7 @@ class Fast_ACVNet_plus(nn.Module):
         self.feature = FeatureMiTPtr()
         self.feature_up = FeatUp()
         chans = [32, 64, 160, 256]
-        self.enable_lora = True
+        self.enable_lora = enable_lora
         lora_rank = 16
         # self.module = RefineCostVolume(feat_ch=32, max_disp=maxdisp)
         # self.propagation_net = PropagationNetLarge(feat_ch=chans[0])
