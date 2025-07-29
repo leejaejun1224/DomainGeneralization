@@ -10,6 +10,7 @@ class LoRAResidualModule(nn.Module):
         self.maxdisp = maxdisp
         
         # LoRA components for correlation processing
+        # 근데 이렇게 하면 원래에 비해서 파라미터가 늘어나는거 아니야? 
         self.lora_corr_down = nn.Conv3d(1, rank, kernel_size=1, bias=False)
         self.lora_corr_up = nn.Conv3d(rank, 8, kernel_size=1, bias=False)
         
@@ -75,7 +76,10 @@ class LoRAResidualModule(nn.Module):
                     nn.init.kaiming_normal_(m.weight, mode='fan_out')
     
     def forward(self, corr_volume_1, features_left_cat, att_weights_only=False):
+        
         # LoRA residual for correlation processing
+        # 원래 코드에서는 여기가 corr_stem에 해당하는 역할
+        # 역할은? 
         lora_corr = self.lora_corr_up(self.lora_corr_down(corr_volume_1))
         
         # LoRA residual for feature attention
@@ -86,6 +90,7 @@ class LoRAResidualModule(nn.Module):
         residual_corr_volume = lora_corr + lora_feat_att
         
         # Lightweight attention processing
+        # 여기가 hourglass_att에 해당하는 부분임.
         res_att_conv1 = self.residual_att_conv1(residual_corr_volume)
         res_att_conv2 = self.residual_att_conv2(res_att_conv1)
         residual_att_weights = self.residual_att_up(res_att_conv2)

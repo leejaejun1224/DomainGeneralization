@@ -6,7 +6,7 @@ from torch.autograd import Variable
 import torch.nn.functional as F
 from models.estimator.submodules import *
 from models.estimator.refiner import *
-from models.estimator.adaptor import *
+from models.estimator.adaptor2 import *
 import math
 import gc
 import time
@@ -289,8 +289,11 @@ class Fast_ACVNet_plus(nn.Module):
         self.concat_feature_att_4 = channelAtt(16, 80)
         self.hourglass = hourglass(16)
 
-        if self.enable_lora:
-            self.lora_module = LoRAResidualModule(rank=lora_rank, maxdisp=maxdisp)
+        # if self.enable_lora:
+        #     self.lora_module = AdaptedModel(adaptor_rank=4, adaptor_alpha=0.3)
+        if enable_lora:
+            self.adaptor = Adaptor(self.corr_stem, self.corr_feature_att_4, self.hourglass_att, 
+                 adaptor_rank=4, adaptor_alpha=0.3)
 
 
     def concat_volume_generator(self, left_input, right_input, disparity_samples):
@@ -330,20 +333,28 @@ class Fast_ACVNet_plus(nn.Module):
         #### 여기부터
         ## shape [batch, 8, max_disparity//4, h, w]
         ## 이 놈이 위 아래를 연결해주는 핵심부가 됨. 결과는 노션에 정리
-        corr_volume = self.corr_stem(corr_volume_1)
-
-        cost_att = self.corr_feature_att_4(corr_volume, features_left_cat)
-
-        ## left feature는 여기에서는 업데이트가 없도록 함. 
-        ## 여기를 잘 맞추기위한 left feature 학습이 없도록 하기 위해
-        ## 즉 분리를 하겠다는 거임
-        features_left_for_att = [feat.detach() if self.training else feat for feat in features_left]
-        att_weights = self.hourglass_att(cost_att, features_left_for_att)
-        
         if self.enable_lora:
-            residual_att_weights, _ = self.lora_module(corr_volume_1, features_left_cat, self.att_weights_only)
-            # Add residual to original attention weights
-            att_weights = att_weights + residual_att_weights
+            att_weights = self.adaptor(corr_volume_1, features_left_cat, features_left)
+        
+        
+        else:
+            corr_volume = self.corr_stem(corr_volume_1)
+
+            cost_att = self.corr_feature_att_4(corr_volume, features_left_cat)
+
+            ## left feature는 여기에서는 업데이트가 없도록 함. 
+            ## 여기를 잘 맞추기위한 left feature 학습이 없도록 하기 위해
+            ## 즉 분리를 하겠다는 거임
+            features_left_for_att = [feat.detach() if self.training else feat for feat in features_left]
+            att_weights = self.hourglass_att(cost_att, features_left_for_att)
+        
+        ## for first adaptor
+        # if self.enable_lora:
+        #     residual_att_weights, _ = self.lora_module(corr_volume_1, features_left_cat, self.att_weights_only)
+        #     # Add residual to original attention weights
+        #     att_weights = att_weights + residual_att_weights
+        
+        ## second adaptor
         
         ##### 여기까지 한 뭉탱이
         
@@ -379,9 +390,9 @@ class Fast_ACVNet_plus(nn.Module):
             cost = self.hourglass(volume, features_left_for_hg)
             ### 여기까지가 1/4 사이즈 prediction하는거고
             
-            if self.enable_lora:
-                residual_cost = self.lora_module.process_concat_volume(volume)
-                cost = cost + residual_cost
+            # if self.enable_lora:
+            #     residual_cost = self.lora_module.process_concat_volume(volume)
+            #     cost = cost + residual_cost
             
             xspx = self.spx_4(features_left_cat)
             xspx = self.spx_2(xspx, stem_2x)
