@@ -279,7 +279,7 @@ class Fast_ACVNet_plus(nn.Module):
         
         
         # self.desc1 = nn.Conv2d(48, 48, kernel_size=1, padding=0, stride=1)
-        self.corr_stem = BasicConv(1, 8, is_3d=True, kernel_size=3, stride=1, padding=1)
+        self.corr_stem = BasicConv(1, 8, is_3d=True, drop_out=0.3, kernel_size=3, stride=1, padding=1)
         self.corr_feature_att_4 = channelAtt(8, 80, drop_out=0.1)
         self.hourglass_att = hourglass_att(8)
         self.concat_feature = nn.Sequential(
