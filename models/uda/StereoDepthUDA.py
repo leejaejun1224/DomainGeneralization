@@ -178,9 +178,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
         self.freeze_specific_modules()
         self.student_model.freeze_original_network()
         
-    
-        
-        
+
         src_pred, map, features = self.student_forward(data_batch['src_left'], data_batch['src_right'])
         data_batch['src_pred_disp_s'] = src_pred
         data_batch['src_confidence_map_s'] = map[0]
