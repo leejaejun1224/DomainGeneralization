@@ -210,7 +210,8 @@ def calc_pseudo_loss(data_batch, diff_mask, threshold, model='s'):
 
     ## oh shit it only think about the first index of the output 
     ## no consider the batch size
-    mask = (data_batch['tgt_refined_pred_disp_t'] > 0).squeeze(1) 
+    # mask = (data_batch['tgt_refined_pred_disp_t'] > 0).squeeze(1) 
+    mask = (pseudo_disp[0] > 0) & (pseudo_disp[0] < 256) 
     mask_low = (pseudo_disp[1] > 0) & (pseudo_disp[1] < 256) 
 
     masks = [mask, mask_low, mask, mask_low, valid_mask]
@@ -219,7 +220,6 @@ def calc_pseudo_loss(data_batch, diff_mask, threshold, model='s'):
     weights = [0.6, 0.0, 0.5, 0.0, 1.0]
     true_count = 0.0
     pseudo_label_loss = get_loss(pred_disp, pseudo_disp, masks, weights)
-
 
     return pseudo_label_loss, true_count
 

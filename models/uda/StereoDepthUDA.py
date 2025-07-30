@@ -176,7 +176,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
     def forward_train(self, data_batch, epoch, temperature=0.5):
         
         self.freeze_specific_modules()
-        self.student_model.freeze_original_network()
+        # self.student_model.freeze_original_network()
         
 
         src_pred, map, features = self.student_forward(data_batch['src_left'], data_batch['src_right'])
@@ -262,7 +262,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
         #           weights['jino'] * jino_loss +
         #           weights['photometric'] * consist_photo_loss["loss_total"] + 
         #           weights['confidence'] * confidence_loss)
-        total_loss = 0.1 * supervised_loss + 1.0 * pseudo_loss# + 0.1 * jino_loss 
+        total_loss = 0.2 * supervised_loss + 1.0 * pseudo_loss# + 0.1 * jino_loss 
         # total_loss = consist_photo_loss['loss_total']
 
         ## pred, gt, mask, weights
