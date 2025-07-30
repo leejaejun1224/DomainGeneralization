@@ -187,6 +187,9 @@ class StereoDepthUDA(StereoDepthUDAInference):
         data_batch['features_s'] = features[0]
         data_batch['attn_weights_s'] = features[1]
         data_batch['cost_s'] = features[2]
+        
+        
+        
         # data_batch['src`_attn_loss_s'] = features[2]
         # data_batch['pos_encodings_s'] = features[2]
 
