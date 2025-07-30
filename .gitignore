@@ -5,3 +5,7 @@ __pycache__/__pycache__/
 *.pyo
 *.pyd
 .Python
+
+# Python cache
+__pycache__/
+*.py[cod]
