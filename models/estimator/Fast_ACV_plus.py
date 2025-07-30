@@ -430,7 +430,7 @@ class Fast_ACVNet_plus(nn.Module):
     
     def freeze_original_network(self):
         for name, param in self.named_parameters():
-            if 'lora_module' not in name:
+            if 'adaptor' not in name:
                 param.requires_grad = False
     
     
