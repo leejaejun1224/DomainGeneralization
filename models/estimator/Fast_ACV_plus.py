@@ -88,9 +88,10 @@ class Feature(SubModule):
         return [x4, x8, x16, x32]
 
 class FeatUp(SubModule):
-    def __init__(self):
+    def __init__(self, drop_out=0.1):
         super(FeatUp, self).__init__()
         chans = [32, 64, 160, 256]  # Segformer-B0 출력 채널
+        self.drop_out = drop_out
         self.deconv32_16 = Conv2x(chans[3], chans[2], deconv=True, concat=True)  # 256 -> 160
         self.deconv16_8 = Conv2x(chans[2]*2, chans[1], deconv=True, concat=True)  # 320 -> 64
         self.deconv8_4 = Conv2x(chans[1]*2, chans[0], deconv=True, concat=True)  # 128 -> 32
@@ -107,7 +108,10 @@ class FeatUp(SubModule):
         x4 = self.deconv8_4(x8, x4)       # [128, H/4, W/4] + [32, H/4, W/4] -> [64, H/2, W/2]
         y4 = self.deconv8_4(y8, y4)
         x4 = self.conv4(x4)               # [64, H/2, W/2] -> [32, H/2, W/2]
+        x4 = F.dropout2d(x4, p=self.drop_out, training=self.training)
         y4 = self.conv4(y4)
+        y4 = F.dropout2d(y4, p=self.drop_out, training=self.training)
+        
         return [x4, x8, x16, x32], [y4, y8, y16, y32]
 
 ## 여기서 channel attention을 해서 중요한 부분을 스스로 뽑을텐데 이 부분이 
@@ -115,7 +119,7 @@ class FeatUp(SubModule):
 class channelAtt(SubModule):
     def __init__(self, cv_chan, im_chan, drop_out = 0.0):
         super(channelAtt, self).__init__()
-
+        self.drop_out = drop_out
         self.im_att = nn.Sequential(
             BasicConv(im_chan, im_chan//2, kernel_size=1, stride=1, padding=0, drop_out=drop_out),
             nn.Conv2d(im_chan//2, cv_chan, 1))
@@ -125,6 +129,7 @@ class channelAtt(SubModule):
     def forward(self, cv, im):
         channel_att = self.im_att(im).unsqueeze(2)
         cv = torch.sigmoid(channel_att)*cv
+        cv = F.dropout3d(cv, p=self.drop_out, training=self.training)
         return cv
 
 
@@ -177,7 +182,7 @@ class hourglass(nn.Module):
 class hourglass_att(nn.Module):
     def __init__(self, in_channels):
         super(hourglass_att, self).__init__()
-        self.drop_out = 0.001
+        self.drop_out = 0.0
 
         self.conv1 = nn.Sequential(BasicConv(in_channels, in_channels*2, is_3d=True, bn=True, relu=True, drop_out=self.drop_out, kernel_size=3,
                                              padding=1, stride=2, dilation=1),
@@ -271,7 +276,8 @@ class Fast_ACVNet_plus(nn.Module):
             BasicConv(80, 64, kernel_size=3, stride=1, padding=1),
             nn.Conv2d(64, 64, 3, 1, 1, bias=False),
             # nn.BatchNorm2d(64), nn.ReLU())
-            DomainNorm(64), nn.ReLU())
+            DomainNorm(64), 
+            nn.ReLU())
         
         self.conv = BasicConv(80, 80, kernel_size=3, padding=1, stride=1)
         self.desc = nn.Conv2d(80, 80, kernel_size=1, padding=0, stride=1)
@@ -281,7 +287,7 @@ class Fast_ACVNet_plus(nn.Module):
         
         # self.desc1 = nn.Conv2d(48, 48, kernel_size=1, padding=0, stride=1)
         self.corr_stem = BasicConv(1, 8, is_3d=True, drop_out=0.0, kernel_size=3, stride=1, padding=1)
-        self.corr_feature_att_4 = channelAtt(8, 80, drop_out=0.0)
+        self.corr_feature_att_4 = channelAtt(8, 80, drop_out=0.25)
         self.hourglass_att = hourglass_att(8)
         self.concat_feature = nn.Sequential(
             BasicConv(80, 32, kernel_size=3, stride=1, padding=1),
@@ -360,13 +366,19 @@ class Fast_ACVNet_plus(nn.Module):
         ##### 여기까지 한 뭉탱이
         
         att_weights_prob = F.softmax(att_weights, dim=2)
+        prob_flat          = att_weights_prob.squeeze(1)
+        top2_probs, idx_2  = prob_flat.topk(2, dim=1, largest=True)
+        
+        disp_diff = idx_2[:,1].float() - idx_2[:,0].float()
+
+
         _, ind = att_weights_prob.sort(2, True)
         k = 24
         ind_k = ind[:, :, :k]
         ind_k = ind_k.sort(2, False)[0]
         att_topk = torch.gather(att_weights_prob, 2, ind_k)
         disparity_sample_topk = ind_k.squeeze(1).float()
-        
+
         
         if not self.att_weights_only:
             concat_features_left = self.concat_feature(features_left_cat)
@@ -376,6 +388,7 @@ class Fast_ACVNet_plus(nn.Module):
             ## 그럼 차원은 [batch, 2*channel, disparity topk, h, w] 가 됨. 여기서는 곱하기 2 해서 32
             concat_volume = self.concat_volume_generator(concat_features_left, concat_features_right, disparity_sample_topk)
             volume = att_topk * concat_volume
+            volume = F.dropout3d(volume, p=0.20, training=self.training)
             volume = self.concat_stem(volume)
             
             ## 여기는 volume에서 sigmoid로 각 채널마다 중요도를 계산을 하고 그걸 앞서 구한 features_left_cat에 곱함.
@@ -396,6 +409,7 @@ class Fast_ACVNet_plus(nn.Module):
             #     cost = cost + residual_cost
             
             xspx = self.spx_4(features_left_cat)
+            xspx = F.dropout2d(xspx, p=0.15, training=self.training)
             xspx = self.spx_2(xspx, stem_2x)
             spx_pred = self.spx(xspx)
             
@@ -425,7 +439,7 @@ class Fast_ACVNet_plus(nn.Module):
         confidence = prob_up1 + prob_up2
         confidence_map, _ = att_prob.max(dim=1, keepdim=True)
         return [pred_up * 4, pred.squeeze(1) * 4, pred_att_up * 4, pred_att * 4], \
-            [confidence, corr_volume_2, prob, corr_volume_2], \
+            [disp_diff, corr_volume_2, prob, corr_volume_2], \
             [feature_left, attn_weights_left, cost, match_left, match_right]
     
     

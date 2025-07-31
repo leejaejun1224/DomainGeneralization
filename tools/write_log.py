@@ -117,7 +117,7 @@ class Logger:
         filename = data_batch['tgt_left_filename'].split('/')[-1]
         
         plt.figure(figsize=(12, 8))
-        img = plt.imshow(att_prob, cmap='jet')
+        img = plt.imshow(att_prob, cmap='jet', vmax=5, vmin=1)
         cbar = plt.colorbar(img, fraction=0.015, pad=0.04)
         cbar.ax.tick_params(labelsize=8)
         plt.axis('off')

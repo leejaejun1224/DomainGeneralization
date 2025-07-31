@@ -241,6 +241,9 @@ class StereoDepthUDA(StereoDepthUDAInference):
         calc_confidence_entropy(data_batch,threshold=10, k=12, temperature=0.5)
         compute_photometric_error(data_batch, threshold=0.010)
 
+        directional_loss = calc_directional_loss(data_batch)
+
+
         diff_mask = multi_scale_consistency_filter(data_batch)
         data_batch['tgt_refined_pred_disp_t'], diff_mask = refine_disparity(data_batch, diff_mask, threshold=3.0)
         
@@ -250,7 +253,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
         pseudo_loss, true_ratio = calc_pseudo_loss(data_batch, diff_mask, threshold=0.2, model='s')
 
         consist_photo_loss = consistency_photometric_loss(data_batch)
-        confidence_loss = calc_entropy_loss(data_batch)
+        # confidence_loss = calc_entropy_loss(data_batch)
 
         patch_size = random.randint(1, 8)
 
@@ -266,7 +269,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
         #           weights['jino'] * jino_loss + 
         #           weights['photometric'] * consist_photo_loss["loss_total"] + 
         #           weights['confidence'] * confidence_loss) 
-        total_loss = 1.0 * supervised_loss # + 0.0 * pseudo_loss + 0.5 * jino_loss 
+        total_loss = 0.1 * supervised_loss + 1.0 * directional_loss # + 0.0 * pseudo_loss + 0.5 * jino_loss 
         # total_loss = consist_photo_loss['loss_total'] 
 
         ## pred, gt, mask, weights
@@ -283,7 +286,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
             'true_ratio': 0.0,
             'reconstruction_loss': 0.0,
             'depth_loss': 0.0,
-            'entropy_loss': confidence_loss.item(),
+            'entropy_loss': directional_loss,
             'consist_loss' : 0.0, #consist_photo_loss["loss_total"].item(),
             'target_valid_loss_student' : student_loss.item(),
             'target_valid_loss_teacher' : teacher_loss.item(),
@@ -358,7 +361,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
         data_batch['avg_pseudo_disp'] = avg_disparity.unsqueeze(0)
     
         
-        confidence_loss = calc_entropy_loss(data_batch)
+        # confidence_loss = calc_entropy_loss(data_batch)
         consist_photo_loss = consistency_photometric_loss(data_batch)
         pseudo_loss, true_ratio = calc_pseudo_loss(data_batch, diff_mask, threshold=0.2, model='s')
         
@@ -376,6 +379,6 @@ class StereoDepthUDA(StereoDepthUDAInference):
             'true_ratio': 0.0,
             'reconstruction_loss': 0.0,
             'depth_loss': 0.0,
-            'entropy_loss': confidence_loss.item()
+            'entropy_loss': 0.0
         }
         return log_vars
