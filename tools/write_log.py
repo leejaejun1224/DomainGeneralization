@@ -31,7 +31,7 @@ class Logger:
         self.entropy_dir = os.path.join(self.save_dir, 'entropy')
         self.top_one_dir = os.path.join(self.save_dir, 'top_one')
         self.metrics_dir = os.path.join(self.save_dir, 'metrics')
-        self.depth_dir = os.path.join(self.save_dir, 'depth')
+        self.pseudo_disp_dir = os.path.join(self.save_dir, 'pseudo_disp')
         self.error_dir = os.path.join(self.save_dir, 'error_map')
         self.cost_dir = os.path.join(self.save_dir, 'cost')
         self.occlusion_dir = os.path.join(self.save_dir, 'occlusion_mask')
@@ -43,7 +43,7 @@ class Logger:
         os.makedirs(self.entropy_dir, exist_ok=True)
         os.makedirs(self.metrics_dir, exist_ok=True)
         os.makedirs(self.top_one_dir, exist_ok=True)
-        os.makedirs(self.depth_dir, exist_ok=True)
+        os.makedirs(self.pseudo_disp_dir, exist_ok=True)
         os.makedirs(self.error_dir, exist_ok=True)
         os.makedirs(self.cost_dir, exist_ok=True)
         os.makedirs(self.occlusion_dir, exist_ok=True)
@@ -106,7 +106,7 @@ class Logger:
     def save_att(self, data_batch):
         # att_prob = data_batch['src_confidence_map_s']
         
-        att_prob = data_batch['tgt_confidence_map_s'].unsqueeze(1)
+        att_prob = data_batch['confidence_map'].unsqueeze(1)
         mask = data_batch['valid_disp'] > 0
         # att_prob = data_batch['src_confidence_map_s']
         # att_prob = F.interpolate(att_prob, 
@@ -124,16 +124,23 @@ class Logger:
         plt.savefig(os.path.join(self.att_dir, filename), bbox_inches='tight', pad_inches=0.1)
         plt.close()
 
-    def save_depth_map(self, data_batch):
-        depth_map = data_batch['valid_disp'].squeeze().cpu().numpy()
-        filename = data_batch['src_left_filename'].split('/')[-1]
-        plt.figure(figsize=(12, 8))
-        img = plt.imshow(depth_map, cmap='jet', vmin=0, vmax=192)
-        cbar = plt.colorbar(img, fraction=0.015, pad=0.04)
-        cbar.ax.tick_params(labelsize=8)
-        plt.axis('off')
-        plt.savefig(os.path.join(self.depth_dir, filename), bbox_inches='tight', pad_inches=0.1)
-        plt.close()
+    def save_pseudo_disp_map(self, data_batch):
+        
+        disp = data_batch['avg_pseudo_disp'].squeeze(0).cpu().numpy()
+        total_pixels = data_batch['avg_pseudo_disp'].numel()  # 전체 요소 개수
+        non_zero_pixels = torch.count_nonzero(data_batch['avg_pseudo_disp'])  # 0이 아닌 요소 개수
+        ratio = non_zero_pixels.float() / total_pixels
+        
+        # Get filename from src_left_filename (same as original function)
+        filename = data_batch['tgt_left_filename'].split('/')[-1]
+        
+        # Convert to KITTI format: multiply by 256 and convert to uint16
+        # Invalid pixels should remain 0
+        disp_to_save = (disp*256).astype(np.uint16)
+        
+        # Save as 16-bit PNG (KITTI disp_occ_0 format)
+        filepath = os.path.join(self.pseudo_disp_dir, filename)
+        Image.fromarray(disp_to_save).save(filepath)
 
 
     def save_gt(self, data_batch):
@@ -761,7 +768,7 @@ class Logger:
         self.save_att(data_batch)
         self.save_disparity(data_batch, log_vars)
         self.compute_metrics(data_batch)
-        self.save_depth_map(data_batch)
+        self.save_pseudo_disp_map(data_batch)
         self.save_error_map(data_batch)
         self.save_cost_volume_max_prob(data_batch['cost_t'], data_batch['tgt_left_filename'].split('/')[-1], self.cost_dir)
         self.save_occlusion_mask_simple(data_batch)

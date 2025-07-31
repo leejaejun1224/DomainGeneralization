@@ -188,9 +188,9 @@ def calc_pseudo_loss(data_batch, diff_mask, threshold, model='s'):
     # valid_mask = (data_batch['tgt_refined_pred_disp_t'] > 0).squeeze(1)
     # valid_mask = torch.ones_like(pseudo_disp[0], dtype=torch.bool)
     
-    valid_mask = (data_batch['avg_pseudo_disp'] > 0).unsqueeze(0).to(pseudo_disp[0].device)
+    valid_mask = (data_batch['avg_pseudo_disp'] > 0).to(pseudo_disp[0].device)
     pred_disp.append(pred_disp[0])
-    pseudo_disp.append(data_batch['avg_pseudo_disp'].unsqueeze(0).to(pseudo_disp[0].device))
+    pseudo_disp.append(data_batch['avg_pseudo_disp'].to(pseudo_disp[0].device))
 
 
     # pseudo_disp.append(data_batch['tgt_refined_pred_disp_t'].squeeze(1))

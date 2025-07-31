@@ -103,6 +103,8 @@ class StereoDepthUDA(StereoDepthUDAInference):
             # self.student_model.stem_4,
             # self.student_model.conv,  # self.conf가 실제로는 self.conv인 것 같습니다
             # self.student_model.desc
+            
+            self.teacher_model.feature,
         ]
         
         for module in modules_to_freeze:
@@ -117,6 +119,8 @@ class StereoDepthUDA(StereoDepthUDAInference):
             # self.student_model.stem_4,
             # self.student_model.conv,
             # self.student_model.desc
+            
+            self.teacher_model.feature,
         ]
         
         for module in modules_to_unfreeze:
@@ -130,7 +134,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
         optimizer.zero_grad()
         log_vars = self.forward_train(data_batch, epoch, temperature)
         optimizer.step()
-        # self.update_ema(iter, alpha=0.99)
+        self.update_ema(iter, alpha=0.99)
         
         return log_vars
     
@@ -227,7 +231,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
             data_batch['tgt_left_feature_t'] = features[3]
             data_batch['tgt_right_feature_t'] = features[4]
             
-            for i in range(0, 9):
+            for i in range(0, 3):
                 pseudo_disp, map, features = self.teacher_forward(
                     data_batch[f'tgt_left_random_{i+1}'], data_batch[f'tgt_right_random_{i+1}'])
                 data_batch[f'pseudo_disp_random_{i+1}'] = pseudo_disp
@@ -241,7 +245,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
         data_batch['tgt_refined_pred_disp_t'], diff_mask = refine_disparity(data_batch, diff_mask, threshold=3.0)
         
         avg_disparity, _, _ = self.generator.generate_robust_disparity(data_batch)
-        data_batch['avg_pseudo_disp'] = avg_disparity
+        data_batch['avg_pseudo_disp'] = avg_disparity.unsqueeze(0)
         
         pseudo_loss, true_ratio = calc_pseudo_loss(data_batch, diff_mask, threshold=0.2, model='s')
 
@@ -259,11 +263,11 @@ class StereoDepthUDA(StereoDepthUDAInference):
 
         # total_loss = (weights['supervised'] * supervised_loss + 
         #           weights['pseudo'] * pseudo_loss + 
-        #           weights['jino'] * jino_loss +
+        #           weights['jino'] * jino_loss + 
         #           weights['photometric'] * consist_photo_loss["loss_total"] + 
-        #           weights['confidence'] * confidence_loss)
-        total_loss = 0.2 * supervised_loss + 1.0 * pseudo_loss# + 0.1 * jino_loss 
-        # total_loss = consist_photo_loss['loss_total']
+        #           weights['confidence'] * confidence_loss) 
+        total_loss = 1.0 * supervised_loss # + 0.0 * pseudo_loss + 0.5 * jino_loss 
+        # total_loss = consist_photo_loss['loss_total'] 
 
         ## pred, gt, mask, weights
         weight = [1.0]
@@ -351,7 +355,8 @@ class StereoDepthUDA(StereoDepthUDAInference):
         compute_photometric_error(data_batch, threshold=0.03)
         
         avg_disparity, _, _ = self.generator.generate_robust_disparity(data_batch)
-        data_batch['avg_pseudo_disp'] = avg_disparity
+        data_batch['avg_pseudo_disp'] = avg_disparity.unsqueeze(0)
+    
         
         confidence_loss = calc_entropy_loss(data_batch)
         consist_photo_loss = consistency_photometric_loss(data_batch)

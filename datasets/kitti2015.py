@@ -234,7 +234,6 @@ class KITTI2015Dataset(Dataset):
         
         # Pad original disparity
         disparity_padded = self.processor.pad_to_size(disparity, self.processor.TARGET_SIZE)
-        
         # Create different scales
         disparity_half = cv2.resize(disparity_padded, (target_w//2, target_h//2), interpolation=cv2.INTER_NEAREST)
         disparity_low = cv2.resize(disparity_padded, (target_w//4, target_h//4), interpolation=cv2.INTER_NEAREST)

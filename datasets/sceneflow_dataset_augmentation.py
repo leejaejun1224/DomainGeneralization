@@ -65,9 +65,7 @@ def add_shadow_pair(left_img, right_img,
     return apply(left_img), apply(right_img)
 
 
-# --------------------------- #
-#        Dataset class        #
-# --------------------------- #
+
 class FlyingThingDataset(Dataset):
     def __init__(self, datapath, list_filename, training,
                  max_len=None, aug=False, prior=None,
@@ -144,7 +142,7 @@ class FlyingThingDataset(Dataset):
                 L, R = add_shadow_pair(L, R,
                                        prob=self.shadow_prob,
                                        feather=0.6,
-                                       strength_range=(0.4, 0.8))
+                                       strength_range=(0.2, 0.6))
 
             # 랜덤 크롭
             w, h = L.size
