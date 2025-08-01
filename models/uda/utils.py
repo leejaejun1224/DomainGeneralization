@@ -30,30 +30,17 @@ def refine_disparity(data_batch, mask=None, threshold=3.0):
 def calc_directional_loss(data_batch):
     
     C, H, W = data_batch['tgt_confidence_map_s'].shape
-    
-    # 기존 높이 마스크 (H//2 줄만)
     mask = torch.zeros(data_batch['tgt_confidence_map_s'].shape, device=data_batch['tgt_confidence_map_s'].device)
-    mask[:,H//2,:] = 1
+    mask[ : , H//2 : H , : ] = 1
     
     sign_diff = data_batch['tgt_confidence_map_s']
     target_diff = torch.sign(sign_diff)
     
-    # 추가: 절댓값이 2인 부분만 타겟으로 하는 마스크
-    abs_condition_mask = (torch.abs(sign_diff) == 2).float()
+    masked_loss = torch.abs(sign_diff - target_diff) * mask
     
-    # 두 조건을 모두 만족하는 마스크 (AND 조건)
-    final_mask = mask * abs_condition_mask
-    
-    masked_loss = torch.abs(sign_diff - target_diff) * final_mask
-    
-    # 유효한 픽셀이 있을 때만 loss 계산
-    if final_mask.sum() > 0:
-        directional_loss = masked_loss.sum() / final_mask.sum()
-    else:
-        directional_loss = torch.tensor(0.0, device=sign_diff.device)
+    directional_loss = masked_loss.sum() / mask.sum()
     
     return directional_loss
-
 
 
 

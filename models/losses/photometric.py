@@ -76,6 +76,8 @@ def warp_image(src_img: torch.Tensor,
                          align_corners=True)
 
 
+
+
 def ssim(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
     C1, C2 = 0.01 ** 2, 0.03 ** 2
     mu_x   = F.avg_pool2d(x, 3, 1, 1)

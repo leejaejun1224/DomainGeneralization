@@ -88,7 +88,7 @@ class Feature(SubModule):
         return [x4, x8, x16, x32]
 
 class FeatUp(SubModule):
-    def __init__(self, drop_out=0.1):
+    def __init__(self, drop_out=0.0):
         super(FeatUp, self).__init__()
         chans = [32, 64, 160, 256]  # Segformer-B0 출력 채널
         self.drop_out = drop_out
@@ -251,7 +251,7 @@ class Fast_ACVNet_plus(nn.Module):
         self.att_weights_only = att_weights_only
         # self.feature = FeatureMiT()
         self.feature = FeatureMiTPtr()
-        self.feature_up = FeatUp()
+        self.feature_up = FeatUp(drop_out=0.0)
         chans = [32, 64, 160, 256]
         self.enable_lora = enable_lora
         lora_rank = 16
@@ -287,7 +287,7 @@ class Fast_ACVNet_plus(nn.Module):
         
         # self.desc1 = nn.Conv2d(48, 48, kernel_size=1, padding=0, stride=1)
         self.corr_stem = BasicConv(1, 8, is_3d=True, drop_out=0.0, kernel_size=3, stride=1, padding=1)
-        self.corr_feature_att_4 = channelAtt(8, 80, drop_out=0.25)
+        self.corr_feature_att_4 = channelAtt(8, 80, drop_out=0.)
         self.hourglass_att = hourglass_att(8)
         self.concat_feature = nn.Sequential(
             BasicConv(80, 32, kernel_size=3, stride=1, padding=1),
@@ -343,7 +343,6 @@ class Fast_ACVNet_plus(nn.Module):
         if self.enable_lora:
             att_weights = self.adaptor(corr_volume_1, features_left_cat, features_left)
         
-        
         else:
             corr_volume = self.corr_stem(corr_volume_1)
 
@@ -388,7 +387,7 @@ class Fast_ACVNet_plus(nn.Module):
             ## 그럼 차원은 [batch, 2*channel, disparity topk, h, w] 가 됨. 여기서는 곱하기 2 해서 32
             concat_volume = self.concat_volume_generator(concat_features_left, concat_features_right, disparity_sample_topk)
             volume = att_topk * concat_volume
-            volume = F.dropout3d(volume, p=0.20, training=self.training)
+            volume = F.dropout3d(volume, p=0.0, training=self.training)
             volume = self.concat_stem(volume)
             
             ## 여기는 volume에서 sigmoid로 각 채널마다 중요도를 계산을 하고 그걸 앞서 구한 features_left_cat에 곱함.
@@ -409,7 +408,7 @@ class Fast_ACVNet_plus(nn.Module):
             #     cost = cost + residual_cost
             
             xspx = self.spx_4(features_left_cat)
-            xspx = F.dropout2d(xspx, p=0.15, training=self.training)
+            xspx = F.dropout2d(xspx, p=0., training=self.training)
             xspx = self.spx_2(xspx, stem_2x)
             spx_pred = self.spx(xspx)
             
@@ -440,7 +439,7 @@ class Fast_ACVNet_plus(nn.Module):
         confidence_map, _ = att_prob.max(dim=1, keepdim=True)
         return [pred_up * 4, pred.squeeze(1) * 4, pred_att_up * 4, pred_att * 4], \
             [disp_diff, corr_volume_2, prob, corr_volume_2], \
-            [feature_left, attn_weights_left, cost, match_left, match_right]
+            [feature_left, att_weights, cost, match_left, match_right]
     
     
     def freeze_original_network(self):

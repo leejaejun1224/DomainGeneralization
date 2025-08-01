@@ -106,7 +106,7 @@ class Logger:
     def save_att(self, data_batch):
         # att_prob = data_batch['src_confidence_map_s']
         
-        att_prob = data_batch['confidence_map'].unsqueeze(1)
+        att_prob = data_batch['tgt_confidence_map_s'].unsqueeze(1)
         mask = data_batch['valid_disp'] > 0
         # att_prob = data_batch['src_confidence_map_s']
         # att_prob = F.interpolate(att_prob, 
@@ -181,7 +181,12 @@ class Logger:
         plt.savefig(os.path.join(self.disp_dir_src, src_filename), bbox_inches='tight', pad_inches=0.1)
         plt.close()
 
-        pred_tgt = data_batch['pseudo_disp'][0].squeeze().cpu().numpy()
+        pred_tgt = data_batch['tgt_pred_disp_s'][0].squeeze().cpu().numpy()
+        sign_diff = data_batch['tgt_confidence_map_s'].unsqueeze(1)
+        mask = (abs(sign_diff) == 1).float()
+        mask = F.interpolate(mask, scale_factor=4, mode='nearest')
+        mask = mask.squeeze().detach().cpu().numpy()
+        # pred_tgt *= mask
         tgt_filename = data_batch['tgt_left_filename'].split('/')[-1]
         plt.figure(figsize=(12, 8))
         img = plt.imshow(pred_tgt, cmap='jet', vmin=0, vmax=192)
@@ -416,6 +421,11 @@ class Logger:
         # Load main data
         gt = data_batch['tgt_disparity'].squeeze().detach().cpu()
         pred = data_batch['pseudo_disp'][0].squeeze().detach().cpu()
+        sign_diff = data_batch['tgt_confidence_map_s'].unsqueeze(1)
+        mask = (abs(sign_diff) == 1).float()
+        mask = F.interpolate(mask, scale_factor=4, mode='nearest')
+        mask = mask.squeeze().detach().cpu()
+        pred *= mask
         
         # Process main prediction
         valid_main, bad_np_main, good_np_main, bad_main = compute_error_data(gt, pred)

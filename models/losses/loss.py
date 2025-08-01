@@ -181,6 +181,28 @@ def calc_supervised_val_loss(data_batch, model='s'):
     return loss
 
 
+def calc_adaptor_loss(data_batch, T=2.0, eps=1e-8):
+
+    teacher_logits = data_batch['tgt_attn_weights_t'].detach()       # teacher는 gradient 차단
+    student_logits = data_batch['tgt_attn_weights_s']
+
+    mask = abs(data_batch['confidence_map'] == 1)
+    mask = mask.unsqueeze(1).unsqueeze(2).float()
+
+    student_log_p = F.log_softmax(student_logits / T, dim=2)
+    teacher_p = F.softmax(teacher_logits / T, dim=2) 
+
+
+    kl = F.kl_div(student_log_p, teacher_p, reduction='none') * (T**2)  
+
+    kl = kl * mask
+    denom = mask.sum() * teacher_p.size(2) + eps 
+    loss  = kl.sum() / denom
+
+    return loss
+
+
+
 def calc_pseudo_loss(data_batch, diff_mask, threshold, model='s'):
     key = 'tgt_pred_disp_' + model
     pred_disp, pseudo_disp, confidence_map = data_batch[key], data_batch['pseudo_disp'], data_batch['confidence_map']
@@ -211,13 +233,18 @@ def calc_pseudo_loss(data_batch, diff_mask, threshold, model='s'):
     ## oh shit it only think about the first index of the output 
     ## no consider the batch size
     # mask = (data_batch['tgt_refined_pred_disp_t'] > 0).squeeze(1) 
-    mask = (pseudo_disp[0] > 0) & (pseudo_disp[0] < 256) 
+    mask = (pseudo_disp[0] > 0) & (pseudo_disp[0] < 256)
+    sign_diff = data_batch['tgt_confidence_map_s'].unsqueeze(1)
+    mask2 = (abs(sign_diff) == 1).float()
+    mask2 = F.interpolate(mask2, scale_factor=4, mode='nearest').squeeze(1)
+    mask = mask & mask2.bool()
+    
     mask_low = (pseudo_disp[1] > 0) & (pseudo_disp[1] < 256) 
 
-    masks = [mask, mask_low, mask, mask_low, valid_mask]
+    masks = [mask, mask_low, mask, mask_low]
 
 
-    weights = [0.6, 0.0, 0.5, 0.0, 1.0]
+    weights = [0.6, 0.0, 0.5, 0.0]
     true_count = 0.0
     pseudo_label_loss = get_loss(pred_disp, pseudo_disp, masks, weights)
 

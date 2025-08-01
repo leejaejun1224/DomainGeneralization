@@ -315,27 +315,27 @@ class KITTI2015Dataset(Dataset):
             return_data[f"right_random_{i}"] = right_crops[f'crop_{i}']
         
         # Handle training-specific data
-        if self.training:
+        # if self.training:
             # Apply augmentation if enabled
-            if self.aug:
-                left_weak, left_strong = self.jino_transform(main_left)
-                right_weak, right_strong = self.jino_transform(main_right)
-            else:
-                left_weak, _ = self.jino_transform(main_left)
-                right_weak, _ = self.jino_transform(main_right)
-                left_strong = left_weak.clone()
-                right_strong = right_weak.clone()
-            
-            return_data.update({
-                "left_strong_aug": left_strong,
-                "right_strong_aug": right_strong,
-                "prior": self._load_prior()
-            })
+        if self.aug:
+            left_weak, left_strong = self.jino_transform(main_left)
+            right_weak, right_strong = self.jino_transform(main_right)
         else:
-            # Convert tensors to numpy for validation
-            for key in ['left_half', 'right_half', 'left_low', 'right_low']:
-                if key in return_data:
-                    return_data[key] = return_data[key].numpy()
+            left_weak, _ = self.jino_transform(main_left)
+            right_weak, _ = self.jino_transform(main_right)
+            left_strong = left_weak.clone()
+            right_strong = right_weak.clone()
+        
+        return_data.update({
+            "left_strong_aug": left_strong,
+            "right_strong_aug": right_strong,
+            "prior": self._load_prior()
+        })
+        # else:
+        #     # Convert tensors to numpy for validation
+        #     for key in ['left_half', 'right_half', 'left_low', 'right_low']:
+        #         if key in return_data:
+        #             return_data[key] = return_data[key].numpy()
         
         # Add disparity data if available
         if disparity is not None:

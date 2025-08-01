@@ -29,6 +29,7 @@ def parse_args():
     parser.add_argument('--log_dir', default='./log', help='log directory')
     parser.add_argument('--compute_metrics', default=True, help='compute metrics')
     parser.add_argument('--ckpt', default=None, help='load checkpoint')
+    parser.add_argument('--ckpt2', default=None, help='load checkpoint')
     return parser.parse_args()
 
 def setup_environment(args):
@@ -54,7 +55,7 @@ def setup_train_loaders(cfg):
         datapath=cfg['dataset']['tgt_root'],
         list_filename=cfg['dataset']['tgt_filelist'],
         training=True,
-        aug=False,
+        aug=True,
         prior=cfg['dataset']['tgt_prior']
     )
 
@@ -250,6 +251,12 @@ def main():
         print("start_epoch", start_epoch)
         log_dict['ckpt'] = args.ckpt
         log_dict['ckpt_epoch'] = start_epoch
+    
+    if args.ckpt2 is not None:
+        print("checkpoint2", args.ckpt2)
+        checkpoint2 = torch.load(args.ckpt2)
+        model.teacher_model.load_state_dict(checkpoint2['teacher_state_dict'], strict=False)
+        
         
     # segformer의 엔코더를 pretrained으로 두고 싶으면 주석 해제
     # fresh_segformer = SegformerModel.from_pretrained(
@@ -274,7 +281,7 @@ def main():
     for epoch in range(start_epoch, start_epoch + cfg['epoch']):
         train_metrics = train_epoch(model, train_source_loader, train_target_loader, optimizer, threshold_manager, epoch, cfg, args)
         print(f'Epoch [{epoch + 1}/{start_epoch + cfg["epoch"]}] Average Loss: {train_metrics["train_loss"]:.4f}')
-        print(f'Epoch [{epoch + 1}/{start_epoch + cfg["epoch"]}] Average Consist Photo Loss: {train_metrics["consist_photo_loss"]:.4f}')
+        print(f'Epoch [{epoch + 1}/{start_epoch + cfg["epoch"]}] Average Pseudo Loss: {train_metrics["train_pseudo_loss"]:.4f}')
         print(f'Epoch [{epoch + 1}/{start_epoch + cfg["epoch"]}] Average Entropy Loss: {train_metrics["entropy_loss"]:.4f}')
         if (epoch + 1) % cfg['val_interval'] == 0:
             val_metrics = validate(model, test_source_loader, test_target_loader, epoch)
