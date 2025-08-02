@@ -44,6 +44,8 @@ class FeatureMiTPtr(SubModule):
 
     def forward(self, x):
         outputs = self.encoder(x, output_hidden_states=True, output_attentions=True)
+        for output in outputs.attentions:
+            print(output.shape)
         return outputs.hidden_states, outputs.attentions
 
 class FeatureMiT(SubModule):
@@ -56,6 +58,7 @@ class FeatureMiT(SubModule):
 
     def forward(self, x):
         features, attn_weights = self.model(x)
+
         return features, attn_weights  # [stage1, stage2, stage3, stage4]
 
 
@@ -251,7 +254,7 @@ class Fast_ACVNet_plus(nn.Module):
         self.att_weights_only = att_weights_only
         # self.feature = FeatureMiT()
         self.feature = FeatureMiTPtr()
-        self.feature_up = FeatUp(drop_out=0.0)
+        self.feature_up = FeatUp(drop_out=0.1)
         chans = [32, 64, 160, 256]
         self.enable_lora = enable_lora
         lora_rank = 16
@@ -347,7 +350,7 @@ class Fast_ACVNet_plus(nn.Module):
             corr_volume = self.corr_stem(corr_volume_1)
 
             cost_att = self.corr_feature_att_4(corr_volume, features_left_cat)
-
+            cost_att = F.dropout3d(cost_att, p=0.25, training=self.training)
             ## left feature는 여기에서는 업데이트가 없도록 함. 
             ## 여기를 잘 맞추기위한 left feature 학습이 없도록 하기 위해
             ## 즉 분리를 하겠다는 거임
@@ -387,7 +390,7 @@ class Fast_ACVNet_plus(nn.Module):
             ## 그럼 차원은 [batch, 2*channel, disparity topk, h, w] 가 됨. 여기서는 곱하기 2 해서 32
             concat_volume = self.concat_volume_generator(concat_features_left, concat_features_right, disparity_sample_topk)
             volume = att_topk * concat_volume
-            volume = F.dropout3d(volume, p=0.0, training=self.training)
+            volume = F.dropout3d(volume, p=0.20, training=self.training)
             volume = self.concat_stem(volume)
             
             ## 여기는 volume에서 sigmoid로 각 채널마다 중요도를 계산을 하고 그걸 앞서 구한 features_left_cat에 곱함.
@@ -408,7 +411,7 @@ class Fast_ACVNet_plus(nn.Module):
             #     cost = cost + residual_cost
             
             xspx = self.spx_4(features_left_cat)
-            xspx = F.dropout2d(xspx, p=0., training=self.training)
+            xspx = F.dropout2d(xspx, p=0.15, training=self.training)
             xspx = self.spx_2(xspx, stem_2x)
             spx_pred = self.spx(xspx)
             
