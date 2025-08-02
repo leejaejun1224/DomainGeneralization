@@ -289,7 +289,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
         log_vars = {
             'loss': total_loss.item(),
             'supervised_loss': supervised_loss.item(),
-            'unsupervised_loss': pseudo_loss.item(),
+            'unsupervised_loss': student_loss.item(),
             'true_ratio': 0.0,
             'reconstruction_loss': 0.0,
             'depth_loss': 0.0,

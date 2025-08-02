@@ -14,7 +14,7 @@ ImageFile.LOAD_TRUNCATED_IMAGES = True
 def _random_rect_shadow(img,
                         h_ratio=(0.2, 0.5),    # 직사각형 높이 비율
                         w_ratio=(0.1, 0.9),    # 너비 비율
-                        y_min_ratio=0.55,        # 그림자 y 시작 하한(전체비율)
+                        y_min_ratio=0.35,        # 그림자 y 시작 하한(전체비율)
                         alpha_range=(0.25, 0.5),# 어둡게 정도(1=원본)
                         blur_sigma=1):
     """
