@@ -63,30 +63,63 @@ def apply_shadow(img, prob=0.6):
 def darken_only(img, bright_range=(0.5, 1.0)):
     """채널별 왜곡 없이 전체 밝기만 낮춘다."""
     factor = random.uniform(*bright_range)  # 1.0 = 그대로, 0.4 = 많이 어둡게
+    print(factor)
     return (img.astype(np.float32) * factor).clip(0, 255).astype(img.dtype)
+# ───────────────────────── 네모 그림자 보조 함수
+def _random_rect_shadow(img, prob=0.7,
+                        h_ratio=(0.2, 0.5),   # 직사각형 높이 비율
+                        w_ratio=(0.1, 0.9),   # 직사각형 너비 비율
+                        alpha_range=(0.25, 0.55),  # 어둡게 할 정도
+                        blur_sigma=1):
+    """
+    이미지 하단에 네모난 그림자를 얹어 반환.
+    - prob: 1.0 → 항상, 0.0 → 절대 X
+    - h_ratio / w_ratio: 직사각형 크기 (전체 대비 비율, 튜플이면 랜덤)
+    - alpha_range: 0.0(완전검정)~1.0(원본) 가운데 랜덤
+    - blur_sigma: 모서리 부드럽게
+    """
+    if random.random() > prob:
+        return img
+
+    h, w = img.shape[:2]
+
+    # 랜덤 크기‧위치 계산
+    rh = int(h * random.uniform(*h_ratio))
+    rw = int(w * random.uniform(*w_ratio))
+    # y 는 하단부 쪽으로만, x 는 자유롭게
+    y0 = random.randint(int(h * 0.55), max(h - rh - 1, int(h * 0.55)))
+    x0 = random.randint(0, w - rw - 1)
+
+    # 마스크 생성 (1 = 그대로, 0 = 완전검정)
+    mask = np.ones((h, w), np.float32)
+    darkness = random.uniform(*alpha_range)
+    print(darkness)
+    mask[y0:y0 + rh, x0:x0 + rw] = darkness
+    mask = cv2.GaussianBlur(mask, (0, 0), blur_sigma)
+
+    # 적용
+    out = (img.astype(np.float32) * mask[..., None]).clip(0, 255).astype(img.dtype)
+    return out
 
 
 def augment_pair(imgL, imgR=None):
-    """좌·우 쌍 증강. 색상 그대로, 검은 그림자/감광만."""
-    imgL = apply_shadow(imgL)
-    imgL = darken_only(imgL)           # ← 색 틴트 대신 전체 감광
+    """좌·우 쌍 증강. (네모 그림자 → 다각형 그림자 → 전체 감광)"""
+    # 1) 하단 네모 그림자
+    imgL = _random_rect_shadow(imgL)
+    # 2) 기존 다각형/그래디언트 그림자
+    # imgL = apply_shadow(imgL)
+    # 3) 전체 밝기 낮추기
+    # imgL = darken_only(imgL)
 
     if imgR is not None:
-        imgR = apply_shadow(imgR)
-        imgR = darken_only(imgR)       # 좌·우 동일 방식
+        imgR = _random_rect_shadow(imgR)
+        # imgR = apply_shadow(imgR)
+        # imgR = darken_only(imgR)
         return imgL, imgR
     return imgL, None
 
-def augment_pair(imgL, imgR=None):
-    """좌·우 쌍 증강. 색상 그대로, 검은 그림자/감광만."""
-    imgL = apply_shadow(imgL)
-    imgL = darken_only(imgL)           # ← 색 틴트 대신 전체 감광
 
-    if imgR is not None:
-        imgR = apply_shadow(imgR)
-        imgR = darken_only(imgR)       # 좌·우 동일 방식
-        return imgL, imgR
-    return imgL, None
+
 
 
 def main():

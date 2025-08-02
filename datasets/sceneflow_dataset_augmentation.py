@@ -11,60 +11,41 @@ import torchvision
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 
-# --------------------------- #
-#   Random shadow  utilities  #
-# --------------------------- #
-def _poly_shadow_mask(h, w,
-                      vertices=None,
-                      feather=0.6,
-                      strength_range=(0.4, 0.8)):
+def _random_rect_shadow(img,
+                        h_ratio=(0.2, 0.5),    # 직사각형 높이 비율
+                        w_ratio=(0.1, 0.9),    # 너비 비율
+                        y_min_ratio=0.55,        # 그림자 y 시작 하한(전체비율)
+                        alpha_range=(0.25, 0.5),# 어둡게 정도(1=원본)
+                        blur_sigma=1):
     """
-    랜덤 폴리곤 그림자 마스크 생성 (0~1, 0=어둡게)
+    이미지 하단부에 부드러운 네모 그림자 적용 후 새 이미지 반환.
     """
-    if vertices is None:
-        # 3~6각형 임의 생성
-        num_pts = random.randint(3, 6)
-        xs = np.random.randint(int(0.0*w), int(1.0*w), num_pts)
-        ys = np.random.randint(int(0.0*h), int(1.0*h), num_pts)
-        vertices = np.vstack([xs, ys]).T.astype(np.int32)
+    h, w = img.shape[:2]
+
+    rh = int(h * random.uniform(*h_ratio))
+    rw = int(w * random.uniform(*w_ratio))
+    y0 = random.randint(int(h * y_min_ratio), max(h - rh - 1, int(h * y_min_ratio)))
+    x0 = random.randint(0, w - rw - 1)
 
     mask = np.ones((h, w), np.float32)
-    cv2.fillConvexPoly(mask, vertices, 0.0, lineType=cv2.LINE_AA)
+    mask[y0:y0 + rh, x0:x0 + rw] = random.uniform(*alpha_range)
+    mask = cv2.GaussianBlur(mask, (0, 0), blur_sigma)
 
-    # feather
-    k = int(max(h, w) * 0.05)
-    k = k if k % 2 == 1 else k + 1
-    mask = cv2.GaussianBlur(mask, (k, k), 0)
-    mask = mask ** (1.0 - feather)
-
-    strength = random.uniform(*strength_range)   # 0.4~0.8
-    mask = 1.0 - mask * strength                 # 1 → 그대로, 0.2~0.6 → 어둡게
-    mask = mask[..., None]                       # (H,W,1)
-    return mask
+    out = (img.astype(np.float32) * mask[..., None]).clip(0, 255).astype(img.dtype)
+    return out
 
 
-def add_shadow_pair(left_img, right_img,
-                    prob=0.5,
-                    feather=0.6,
-                    strength_range=(0.4, 0.8)):
+def add_rect_shadow_pair(left_img, right_img, prob=0.5, **shadow_kwargs):
     """
-    좌/우 이미지에 동일 그림자 마스크 곱하기.
+    좌·우 이미지에 동일 파라미터로 네모 그림자를 적용.
     """
     if random.random() > prob:
         return left_img, right_img
 
-    img_np = np.array(left_img).astype(np.float32) / 255.0
-    h, w = img_np.shape[:2]
-    mask = _poly_shadow_mask(h, w, feather=feather, strength_range=strength_range)
+    left_arr  = _random_rect_shadow(np.array(left_img),  **shadow_kwargs)
+    right_arr = _random_rect_shadow(np.array(right_img), **shadow_kwargs)
 
-    def apply(img):
-        arr = np.array(img).astype(np.float32) / 255.0
-        arr = (arr * mask).clip(0, 1)
-        return Image.fromarray((arr * 255).astype(np.uint8))
-
-    return apply(left_img), apply(right_img)
-
-
+    return Image.fromarray(left_arr), Image.fromarray(right_arr)
 
 class FlyingThingDataset(Dataset):
     def __init__(self, datapath, list_filename, training,
@@ -139,10 +120,13 @@ class FlyingThingDataset(Dataset):
                     pass  # placeholder (kept minimal to focus on shadow)
 
                 # 그림자 증강
-                L, R = add_shadow_pair(L, R,
-                                       prob=self.shadow_prob,
-                                       feather=0.6,
-                                       strength_range=(0.2, 0.6))
+                L, R = add_rect_shadow_pair(L, R,
+                                            prob=self.shadow_prob,
+                                            h_ratio=(0.12, 0.30),
+                                            w_ratio=(0.25, 0.70),
+                                            y_min_ratio=0.55,
+                                            alpha_range=(0.35, 0.55),
+                                            blur_sigma=15)
 
             # 랜덤 크롭
             w, h = L.size
