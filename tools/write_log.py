@@ -106,7 +106,7 @@ class Logger:
     def save_att(self, data_batch):
         # att_prob = data_batch['src_confidence_map_s']
         
-        att_prob = data_batch['tgt_confidence_map_s'].unsqueeze(1)
+        att_prob = data_batch['tgt_disp_diff'].unsqueeze(1)
         mask = data_batch['valid_disp'] > 0
         # att_prob = data_batch['src_confidence_map_s']
         # att_prob = F.interpolate(att_prob, 
@@ -182,7 +182,7 @@ class Logger:
         plt.close()
 
         pred_tgt = data_batch['tgt_pred_disp_s'][0].squeeze().cpu().numpy()
-        sign_diff = data_batch['tgt_confidence_map_s'].unsqueeze(1)
+        sign_diff = data_batch['tgt_disp_diff'].unsqueeze(1)
         mask = (abs(sign_diff) == 1).float()
         mask = F.interpolate(mask, scale_factor=4, mode='nearest')
         mask = mask.squeeze().detach().cpu().numpy()
@@ -421,7 +421,7 @@ class Logger:
         # Load main data
         gt = data_batch['tgt_disparity'].squeeze().detach().cpu()
         pred = data_batch['pseudo_disp'][0].squeeze().detach().cpu()
-        sign_diff = data_batch['tgt_confidence_map_s'].unsqueeze(1)
+        sign_diff = data_batch['tgt_disp_diff'].unsqueeze(1)
         mask = (abs(sign_diff) == 1).float()
         mask = F.interpolate(mask, scale_factor=4, mode='nearest')
         mask = mask.squeeze().detach().cpu()

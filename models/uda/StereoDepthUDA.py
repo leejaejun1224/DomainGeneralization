@@ -180,7 +180,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
     def forward_train(self, data_batch, epoch, temperature=0.5):
         
         self.freeze_specific_modules()
-        # self.student_model.freeze_original_network()
+        self.student_model.freeze_original_network()
         
 
         src_pred, map, features = self.student_forward(data_batch['src_left'], data_batch['src_right'])
@@ -200,7 +200,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
 
         tgt_pred, map, features = self.student_forward(data_batch['tgt_left_strong_aug'], data_batch['tgt_right_strong_aug'])  
         data_batch['tgt_pred_disp_s'] = tgt_pred
-        data_batch['tgt_confidence_map_s'] = map[0]
+        data_batch['tgt_disp_diff'] = map[0]
         data_batch['tgt_corr_volume_s_1'] = map[1]
         data_batch['tgt_mask_pred_s'] = map[2]
         data_batch['tgt_corr_volume_s_2'] = map[3]
@@ -231,7 +231,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
             data_batch['tgt_left_feature_t'] = features[3]
             data_batch['tgt_right_feature_t'] = features[4]
             
-            for i in range(0, 5):
+            for i in range(0, 9):
                 pseudo_disp, map, features = self.teacher_forward(
                     data_batch[f'tgt_left_random_{i+1}'], data_batch[f'tgt_right_random_{i+1}'])
                 data_batch[f'pseudo_disp_random_{i+1}'] = pseudo_disp
@@ -241,7 +241,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
         calc_confidence_entropy(data_batch,threshold=10, k=12, temperature=0.5)
         compute_photometric_error(data_batch, threshold=0.010)
 
-        directional_loss = calc_directional_loss(data_batch)
+        # directional_loss = calc_directional_loss(data_batch)
 
 
         diff_mask = multi_scale_consistency_filter(data_batch)
@@ -252,13 +252,13 @@ class StereoDepthUDA(StereoDepthUDAInference):
         
         pseudo_loss, true_ratio = calc_pseudo_loss(data_batch, diff_mask, threshold=0.2, model='s')
         if torch.isnan(pseudo_loss).any():
-            print("something wrong with pseudo loss")
             pseudo_loss = torch.tensor(0.0, device=data_batch['tgt_pred_disp_s'][0].device)
 
         consist_photo_loss = consistency_photometric_loss(data_batch)
         # confidence_loss = calc_entropy_loss(data_batch)
 
         lora_loss = calc_adaptor_loss(data_batch, T=2.0)
+        band_kl_loss = calc_band_kl_loss(data_batch)
 
 
         patch_size = random.randint(1, 8)
@@ -278,7 +278,9 @@ class StereoDepthUDA(StereoDepthUDAInference):
         # total_loss = 0.5 * supervised_loss + 1.0 * directional_loss # + 0.0 * pseudo_loss + 0.5 * jino_loss 
         # total_loss = consist_photo_loss['loss_total'] 
         # total_loss = 0.2 * supervised_loss + 1.0 * pseudo_loss + 1.0 * lora_loss
-        total_loss = supervised_loss
+        total_loss = 0.2*supervised_loss + 1.0 * pseudo_loss + 0.5*lora_loss + 0.2*band_kl_loss
+        
+        
         ## pred, gt, mask, weights
         weight = [1.0]
         gt_tgt_disp = data_batch['tgt_disparity']
@@ -319,7 +321,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
 
         tgt_pred, map, features = self.student_forward(data_batch['tgt_left_strong_aug'], data_batch['tgt_right_strong_aug'])  
         data_batch['tgt_pred_disp_s'] = tgt_pred
-        data_batch['tgt_confidence_map_s'] = map[0]
+        data_batch['tgt_disp_diff'] = map[0]
         data_batch['tgt_corr_volume_s_1'] = map[1]
         data_batch['tgt_mask_pred_s'] = map[2]
         data_batch['tgt_corr_volume_s_2'] = map[3]

@@ -161,7 +161,7 @@ class hourglass(nn.Module):
                                              padding=1, stride=2, dilation=1),
                                    BasicConv(in_channels*4, in_channels*4, is_3d=True, bn=True, relu=True, kernel_size=3,
                                              padding=1, stride=1, dilation=1),
-                                   nn.Dropout3d(0.1))                             
+                                   nn.Dropout3d(0.0))                             
 
 
         self.conv2_up = BasicConv(in_channels*4, in_channels*2, deconv=True, is_3d=True, bn=True,
@@ -172,7 +172,7 @@ class hourglass(nn.Module):
 
         self.agg = nn.Sequential(BasicConv(in_channels*4, in_channels*2, is_3d=True, kernel_size=1, padding=0, stride=1),
                                  BasicConv(in_channels*2, in_channels*2, is_3d=True, kernel_size=3, padding=1, stride=1),
-                                 nn.Dropout3d(0.1),
+                                 nn.Dropout3d(0.0),
                                  BasicConv(in_channels*2, in_channels*2, is_3d=True, kernel_size=3, padding=1, stride=1))
 
 
@@ -217,14 +217,14 @@ class hourglass_att(nn.Module):
                                              padding=1, stride=2, dilation=1),
                                    BasicConv(in_channels*4, in_channels*4, is_3d=True, bn=True, relu=True, kernel_size=3,
                                              padding=1, stride=1, dilation=1),
-                                   nn.Dropout3d(0.1))                             
+                                   nn.Dropout3d(0.0))                             
 
 
         self.conv3 = nn.Sequential(BasicConv(in_channels*4, in_channels*6, is_3d=True, bn=True, relu=True,  kernel_size=3,
                                              padding=1, stride=2, dilation=1),
                                    BasicConv(in_channels*6, in_channels*6, is_3d=True, bn=True, relu=True,  kernel_size=3,
                                              padding=1, stride=1, dilation=1),
-                                   nn.Dropout3d(0.15)) 
+                                   nn.Dropout3d(0.0)) 
 
 
         self.conv3_up = BasicConv(in_channels*6, in_channels*4, deconv=True, is_3d=True, bn=True,
@@ -237,11 +237,11 @@ class hourglass_att(nn.Module):
 
         self.agg_0 = nn.Sequential(BasicConv(in_channels*8, in_channels*4, is_3d=True, kernel_size=1, padding=0, stride=1),
                                    BasicConv(in_channels*4, in_channels*4, is_3d=True, kernel_size=3, padding=1, stride=1),
-                                   nn.Dropout3d(0.12),
+                                   nn.Dropout3d(0.0),
                                    BasicConv(in_channels*4, in_channels*4, is_3d=True, kernel_size=3, padding=1, stride=1))
         self.agg_1 = nn.Sequential(BasicConv(in_channels*4, in_channels*2, is_3d=True, kernel_size=1, padding=0, stride=1),
                                    BasicConv(in_channels*2, in_channels*2, is_3d=True, kernel_size=3, padding=1, stride=1),
-                                   nn.Dropout3d(0.1),
+                                   nn.Dropout3d(0.0),
                                    BasicConv(in_channels*2, in_channels*2, is_3d=True, kernel_size=3, padding=1, stride=1))
 
 
@@ -293,6 +293,7 @@ class Fast_ACVNet_plus(nn.Module):
         self.feature_up = FeatUp()
         chans = [32, 64, 160, 256]
         self.enable_lora = enable_lora
+        self.enable_refine = False
         lora_rank = 16
         # self.module = RefineCostVolume(feat_ch=32, max_disp=maxdisp)
         # self.propagation_net = PropagationNetLarge(feat_ch=chans[0])
@@ -321,7 +322,7 @@ class Fast_ACVNet_plus(nn.Module):
         
         self.conv = BasicConv(80, 80, kernel_size=3, padding=1, stride=1)
         self.desc = nn.Conv2d(80, 80, kernel_size=1, padding=0, stride=1)
-        self.desc_dropout = nn.Dropout2d(0.1)
+        self.desc_dropout = nn.Dropout2d(0.0)
         # self.conv = BasicConv(80, 48, kernel_size=3, padding=1, stride=1)
         # self.desc = nn.Conv2d(48, 48, kernel_size=1, padding=0, stride=1)
         
@@ -332,7 +333,7 @@ class Fast_ACVNet_plus(nn.Module):
         self.hourglass_att = hourglass_att(8)
         self.concat_feature = nn.Sequential(
             BasicConv(80, 32, kernel_size=3, stride=1, padding=1),
-            nn.Dropout2d(0.05),
+            nn.Dropout2d(0.0),
             nn.Conv2d(32, 16, 3, 1, 1, bias=False))
         self.concat_stem = BasicConv(32, 16, is_3d=True, kernel_size=3, stride=1, padding=1)
         self.concat_feature_att_4 = channelAtt(16, 80)
@@ -345,7 +346,14 @@ class Fast_ACVNet_plus(nn.Module):
             self.adaptor = Adaptor(self.corr_stem, self.corr_feature_att_4, self.hourglass_att, 
                  adaptor_rank=4, adaptor_alpha=0.3)
 
-
+        if self.enable_refine :
+            self.refiner = LocalMHARefiner(
+                attn_channels=8,  # hourglass_att 출력 채널
+                feat_channels=80,
+                embed_dim=32,
+                num_heads=2,
+                window_size=11
+            )
 
     def concat_volume_generator(self, left_input, right_input, disparity_samples):
         
@@ -413,12 +421,16 @@ class Fast_ACVNet_plus(nn.Module):
         
         ##### 여기까지 한 뭉탱이
         
+        
+        
         att_weights_prob = F.softmax(att_weights, dim=2)
         prob_flat          = att_weights_prob.squeeze(1)
         top2_probs, idx_2  = prob_flat.topk(2, dim=1, largest=True)
         
         disp_diff = idx_2[:,1].float() - idx_2[:,0].float()
 
+        if self.enable_refine:
+            att_weights = self.refiner(att_weights, features_left_cat, disp_diff)
 
 
         _, ind = att_weights_prob.sort(2, True)
@@ -498,6 +510,9 @@ class Fast_ACVNet_plus(nn.Module):
         for name, param in self.named_parameters():
             if 'adaptor' not in name:
                 param.requires_grad = False
+        # for name, param in self.named_parameters():
+        #     if 'refiner' not in name:
+        #         param.requires_grad = False
     
     
     def unfreeze_all(self):

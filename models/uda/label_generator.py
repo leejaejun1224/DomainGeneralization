@@ -16,9 +16,9 @@ class RobustDisparityGenerator:
                  ransac_inlier_thresh: float = 0.6,      # RANSAC inlier threshold
                  min_consensus_ratio: float = 0.6,       # Minimum consensus ratio for RANSAC
                  min_agreement_ratio: float = 0.1,       # Minimum final agreement ratio
-                 use_median_fallback: bool = True,        # Use median when mean fails
-                 confidence_weighting: bool = True,       # Enable confidence-based weighting
-                 zero_outside_agreement: bool = True):
+                 use_median_fallback: bool = False,        # Use median when mean fails
+                 confidence_weighting: bool = False,       # Enable confidence-based weighting
+                 zero_outside_agreement: bool = False):
         """
         Args:
             variance_thresh: Maximum allowed variance for statistical consensus
@@ -50,7 +50,6 @@ class RobustDisparityGenerator:
         
         # Extract random crops and coordinates
         random_crops, coords_list = self._extract_random_crops(data_batch)
-        
         if len(random_crops) == 0:
             return self._handle_no_crops(main_pred)
         

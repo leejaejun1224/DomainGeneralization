@@ -202,6 +202,37 @@ def calc_adaptor_loss(data_batch, T=2.0, eps=1e-8):
     return loss
 
 
+def calc_band_kl_loss(data_batch,
+                 alpha: float = 0.5,
+                 temperature: float = 1.0,
+                 eps: float = 1e-8) -> torch.Tensor:
+
+    logits     = data_batch['tgt_attn_weights_s']          # student logits
+    disp_diff  = data_batch['tgt_disp_diff']                   # disparity gap
+
+    prob = F.softmax(logits / temperature, dim=2)          # [B,C,D,H,W]
+
+    _, d1 = prob.max(dim=2)                                # [B,C,H,W]
+
+    B, C, D, H, W = prob.shape
+    band = logits.new_zeros(B, C, D, H, W)                 # zeros_like logits
+
+    idx_d = torch.arange(D, device=logits.device).view(1,1,D,1,1)
+
+    band += (idx_d == d1.unsqueeze(2)).float()                                  # d1
+    band += alpha * ((idx_d == (d1+1).clamp_max(D-1).unsqueeze(2)) |            # d1+1
+                     (idx_d == (d1-1).clamp_min(0).unsqueeze(2))).float()       # d1-1
+    band = band / band.sum(dim=2, keepdim=True).clamp_min(eps)
+
+    kl_map = (prob * (prob.add(eps).log() - band.add(eps).log())).sum(2).mean(1)  # [B,H,W]
+
+    mask = (disp_diff >= 2).float()                                             # [B,H,W]
+    masked_kl = (kl_map * mask).sum()                                           # total KL
+    num_mask  = mask.sum().clamp_min(1.0)                                       # avoid /0
+
+    return masked_kl / num_mask
+
+
 
 def calc_pseudo_loss(data_batch, diff_mask, threshold, model='s'):
     key = 'tgt_pred_disp_' + model
@@ -234,17 +265,18 @@ def calc_pseudo_loss(data_batch, diff_mask, threshold, model='s'):
     ## no consider the batch size
     # mask = (data_batch['tgt_refined_pred_disp_t'] > 0).squeeze(1) 
     mask = (pseudo_disp[0] > 0) & (pseudo_disp[0] < 256)
-    sign_diff = data_batch['tgt_confidence_map_s'].unsqueeze(1)
+    sign_diff = data_batch['tgt_disp_diff'].unsqueeze(1)
     mask2 = (abs(sign_diff) == 1).float()
     mask2 = F.interpolate(mask2, scale_factor=4, mode='nearest').squeeze(1)
     mask = mask & mask2.bool()
     
     mask_low = (pseudo_disp[1] > 0) & (pseudo_disp[1] < 256) 
 
-    masks = [mask, mask_low, mask, mask_low]
+    masks = [mask, mask_low, mask, mask_low, valid_mask]
 
 
-    weights = [0.6, 0.0, 0.5, 0.0]
+
+    weights = [0.6, 0.0, 0.5, 0.0, 1.0]
     true_count = 0.0
     pseudo_label_loss = get_loss(pred_disp, pseudo_disp, masks, weights)
 
