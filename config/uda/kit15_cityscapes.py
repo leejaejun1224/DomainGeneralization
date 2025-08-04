@@ -34,8 +34,8 @@ data = dict(
         num_workers = 2,
         shuffle = True,
         pin_memory = True,
-        val_interval = 15,
-        save_interval = 15
+        val_interval = 5,
+        save_interval = 5
     ),
     test = dict(
         batch_size = 1,

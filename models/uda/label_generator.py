@@ -12,7 +12,7 @@ class RobustDisparityGenerator:
     """
     
     def __init__(self, 
-                 variance_thresh: float = 1.0,           # Statistical filtering threshold
+                 variance_thresh: float = 0.75,           # Statistical filtering threshold
                  ransac_inlier_thresh: float = 0.6,      # RANSAC inlier threshold
                  min_consensus_ratio: float = 0.6,       # Minimum consensus ratio for RANSAC
                  min_agreement_ratio: float = 0.1,       # Minimum final agreement ratio

@@ -327,8 +327,8 @@ class KITTI2015Dataset(Dataset):
             right_strong = right_weak.clone()
         
         return_data.update({
-            "left_strong_aug": left_strong,
-            "right_strong_aug": right_strong,
+            "left_strong_aug": left_weak,
+            "right_strong_aug": right_weak,
             "prior": self._load_prior()
         })
         # else:

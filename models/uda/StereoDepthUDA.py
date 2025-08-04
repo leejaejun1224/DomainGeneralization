@@ -278,7 +278,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
         # total_loss = 0.5 * supervised_loss + 1.0 * directional_loss # + 0.0 * pseudo_loss + 0.5 * jino_loss 
         # total_loss = consist_photo_loss['loss_total'] 
         # total_loss = 0.2 * supervised_loss + 1.0 * pseudo_loss + 1.0 * lora_loss
-        total_loss = 0.2*supervised_loss + 1.0 * pseudo_loss + 0.5*lora_loss + 0.2*band_kl_loss
+        total_loss = 0.2*supervised_loss + 1.0 * pseudo_loss + 0.5*lora_loss #+ 0.2*band_kl_loss
         
         
         ## pred, gt, mask, weights

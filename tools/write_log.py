@@ -277,8 +277,8 @@ class Logger:
                         dilation: int = 1,
                         bins: int = 50,
                         # Robust consensus parameters (multiscale 제거)
-                        variance_thresh: float = 1.0,
-                        ransac_inlier_thresh: float = 0.6,
+                        variance_thresh: float = 0.75, # 작을수록 더 빡시게
+                        ransac_inlier_thresh: float = 0.6, # 차이 더 작게만 허용헤줌
                         min_consensus_ratio: float = 0.6):
         
         # Helper function to compute error map for any prediction
