@@ -30,11 +30,13 @@ class DomainNorm(nn.Module):
         
 class BasicConv(nn.Module):
 
-    def __init__(self, in_channels, out_channels, deconv=False, is_3d=False, bn=True, relu=True, **kwargs):
+    def __init__(self, in_channels, out_channels, deconv=False, is_3d=False, bn=True, relu=True, drop_out = 0.0, **kwargs):
         super(BasicConv, self).__init__()
 
         self.relu = relu
         self.use_bn = bn
+        self.use_dropout = drop_out > 0.0
+        self.drop_prob = drop_out
         if is_3d:
             if deconv:
                 self.conv = nn.ConvTranspose3d(in_channels, out_channels, bias=False, **kwargs)
@@ -48,11 +50,15 @@ class BasicConv(nn.Module):
                 self.conv = nn.Conv2d(in_channels, out_channels, bias=False, **kwargs)
             # self.bn = nn.BatchNorm2d(out_channels)
             self.bn = DomainNorm(out_channels, l2=True)
+        if self.use_dropout:
+            self.drop_out = nn.Dropout2d(self.drop_prob) if not is_3d else nn.Dropout3d(self.drop_prob)
 
     def forward(self, x):
         x = self.conv(x)
         if self.use_bn:
             x = self.bn(x)
+        if self.use_dropout:
+            x = self.drop_out(x)
         if self.relu:
             x = nn.LeakyReLU()(x)#, inplace=True)
         return x
