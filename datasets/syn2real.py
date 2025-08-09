@@ -4,10 +4,12 @@ from tqdm import tqdm
 from skimage import color, exposure
 
 # ──────────────── 1) 통계 추출 (Real) ────────────────
-def gather_real_stats(real_dir, max_imgs=500):
+def gather_real_stats(real_dir, max_imgs=400):
+    print(real_dir)
     Ls, ab = [], []
     gammas = []
     files = sorted(glob.glob(os.path.join(real_dir, '*')))[:max_imgs]
+    print(files)
     for fp in tqdm(files, desc='Real stats'):
         bgr = cv2.imread(fp)                 # BGR [0,255]
         rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB) / 255.0
@@ -70,13 +72,19 @@ def transform_dataset(real_dir, syn_dir, out_dir):
     syn_files = glob.glob(os.path.join(syn_dir, '*'))
     for fp in tqdm(syn_files, desc='Transform'):
         num = int(fp.split('/')[-1].split('.')[0])
-        if num < 500:
-            img = cv2.imread(fp)
-            img_t = adapt_synthetic(img, stats, clahe=True)
-            cv2.imwrite(os.path.join(out_dir, os.path.basename(fp)), img_t)
+        # if num < 500:
+        img = cv2.imread(fp)
+        img_t = adapt_synthetic(img, stats, clahe=True)
+        cv2.imwrite(os.path.join(out_dir, os.path.basename(fp)), img_t)
 
 if __name__ == "__main__":
-    REAL_DIR = "/home/jaejun/dataset/kitti_2015/training/image_2"
-    SYN_DIR  = "/home/jaejun/dataset/FlyingThing/FlyingThings3D_subset_image_clean/FlyingThings3D_subset/train/image_clean/right"
-    OUT_DIR  = "/home/jaejun/dataset/FlyingThing/FlyingThings3D_subset_image_clean/FlyingThings3D_subset/train/image_clean/right_real"
+    # REAL_DIR = "/home/jaejun/dataset/kitti_2015/training/image_2"
+    # SYN_DIR  = "/home/jaejun/dataset/FlyingThing/FlyingThings3D_subset_image_clean/FlyingThings3D_subset/train/image_clean/right"
+    # OUT_DIR  = "/home/jaejun/dataset/FlyingThing/FlyingThings3D_subset_image_clean/FlyingThings3D_subset/train/image_clean/right_real"
+    
+    REAL_DIR  = "/home/jaejun/dataset/flyingthing/FlyingThings3D_subset_image_clean/FlyingThings3D_subset/train/image_clean/left"
+    SYN_DIR = "/home/jaejun/dataset/kitti_2015/training/image_2"
+    OUT_DIR = "/home/jaejun/dataset/kitti_2015/training/image_2_syn"
+    
+    
     transform_dataset(REAL_DIR, SYN_DIR, OUT_DIR)

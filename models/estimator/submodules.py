@@ -50,15 +50,11 @@ class BasicConv(nn.Module):
                 self.conv = nn.Conv2d(in_channels, out_channels, bias=False, **kwargs)
             # self.bn = nn.BatchNorm2d(out_channels)
             self.bn = DomainNorm(out_channels, l2=True)
-        if self.use_dropout:
-            self.drop_out = nn.Dropout2d(self.drop_prob) if not is_3d else nn.Dropout3d(self.drop_prob)
 
     def forward(self, x):
         x = self.conv(x)
         if self.use_bn:
             x = self.bn(x)
-        if self.use_dropout:
-            x = self.drop_out(x)
         if self.relu:
             x = nn.LeakyReLU()(x)#, inplace=True)
         return x
