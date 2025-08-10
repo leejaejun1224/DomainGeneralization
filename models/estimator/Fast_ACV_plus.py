@@ -47,9 +47,10 @@ class FeatureMiTPtr(SubModule):
 
 
     def forward(self, x):
-        outputs = self.encoder(x, output_hidden_states=True, output_attentions=True)
+        outputs = self.encoder(x, output_hidden_states=True, output_attentions=False)
 
-        return outputs.hidden_states, outputs.attentions
+        # return outputs.hidden_states, outputs.attentions
+        return outputs.hidden_states, None
 
 
 class FeatureMiT(SubModule):
@@ -337,6 +338,17 @@ class Fast_ACVNet_plus(nn.Module):
         self.concat_stem = BasicConv(32, 16, is_3d=True, kernel_size=3, stride=1, padding=1)
         self.concat_feature_att_4 = channelAtt(16, 80)
         self.hourglass = hourglass(16)
+        
+        self.strip_att = RowStripAttention3D(
+            cv_chan=8, feat_chan=80,
+            heads=1, dim=8,            # 2×16 → 1×8 로 축소
+            min_range=16,
+            use_feat=True,
+            memory_efficient=True,
+            block_size=32,             # 64 → 32
+            kv_stride=4                # K/V 절반의 절반(가로 1/4)
+        )
+
 
 
         # if self.enable_lora:
@@ -383,7 +395,6 @@ class Fast_ACVNet_plus(nn.Module):
 
         ## shape [batch, 1, max_disparity//4, h, w]
         corr_volume_1 = build_norm_correlation_volume(match_left, match_right, self.maxdisp//4, mode=mode)
-        corr_volume_2 = corr_volume_1
 
 
         #### 여기부터
@@ -400,6 +411,8 @@ class Fast_ACVNet_plus(nn.Module):
             ## left feature는 여기에서는 업데이트가 없도록 함. 
             ## 여기를 잘 맞추기위한 left feature 학습이 없도록 하기 위해
             ## 즉 분리를 하겠다는 거임
+            cost_att, strip_stats = self.strip_att(cost_att, features_left_cat)
+
             features_left_for_att = [feat.detach() if self.training else feat for feat in features_left]
             att_weights = self.hourglass_att(cost_att, features_left_for_att)
         
@@ -484,14 +497,15 @@ class Fast_ACVNet_plus(nn.Module):
         ## 고 다음에 주변과의 유사도를 다시 계산해서 주변 9개의 probability를 구해서
         ## 또 똑같이 가중합을 해서 찐 최종을 구함.
         pred_up = context_upsample(pred, spx_pred)
-        prob_up1 = context_upsample(prob[:,0,:,:].unsqueeze(1),spx_pred)
-        prob_up2 = context_upsample(prob[:,1,:,:].unsqueeze(1),spx_pred)
+        # prob_up1 = context_upsample(prob[:,0,:,:].unsqueeze(1),spx_pred)
+        # prob_up2 = context_upsample(prob[:,1,:,:].unsqueeze(1),spx_pred)
         
-        confidence = prob_up1 + prob_up2
-        confidence_map, _ = att_prob.max(dim=1, keepdim=True)
+        # confidence = prob_up1 + prob_up2
+        # confidence_map, _ = att_prob.max(dim=1, keepdim=True)
         return [pred_up * 4, pred.squeeze(1) * 4, pred_att_up * 4, pred_att * 4], \
-            [disp_diff, corr_volume_2, prob, corr_volume_2], \
-            [feature_left, att_weights, cost, match_left, match_right]
+            [disp_diff.detach(), corr_volume_1.detach(), None, corr_volume_1.detach()], \
+            [None, att_weights.detach(), cost.detach(), match_left.detach(), match_right.detach()]
+            # [feature_left, att_weights.detach(), cost.detach(), match_left.detach(), match_right.detach()]
     
     
     def freeze_original_network(self):

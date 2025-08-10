@@ -248,7 +248,7 @@ class Logger:
         plt.close()
 
 
-        entropy_map = data_batch['confidence_entropy_map_s']
+        entropy_map = data_batch['tgt_mask_pred_s']
         # entropy_map = data_batch['tgt_entropy_map_idx_t_2']
         # entropy_map_resized = F.interpolate(entropy_map.float(), scale_factor=4, mode="bilinear")
         entropy_map_resized = entropy_map.squeeze(0).squeeze(0).cpu().numpy()       
@@ -422,10 +422,18 @@ class Logger:
         gt = data_batch['tgt_disparity'].squeeze().detach().cpu()
         pred = data_batch['tgt_pred_disp_s'][0].squeeze().detach().cpu()
         sign_diff = data_batch['tgt_disp_diff'].unsqueeze(1)
-        mask = (abs(sign_diff) == 1).float()
-        mask = F.interpolate(mask, scale_factor=4, mode='bilinear', align_corners=False)
-        mask = mask.squeeze().detach().cpu()
+        
+        ### confidence mask
+        mask = data_batch['tgt_mask_pred_s'] > 0.95
+        # pred *= mask.squeeze().detach().cpu()
+        
+        
+        ### top2 mask
+        # mask = (abs(sign_diff) == 1).float()
+        # mask = F.interpolate(mask, scale_factor=4, mode='bilinear', align_corners=False)
+        # mask = mask.squeeze().detach().cpu()
         # pred *= mask
+        ###
         
         # Process main prediction
         valid_main, bad_np_main, good_np_main, bad_main = compute_error_data(gt, pred)

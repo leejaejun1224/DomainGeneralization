@@ -116,7 +116,7 @@ def setup_model(cfg, ckpt_path, encoder_ckpt_path=None):
     # model.student_model.feature.model.load_state_dict(fresh_sd, strict=False)
 
 
-    return model.to('cuda:0')
+    return model.cuda()
 
 
 def process_batch(data_batch, source_batch, target_batch):

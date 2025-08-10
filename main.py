@@ -266,7 +266,7 @@ def main():
     # model.teacher_model.feature.model.load_state_dict(fresh_sd, strict=False)
     # model.student_model.feature.model.load_state_dict(fresh_sd, strict=False)
     
-    model.to('cuda:0')
+    model.cuda()
     model.init_ema()
 
     optimizer = torch.optim.Adam(model.parameters(), lr=cfg['lr'])

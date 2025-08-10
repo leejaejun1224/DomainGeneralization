@@ -23,7 +23,9 @@ from models.tools.filter import *
 ### if student => model = 's'
 ### if teacher => model = 't'
 
-
+# 선택: TF32 허용(속도 향상, 정확도 영향 미미)
+torch.backends.cuda.matmul.allow_tf32 = True
+torch.backends.cudnn.allow_tf32 = True
 def multi_scale_consistency_filter(data_batch, scales=[1, 2, 4]):
     """
     여러 스케일에서 consistency 검증
@@ -65,15 +67,16 @@ class StereoDepthUDA(StereoDepthUDAInference):
         self.jino_loss = JINOLoss()
         self.entropy_threshold = 2.5
         self.generator = RobustDisparityGenerator()
-        self.filler = SemanticDisparityFiller(
-            ignore_label=255,
-            kernels=[3,5,7,11],       # 필요 시 더 작게/보수적으로
-            min_valid_for_plane=96,
-            huber_delta=1.0,
-            plane_iters=3,
-            smooth_iters=6,
-            clip_margin=1.0
-        )
+
+        self.amp_enabled = True  # cfg에서 가져오면 더 좋음
+        # BF16 지원이면 BF16, 아니면 FP16
+        self.amp_dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
+
+        # FP16에만 GradScaler 사용 (BF16은 보통 불필요)
+        use_scaler = (self.amp_enabled and self.amp_dtype == torch.float16)
+        self.scaler = torch.cuda.amp.GradScaler(enabled=use_scaler)
+
+
 
 
 
@@ -142,14 +145,19 @@ class StereoDepthUDA(StereoDepthUDAInference):
 
     "args : optimizer, data_batchhhhh"
     def train_step(self, data_batch, optimizer, iter, epoch, temperature=1.0):
-        
-        optimizer.zero_grad()
-        log_vars = self.forward_train(data_batch, epoch, temperature)
+        optimizer.zero_grad(set_to_none=True)
+
+        # AMP 구간
+        with torch.cuda.amp.autocast(enabled=self.amp_enabled, dtype=self.amp_dtype):
+            log_vars = self.forward_train(data_batch, epoch, temperature)
+            # forward_train이 합산 loss를 반환하도록 하거나, 여기서 합산
+
         optimizer.step()
         self.update_ema(iter, alpha=0.99)
         
         return log_vars
-    
+
+        
     
     def get_loss_weights(self, epoch, total_epochs=200):
         """
@@ -243,47 +251,45 @@ class StereoDepthUDA(StereoDepthUDAInference):
             data_batch['tgt_left_feature_t'] = features[3]
             data_batch['tgt_right_feature_t'] = features[4]
             
-            for i in range(0, 9):
-                pseudo_disp, map, features = self.teacher_forward(
-                    data_batch[f'tgt_left_random_{i+1}'], data_batch[f'tgt_right_random_{i+1}'])
-                data_batch[f'pseudo_disp_random_{i+1}'] = pseudo_disp
+            # for i in range(0, 9):
+            #     pseudo_disp, map, features = self.teacher_forward(
+            #         data_batch[f'tgt_left_random_{i+1}'], data_batch[f'tgt_right_random_{i+1}'])
+            #     data_batch[f'pseudo_disp_random_{i+1}'] = pseudo_disp
 
         supervised_loss = calc_supervised_train_loss(data_batch, model='s', epoch=epoch)
-        calc_entropy(data_batch, temperature=temperature, threshold=self.entropy_threshold)
-        calc_confidence_entropy(data_batch,threshold=10, k=12, temperature=0.5)
-        compute_photometric_error(data_batch, threshold=0.010)
+        # calc_entropy(data_batch, temperature=temperature, threshold=self.entropy_threshold)
+        # calc_confidence_entropy(data_batch,threshold=10, k=12, temperature=0.5)
+        # compute_photometric_error(data_batch, threshold=0.010)
 
-        # directional_loss = calc_directional_loss(data_batch)
+        # # directional_loss = calc_directional_loss(data_batch)
 
 
-        diff_mask = multi_scale_consistency_filter(data_batch)
-        data_batch['tgt_refined_pred_disp_t'], diff_mask = refine_disparity(data_batch, diff_mask, threshold=3.0)
-        data_batch['diff_mask'] = diff_mask
-        avg_disparity, _, _ = self.generator.generate_robust_disparity(data_batch)
-        data_batch['avg_pseudo_disp'] = avg_disparity.unsqueeze(0)
+        # diff_mask = multi_scale_consistency_filter(data_batch)
+        # data_batch['tgt_refined_pred_disp_t'], diff_mask = refine_disparity(data_batch, diff_mask, threshold=3.0)
+        # data_batch['diff_mask'] = diff_mask
+        # avg_disparity, _, _ = self.generator.generate_robust_disparity(data_batch)
+        # data_batch['avg_pseudo_disp'] = avg_disparity.unsqueeze(0)
         
-        pseudo_loss, true_ratio = calc_pseudo_loss(data_batch, diff_mask, threshold=0.2, model='s')
-        if torch.isnan(pseudo_loss).any():
-            pseudo_loss = torch.tensor(0.0, device=data_batch['tgt_pred_disp_s'][0].device)
+        # pseudo_loss, true_ratio = calc_pseudo_loss(data_batch, diff_mask, threshold=0.2, model='s')
+        # if torch.isnan(pseudo_loss).any():
+        #     pseudo_loss = torch.tensor(0.0, device=data_batch['tgt_pred_disp_s'][0].device)
 
-        consist_photo_loss = consistency_photometric_loss(data_batch)
-        # confidence_loss = calc_entropy_loss(data_batch)
+        # consist_photo_loss = consistency_photometric_loss(data_batch)
+        # # confidence_loss = calc_entropy_loss(data_batch)
 
-        lora_loss = calc_adaptor_loss(data_batch, T=2.0)
-        band_kl_loss = calc_band_kl_loss(data_batch)
+        # lora_loss = calc_adaptor_loss(data_batch, T=2.0)
+        # band_kl_loss = calc_band_kl_loss(data_batch)
         
-        disp_filled, filled_mask = self.filler.fill(data_batch['tgt_refined_pred_disp_t'], data_batch["tgt_seg"].to(data_batch['tgt_refined_pred_disp_t'].device))
         
-        semantic_loss = calc_semantic_loss(disp_filled, data_batch)
 
 
-        patch_size = random.randint(1, 8)
+        # patch_size = random.randint(1, 8)
 
-        jino_loss = self.jino_loss(data_batch["tgt_left_feature_s_aug"], data_batch["tgt_left_feature_t"], patch_size) \
-         + self.jino_loss(data_batch["tgt_right_feature_s_aug"], data_batch["tgt_right_feature_t"], patch_size)
+        # jino_loss = self.jino_loss(data_batch["tgt_left_feature_s_aug"], data_batch["tgt_left_feature_t"], patch_size) \
+        #  + self.jino_loss(data_batch["tgt_right_feature_s_aug"], data_batch["tgt_right_feature_t"], patch_size)
 
         
-        weights = self.get_loss_weights(epoch, total_epochs=200)
+        # weights = self.get_loss_weights(epoch, total_epochs=200)
         
 
         # total_loss = (weights['supervised'] * supervised_loss + 
@@ -294,7 +300,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
         # total_loss = 0.5 * supervised_loss + 1.0 * directional_loss # + 0.0 * pseudo_loss + 0.5 * jino_loss 
         # total_loss = consist_photo_loss['loss_total'] 
         # total_loss = 0.2 * supervised_loss + 1.0 * pseudo_loss + 1.0 * lora_loss
-        total_loss = 0.1*supervised_loss + semantic_loss #+ 1.0 * pseudo_loss #+ 0.5*lora_loss #+ 0.2*band_kl_loss
+        total_loss = 0.1*supervised_loss #+ 1.0 * pseudo_loss #+ 0.5*lora_loss #+ 0.2*band_kl_loss
         
         
         ## pred, gt, mask, weights
@@ -311,7 +317,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
             'true_ratio': 0.0,
             'reconstruction_loss': 0.0,
             'depth_loss': 0.0,
-            'entropy_loss': lora_loss.item(),
+            'entropy_loss': 0.0,
             'consist_loss' : 0.0, #consist_photo_loss["loss_total"].item(),
             'target_valid_loss_student' : student_loss.item(),
             'target_valid_loss_teacher' : teacher_loss.item(),
@@ -366,10 +372,10 @@ class StereoDepthUDA(StereoDepthUDAInference):
             data_batch['tgt_attn_weights_t'] = features[1]
             data_batch['cost_t'] = features[2]
             
-            # for i in range(0, 9):
-            #     pseudo_disp, map, features = self.teacher_forward(
-            #         data_batch[f'tgt_left_random_{i+1}'], data_batch[f'tgt_right_random_{i+1}'])
-            #     data_batch[f'pseudo_disp_random_{i+1}'] = pseudo_disp
+            for i in range(0, 9):
+                pseudo_disp, map, features = self.teacher_forward(
+                    data_batch[f'tgt_left_random_{i+1}'], data_batch[f'tgt_right_random_{i+1}'])
+                data_batch[f'pseudo_disp_random_{i+1}'] = pseudo_disp
                 
                 
             # data_batch['tgt_attn_loss_t'] = features[2]
@@ -381,7 +387,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
         # calc_entropy(data_batch, threshold=self.entropy_threshold)
         calc_entropy(data_batch, threshold=2.487)
         data_batch['tgt_refined_pred_disp_t'], diff_mask = refine_disparity(data_batch, threshold=1.8)
-        calc_confidence_entropy(data_batch,threshold=1.3, k=12, temperature=0.2)
+        # calc_confidence_entropy(data_batch,threshold=1.3, k=12, temperature=0.2)
         compute_photometric_error(data_batch, threshold=0.03)
         
         avg_disparity, _, _ = self.generator.generate_robust_disparity(data_batch)
