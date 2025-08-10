@@ -17,6 +17,7 @@ from models.losses.loss import *
 import time
 from models.losses.monoloss import MonoDepthLoss
 from models.losses.photometric import *
+from models.losses.segmentloss import *
 from models.tools.prior_setting import *
 from models.tools.filter import *
 ### if student => model = 's'
@@ -64,6 +65,16 @@ class StereoDepthUDA(StereoDepthUDAInference):
         self.jino_loss = JINOLoss()
         self.entropy_threshold = 2.5
         self.generator = RobustDisparityGenerator()
+        self.filler = SemanticDisparityFiller(
+            ignore_label=255,
+            kernels=[3,5,7,11],       # 필요 시 더 작게/보수적으로
+            min_valid_for_plane=96,
+            huber_delta=1.0,
+            plane_iters=3,
+            smooth_iters=6,
+            clip_margin=1.0
+        )
+
 
 
     def update_ema(self, iter, alpha=0.99):
@@ -260,6 +271,10 @@ class StereoDepthUDA(StereoDepthUDAInference):
 
         lora_loss = calc_adaptor_loss(data_batch, T=2.0)
         band_kl_loss = calc_band_kl_loss(data_batch)
+        
+        disp_filled, filled_mask = self.filler.fill(data_batch['tgt_refined_pred_disp_t'], data_batch["tgt_seg"].to(data_batch['tgt_refined_pred_disp_t'].device))
+        
+        semantic_loss = calc_semantic_loss(disp_filled, data_batch)
 
 
         patch_size = random.randint(1, 8)
@@ -279,7 +294,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
         # total_loss = 0.5 * supervised_loss + 1.0 * directional_loss # + 0.0 * pseudo_loss + 0.5 * jino_loss 
         # total_loss = consist_photo_loss['loss_total'] 
         # total_loss = 0.2 * supervised_loss + 1.0 * pseudo_loss + 1.0 * lora_loss
-        total_loss = 1.0*supervised_loss# + 1.0 * pseudo_loss + 0.5*lora_loss #+ 0.2*band_kl_loss
+        total_loss = 0.1*supervised_loss + semantic_loss #+ 1.0 * pseudo_loss #+ 0.5*lora_loss #+ 0.2*band_kl_loss
         
         
         ## pred, gt, mask, weights
@@ -331,7 +346,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
         data_batch['tgt_attn_weights_s'] = features[1]
         data_batch['cost_s'] = features[2]
 
-        tgt_pred, _, _ = self.student_forward(data_batch['tgt_left'], data_batch['tgt_right'])  
+        tgt_pred, _, _ = self.student_forward(data_batch['tgt_left'], data_batch['tgt_right'])
         data_batch['tgt_pred_disp_s_for_loss'] = tgt_pred[0]
         
         tgt_pred, map, features = self.student_forward(data_batch['tgt_right'], data_batch['tgt_left'], mode='right')  
@@ -365,7 +380,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
         supervised_loss = calc_supervised_train_loss(data_batch, model='s', epoch=epoch)
         # calc_entropy(data_batch, threshold=self.entropy_threshold)
         calc_entropy(data_batch, threshold=2.487)
-        data_batch['tgt_refined_pred_disp_t'], diff_mask = refine_disparity(data_batch, threshold=1.5)
+        data_batch['tgt_refined_pred_disp_t'], diff_mask = refine_disparity(data_batch, threshold=1.8)
         calc_confidence_entropy(data_batch,threshold=1.3, k=12, temperature=0.2)
         compute_photometric_error(data_batch, threshold=0.03)
         
@@ -377,7 +392,6 @@ class StereoDepthUDA(StereoDepthUDAInference):
         # confidence_loss = calc_entropy_loss(data_batch)
         consist_photo_loss = consistency_photometric_loss(data_batch)
         pseudo_loss, true_ratio = calc_pseudo_loss(data_batch, diff_mask, threshold=0.2, model='s')
-        
         # mask = filter_mask(data_batch)
         weight = [1.0]
         gt_tgt_disp = data_batch['tgt_disparity']

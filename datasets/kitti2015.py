@@ -107,6 +107,26 @@ class JinoTransform:
         strong = self.strong_photo(pil_img)
         return weak, strong
 
+# === [ADD] 세그먼트 패딩 유틸 ===
+def pad_to_size_value(arr: np.ndarray, target_size, value: int):
+    """
+    arr: [H,W] 또는 [C,H,W]
+    target_size: (W_target, H_target)
+    value: 패딩에 쓸 상수 (예: 255=ignore)
+    """
+    if arr.ndim == 2:
+        h, w = arr.shape
+    elif arr.ndim == 3:
+        _, h, w = arr.shape
+    else:
+        raise ValueError(f"pad_to_size_value: 지원하지 않는 arr.shape={arr.shape}")
+    target_w, target_h = target_size
+    top_pad = max(0, target_h - h)
+    right_pad = max(0, target_w - w)
+    if arr.ndim == 2:
+        return np.pad(arr, ((top_pad, 0), (0, right_pad)), mode='constant', constant_values=value)
+    else:
+        return np.pad(arr, ((0, 0), (top_pad, 0), (0, right_pad)), mode='constant', constant_values=value)
 
 class KITTI2015Dataset(Dataset):
     """KITTI 2015 stereo dataset"""
@@ -121,6 +141,9 @@ class KITTI2015Dataset(Dataset):
         self.max_len = max_len
         self.aug = aug
         self.prior_path = prior
+        
+        self.seg_root = "/home/jaejun/dataset/kitti_2015/training/seg_results"
+        self.seg_ignore_label = 255
         
         # Initialize transforms
         self.hf_transform = HFStereoV2(use_edge_enhancement=True)
@@ -152,6 +175,35 @@ class KITTI2015Dataset(Dataset):
         """Load disparity image"""
         data = Image.open(os.path.expanduser(filename))
         return np.array(data, dtype=np.float32) / 256.0
+    
+    def _load_segmentation(self, left_filename):
+        """
+        left 이미지의 파일명 기준으로 seg_root/filename_seg.npy 로부터 세그 레이블(2D)을 로딩
+        반환: seg_full, seg_half, seg_low (np.int64)
+        """
+        if self.seg_root is None:
+            return None, None, None
+
+        base = os.path.splitext(os.path.basename(left_filename))[0]
+        seg_path = os.path.join(os.path.expanduser(self.seg_root), base + "_seg.npy")
+        if not os.path.exists(seg_path):
+            raise FileNotFoundError(f"[KITTI2015Dataset] 세그 파일을 찾을 수 없습니다: {seg_path}")
+
+        seg = np.load(seg_path)
+        if seg.ndim != 2:
+            raise ValueError(f"[KITTI2015Dataset] 2D 세그 레이블(.npy)만 지원합니다. got {seg.shape} at {seg_path}")
+        seg = seg.astype(np.int64)
+
+        # target 크기로 패딩 (ignore_label로 채움)
+        seg_full = pad_to_size_value(seg, self.processor.TARGET_SIZE, self.seg_ignore_label)
+
+        # 멀티스케일
+        target_w, target_h = self.processor.TARGET_SIZE
+        seg_half = cv2.resize(seg_full, (target_w // 2, target_h // 2), interpolation=cv2.INTER_NEAREST)
+        seg_low  = cv2.resize(seg_full, (target_w // 4, target_h // 4), interpolation=cv2.INTER_NEAREST)
+
+        return seg_full, seg_half, seg_low
+    
     
     def _load_prior(self):
         """Load prior data if available"""
@@ -295,6 +347,7 @@ class KITTI2015Dataset(Dataset):
         left_crops = self._create_random_crops(left_full, random_coords)
         right_crops = self._create_random_crops(right_full, random_coords)
         
+        
         # Prepare base return data
         return_data = {
             "left_filename": self.left_filenames[idx],
@@ -305,6 +358,15 @@ class KITTI2015Dataset(Dataset):
             "overlap_coords": self._calculate_overlap(random_coords[0], random_coords[1])
         }
         
+        if self.seg_root is not None:
+            seg_full, seg_half, seg_low = self._load_segmentation(self.left_filenames[idx])
+            if seg_full is not None:
+                return_data.update({
+                    "seg": seg_full,          # [H,W] np.int64 (DataLoader가 torch.LongTensor로 변환)
+                    "seg_half": seg_half,     # [H/2,W/2]
+                    "seg_low": seg_low        # [H/4,W/4]
+                })
+                
         # Add multi-scale data
         return_data.update(multiscale_data)
         

@@ -420,10 +420,10 @@ class Logger:
         
         # Load main data
         gt = data_batch['tgt_disparity'].squeeze().detach().cpu()
-        pred = data_batch['pseudo_disp'][0].squeeze().detach().cpu()
+        pred = data_batch['tgt_pred_disp_s'][0].squeeze().detach().cpu()
         sign_diff = data_batch['tgt_disp_diff'].unsqueeze(1)
         mask = (abs(sign_diff) == 1).float()
-        mask = F.interpolate(mask, scale_factor=4, mode='nearest')
+        mask = F.interpolate(mask, scale_factor=4, mode='bilinear', align_corners=False)
         mask = mask.squeeze().detach().cpu()
         # pred *= mask
         

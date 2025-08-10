@@ -276,7 +276,7 @@ def calc_pseudo_loss(data_batch, diff_mask, threshold, model='s'):
 
 
 
-    weights = [0.6, 0.0, 0.5, 0.0, 1.0]
+    weights = [0.0, 0.0, 0.0, 0.0, 1.0]
     true_count = 0.0
     pseudo_label_loss = get_loss(pred_disp, pseudo_disp, masks, weights)
 
