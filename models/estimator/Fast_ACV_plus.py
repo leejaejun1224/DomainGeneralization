@@ -497,13 +497,13 @@ class Fast_ACVNet_plus(nn.Module):
         ## 고 다음에 주변과의 유사도를 다시 계산해서 주변 9개의 probability를 구해서
         ## 또 똑같이 가중합을 해서 찐 최종을 구함.
         pred_up = context_upsample(pred, spx_pred)
-        # prob_up1 = context_upsample(prob[:,0,:,:].unsqueeze(1),spx_pred)
-        # prob_up2 = context_upsample(prob[:,1,:,:].unsqueeze(1),spx_pred)
+        prob_up1 = context_upsample(prob[:,0,:,:].unsqueeze(1),spx_pred)
+        prob_up2 = context_upsample(prob[:,1,:,:].unsqueeze(1),spx_pred)
         
-        # confidence = prob_up1 + prob_up2
-        # confidence_map, _ = att_prob.max(dim=1, keepdim=True)
+        confidence = prob_up1 + prob_up2
+        confidence_map, _ = att_prob.max(dim=1, keepdim=True)
         return [pred_up * 4, pred.squeeze(1) * 4, pred_att_up * 4, pred_att * 4], \
-            [disp_diff.detach(), corr_volume_1.detach(), None, corr_volume_1.detach()], \
+            [disp_diff.detach(), corr_volume_1.detach(), confidence, corr_volume_1.detach()], \
             [None, att_weights.detach(), cost.detach(), match_left.detach(), match_right.detach()]
             # [feature_left, att_weights.detach(), cost.detach(), match_left.detach(), match_right.detach()]
     
