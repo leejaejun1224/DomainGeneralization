@@ -411,7 +411,7 @@ class Fast_ACVNet_plus(nn.Module):
             ## left feature는 여기에서는 업데이트가 없도록 함. 
             ## 여기를 잘 맞추기위한 left feature 학습이 없도록 하기 위해
             ## 즉 분리를 하겠다는 거임
-            cost_att, strip_stats = self.strip_att(cost_att, features_left_cat)
+            # cost_att, strip_stats = self.strip_att(cost_att, features_left_cat)
 
             features_left_for_att = [feat.detach() if self.training else feat for feat in features_left]
             att_weights = self.hourglass_att(cost_att, features_left_for_att)

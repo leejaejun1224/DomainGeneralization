@@ -8,6 +8,7 @@ from datasets.data_io import get_transform, read_all_lines, pfm_imread
 import torchvision.transforms as transforms  # 호환 유지
 import torch
 import math
+from aug.car_patch_modeule import CarPatchAugmenter
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
@@ -494,6 +495,19 @@ class FlyingThingDataset(Dataset):
 
         # 증강기
         self.augmentor = StereoAugmentor() if (self.training and self.aug) else None
+        self.car_patch_aug = CarPatchAugmenter(
+            aug_prob=0.10,                 # 이미지 10%에 적용 (원하시는 비율로 조정)
+            ymin_ratio=0.70, ymax_ratio=1.00,
+            height_base=150, width_base=300, size_jitter=0.20,
+            disp_mean=70.0, disp_jitter=10.0,
+            zbuffer_margin=0.5, disp_valid_min=0.1,
+            base_gray_range=(30, 250),
+            shape='random',
+            rotate_deg_range=(-18.0, 18.0),
+            corner='random',
+            noise_level=0.0, noise_cells=0,
+            seed=42
+        ) if (self.training and self.aug) else None
 
     # ---------- 로드/파싱 ----------
     def load_path(self, list_filename):
@@ -550,6 +564,15 @@ class FlyingThingDataset(Dataset):
         prior_data = self.load_prior()
 
         if self.training:
+            
+            if self.aug and self.car_patch_aug is not None:
+                L_np = np.array(left_img)   # PIL -> np.uint8 (RGB)
+                R_np = np.array(right_img)
+                disparity = np.asarray(disparity, dtype=np.float32)
+                L_np, R_np, disparity = self.car_patch_aug(L_np, R_np, disparity)
+                left_img  = Image.fromarray(L_np)
+                right_img = Image.fromarray(R_np)
+
             # --------- 증강 ----------
             if self.aug and self.augmentor is not None:
                 L = np.array(left_img)
