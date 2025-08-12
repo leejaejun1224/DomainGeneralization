@@ -8,7 +8,7 @@ from datasets.data_io import get_transform, read_all_lines, pfm_imread
 import torchvision.transforms as transforms  # 호환 유지
 import torch
 import math
-from aug.car_patch_modeule import CarPatchAugmenter
+from datasets.aug.car_patch_modeule import CarPatchAugmenter
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 

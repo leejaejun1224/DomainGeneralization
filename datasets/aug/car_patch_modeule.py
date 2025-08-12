@@ -165,6 +165,60 @@ def _make_disp_patch(w, h, d0=70.0, jitter=10.0, rng=None):
     disp = np.clip(d0 + var + curvature, d0 - jitter, d0 + jitter).astype(np.float32)
     return disp
 
+
+# car_patch_module.py 안 어딘가(유틸들 아래)에 추가/교체
+
+def _bump_from_alpha(alpha):
+    """alpha(0~1)에서 중심으로 갈수록 1에 가까워지는 bump(거리변환 기반)"""
+    h, w = alpha.shape
+    m = (alpha > 0.5).astype(np.uint8)
+    if m.max() == 0:
+        return np.zeros_like(alpha, np.float32)
+    dist = cv2.distanceTransform(m, cv2.DIST_L2, 5).astype(np.float32)
+    if dist.max() > 1e-6:
+        dist /= dist.max()
+    bump = _gaussian_blur_field(dist, 0.06 * max(h, w))
+    
+    return np.clip(bump, 0.0, 1.0).astype(np.float32)
+
+def _make_disp_patch_shapeaware(w, h, d0, jitter, alpha, rng=None,
+                                bump_ratio=0.6, tilt_ratio=0.3, noise_ratio=0.1):
+    """
+    d(x,y) = d0 + bump + tilt + noise (합이 ±jitter 안으로 클립)
+    - bump_ratio, tilt_ratio, noise_ratio는 각 성분의 비중(합<=1 권장)
+    - alpha 모양을 따라 가장자리에서 자연스럽게 0으로 감쇠
+    """
+    rng = rng or np.random.RandomState(0)
+
+    bump = _bump_from_alpha(alpha)  # 0~1
+    # (아주 약한) y방향 기울기 + 초저주파 노이즈
+    h_, w_ = h, w
+    xv = np.linspace(-1, 1, w_, dtype=np.float32)[None, :]
+    yv = np.linspace(-1, 1, h_, dtype=np.float32)[:, None]
+
+    ay = rng.uniform(-0.3, 0.3)     # y tilt는 약하게
+    plane_y = ay * yv
+    plane_y /= (np.max(np.abs(plane_y)) + 1e-6)
+    plane_y = _gaussian_blur_field(plane_y, 0.12 * max(w_, h_)) * bump
+
+    gh = max(2, h_ // 8); gw = max(2, w_ // 8)
+    small = rng.randn(gh, gw).astype(np.float32)
+    noise = cv2.resize(small, (w_, h_), interpolation=cv2.INTER_CUBIC)
+    noise = _gaussian_blur_field(noise, 0.12 * max(w_, h_))
+    noise /= (np.max(np.abs(noise)) + 1e-6)
+    noise *= bump
+
+    bump_amp  = bump_ratio  * jitter
+    tilt_amp  = tilt_ratio  * jitter
+    noise_amp = noise_ratio * jitter
+
+    delta = bump_amp * bump + tilt_amp * plane_y + noise_amp * noise
+    disp = d0 + delta
+    return np.clip(disp, d0 - jitter, d0 + jitter).astype(np.float32)
+
+
+
+
 # ----------------------- 외부용 클래스 -----------------------
 class CarPatchAugmenter:
     """
@@ -178,11 +232,16 @@ class CarPatchAugmenter:
                  disp_mean=70.0, disp_jitter=10.0,
                  zbuffer_margin=0.5, disp_valid_min=0.1,
                  base_gray_range=(30, 250),
-                 shape='random',                 # 'random'|'rounded'|'ellipse'|'capsule'|'trapezoid'
+                 shape='random',
                  rotate_deg_range=(-18.0, 18.0),
-                 corner='random',                # 'random'|'left'|'right'
+                 corner='random',
                  noise_level=0.0, noise_cells=0,
+                 # >>> 새 옵션들 <<<
+                 align_tilt_with_corner=True,
+                 bump_ratio=0.6, tilt_ratio=0.3, noise_ratio=0.1,
+                 tilt_strength_range=(0.6, 1.0),
                  seed=42):
+
         self.aug_prob = float(aug_prob)
         self.ymin_ratio = float(ymin_ratio)
         self.ymax_ratio = float(ymax_ratio)
@@ -200,6 +259,12 @@ class CarPatchAugmenter:
         self.noise_level = float(noise_level)
         self.noise_cells = int(noise_cells)
         self.rng = np.random.RandomState(seed)
+        self.align_tilt_with_corner = bool(align_tilt_with_corner)
+        self.bump_ratio  = float(bump_ratio)
+        self.tilt_ratio  = float(tilt_ratio)
+        self.noise_ratio = float(noise_ratio)
+        self.tilt_strength_range = (float(tilt_strength_range[0]), float(tilt_strength_range[1]))
+
 
     def __call__(self, imgL, imgR, disp):
         """
@@ -216,55 +281,82 @@ class CarPatchAugmenter:
         if H < 32 or W < 64:
             return imgL, imgR, disp
 
-        # 부호 자동 감지 → 내부는 양수로 변환
         d_raw = disp.astype(np.float32)
         valid = np.isfinite(d_raw) & (np.abs(d_raw) > self.disp_valid_min)
         orig_sign = -1.0 if (np.any(valid) and np.median(d_raw[valid]) < 0) else 1.0
-        dL = d_raw * orig_sign  # 내부 양수
+        dL = d_raw * orig_sign
 
-        # 패치 크기/밝기/모양/회전 샘플
+        # --- 크기/색/모양/각도/코너 샘플 ---
         ph = int(round(self.height_base * self.rng.uniform(1 - self.size_jitter, 1 + self.size_jitter)))
         pw = int(round(self.width_base  * self.rng.uniform(1 - self.size_jitter, 1 + self.size_jitter)))
-        ph = max(20, min(ph, H // 2)); pw = max(40, min(pw, W - 20))
+        ph = max(20, min(ph, imgL.shape[0] // 2))
+        pw = max(40, min(pw, imgL.shape[1] - 20))
         base_gray = int(self.rng.randint(self.base_gray_range[0], self.base_gray_range[1] + 1))
         band_angle = float(self.rng.uniform(-35.0, 35.0))
         shape_kind = self.shape if self.shape != "random" else self.rng.choice(["rounded","ellipse","capsule","trapezoid"])
-        d0 = float(self.rng.uniform(self.disp_mean - self.disp_jitter, self.disp_mean + self.disp_jitter))
         rot_angle = float(self.rng.uniform(self.rotate_deg_range[0], self.rotate_deg_range[1]))
 
-        patch, alpha = _glossy_patch(pw, ph, base_gray=base_gray,
-                                     band_angle_deg=band_angle,
-                                     noise_level=self.noise_level,
-                                     noise_cells=self.noise_cells,
-                                     shape_kind=shape_kind,
-                                     rng=self.rng)
-        disp_patch = _make_disp_patch(pw, ph, d0=d0, jitter=self.disp_jitter, rng=self.rng)
-        patch_r, alpha_r, disp_r = _rotate_triplet(patch, alpha, disp_patch, rot_angle)
-        rh, rw = patch_r.shape[:2]
-
-        # 좌/우 코너 및 y 범위 샘플
-        m = int(0.03 * min(H, W))
+        # 코너 결정
+        m = int(0.03 * min(imgL.shape[:2]))
         side = self.corner
         if side == "random":
             side = "left" if self.rng.rand() < 0.5 else "right"
+
+        # 패치/알파
+        patch, alpha = _glossy_patch(pw, ph, base_gray=base_gray,
+                                    band_angle_deg=band_angle,
+                                    noise_level=self.noise_level,
+                                    noise_cells=self.noise_cells,
+                                    shape_kind=shape_kind,
+                                    rng=self.rng)
+
+        # disparity (생성 단계 tilt는 0으로 → 회전 후 코너맞춤 tilt 추가)
+        d0 = float(self.rng.uniform(self.disp_mean - self.disp_jitter, self.disp_mean + self.disp_jitter))
+        disp_patch = _make_disp_patch_shapeaware(
+            pw, ph, d0, self.disp_jitter, alpha, rng=self.rng,
+            bump_ratio=self.bump_ratio, tilt_ratio=0.0, noise_ratio=self.noise_ratio
+        )
+
+        # 회전
+        patch_r, alpha_r, disp_r = _rotate_triplet(patch, alpha, disp_patch, rot_angle)
+        rh, rw = patch_r.shape[:2]
+
+        # 코너 정렬 x‑tilt 추가 (이미지 좌표계)
+        if self.align_tilt_with_corner:
+            # 좌코너: 좌가 더 가깝게(디스패리티 큼) → sign = -1
+            # 우코너: 우가 더 가깝게 → sign = +1
+            sign = -1.0 if side == "left" else 1.0
+            xv = np.linspace(-1, 1, rw, dtype=np.float32)[None, :]
+            plane_x = sign * xv                                  # 좌(+), 우(-) 혹은 반대
+            plane_x = np.repeat(plane_x, rh, axis=0)                    # (rh, rw)로 확장  ← NEW
+            bump_r = _bump_from_alpha(alpha_r).astype(np.float32)       # (rh, rw)
+            plane_x = plane_x * bump_r  
+            # 세기 무작위
+            tmag = self.tilt_ratio * self.disp_jitter * float(self.rng.uniform(*self.tilt_strength_range))
+            disp_r = disp_r + tmag * plane_x
+            disp_r = np.clip(disp_r, d0 - self.disp_jitter, d0 + self.disp_jitter).astype(np.float32)
+
+        # 위치(y: 하단, x: 코너 부근)
+        H, W = imgL.shape[:2]
         x0 = m if side == "left" else W - rw - m
         y_low  = max(self.ymin_ratio * H, rh / 2 + m)
         y_high = min(self.ymax_ratio * H, H - rh / 2 - m)
         if not (y_low < y_high) or x0 < 0 or x0 + rw > W:
-            return imgL, imgR, disp  # 범위 불가 → 미적용
+            return imgL, imgR, disp
         yc = self.rng.uniform(y_low, y_high)
         y0 = int(round(yc - rh / 2))
 
-        # 조건 4: 선택 위치에 더 큰 disparity(가까운 배경)가 있으면 PASS
+        # --- 조건 4: 배경 vs 패치(최소 disp) 비교 ---
         sub = dL[y0:y0 + rh, x0:x0 + rw]
         mask = (alpha_r > 0.2) & np.isfinite(sub) & (sub > self.disp_valid_min)
         if not np.any(mask):
             return imgL, imgR, disp
-        max_bg = float(sub[mask].max())
-        if max_bg >= d0 - self.zbuffer_margin:
-            return imgL, imgR, disp  # 미적용
+        max_bg    = float(sub[mask].max())
+        min_patch = float(disp_r[mask].min())  # 패치 내부에서 가장 먼 픽셀
+        if max_bg >= (min_patch - self.zbuffer_margin):
+            return imgL, imgR, disp
 
-        # 합성
+        # --- 합성 ---
         L_out = imgL.copy()
         _alpha_blend(L_out, patch_r, alpha_r, y0, x0)
 
@@ -277,6 +369,6 @@ class CarPatchAugmenter:
         a3 = amaskR[..., None]
         R_out = np.clip((1 - a3) * imgR.astype(np.float32) + a3 * canvasR.astype(np.float32), 0, 255).astype(np.uint8)
 
-        # 원래 부호로 복원
+        # 원부호 복원
         disp_out = dL_out * orig_sign
         return L_out, R_out, disp_out
