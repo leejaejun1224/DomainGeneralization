@@ -355,7 +355,7 @@ class Fast_ACVNet_plus(nn.Module):
         #     self.lora_module = AdaptedModel(adaptor_rank=4, adaptor_alpha=0.3)
         if enable_lora:
             self.adaptor = Adaptor(self.corr_stem, self.corr_feature_att_4, self.hourglass_att, 
-                 adaptor_rank=4, adaptor_alpha=0.3)
+                 adaptor_rank=16, adaptor_alpha=0.3)
 
 
 

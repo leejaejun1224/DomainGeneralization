@@ -142,7 +142,7 @@ class KITTI2015Dataset(Dataset):
         self.aug = aug
         self.prior_path = prior
         
-        self.seg_root = "/home/jaejun/dataset/kitti_2015/training/seg_results"
+        self.seg_root = None#"/home/jaejun/dataset/kitti_2015/training/seg_results"
         self.seg_ignore_label = 255
         
         # Initialize transforms

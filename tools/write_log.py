@@ -420,7 +420,7 @@ class Logger:
         
         # Load main data
         gt = data_batch['tgt_disparity'].squeeze().detach().cpu()
-        pred = data_batch['tgt_pred_disp_s'][0].squeeze().detach().cpu()
+        pred = data_batch['pseudo_disp'][0].squeeze().detach().cpu()
         sign_diff = data_batch['tgt_disp_diff'].unsqueeze(1)
         
         ### confidence mask

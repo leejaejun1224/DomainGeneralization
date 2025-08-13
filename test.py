@@ -59,9 +59,12 @@ def setup_model(cfg, ckpt_path, encoder_ckpt_path=None):
         
         
         decoder_prefixes = (
+            "feature.model.", "feature.encoder.",
+            "feature_up.",   "stem_2.", "stem_4.",
+            "conv.",         "desc.",
             "corr_stem",
-            # "corr_feature_att_4",
-            # "hourglass_att", 
+            "corr_feature_att_4",
+            "hourglass_att", 
             # "concat_feature",
             # "concat_stem", 
             # "concat_feature_att_4"
