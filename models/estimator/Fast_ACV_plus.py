@@ -7,6 +7,7 @@ import torch.nn.functional as F
 from models.estimator.submodules import *
 from models.estimator.refiner import *
 from models.estimator.adaptor2 import *
+from models.estimator.attention_modules.semantic_attn import SemanticCostCrossAtt
 import math
 import gc
 import time
@@ -348,7 +349,11 @@ class Fast_ACVNet_plus(nn.Module):
             block_size=32,             # 64 → 32
             kv_stride=4                # K/V 절반의 절반(가로 1/4)
         )
-
+        
+        self.semantic_cross = SemanticCostCrossAtt(cv_chan=8, feat_chan=256,
+                                                   heads=2, dim_qk=16, dim_v=16,
+                                                   max_tokens=256, dropout=0.0)
+        self.enable_sematic_attn = True
 
 
         # if self.enable_lora:
@@ -408,6 +413,10 @@ class Fast_ACVNet_plus(nn.Module):
 
 
             cost_att = self.corr_feature_att_4(corr_volume, features_left_cat)
+            
+            if self.enable_sematic_attn:
+                feat_s4_for_att = features_left[3].detach() if self.training else features_left[3]
+                cost_att = self.semantic_cross(cost_att, feat_s4_for_att)
             ## left feature는 여기에서는 업데이트가 없도록 함. 
             ## 여기를 잘 맞추기위한 left feature 학습이 없도록 하기 위해
             ## 즉 분리를 하겠다는 거임
