@@ -7,7 +7,7 @@ import torch.nn.functional as F
 from models.estimator.submodules import *
 from models.estimator.refiner import *
 from models.estimator.adaptor2 import *
-from models.estimator.attention_modules.semantic_attn import SemanticCostCrossAtt
+from models.estimator.attention_modules.semantic_attn import *
 import math
 import gc
 import time
@@ -43,8 +43,7 @@ class FeatureMiTPtr(SubModule):
         super(FeatureMiTPtr, self).__init__()
         
         ## 이거 이러면 파라미터에 2번 등록이 되네. 전체랑 encoder만이랑 쒯
-        self.model = SegformerModel.from_pretrained('nvidia/segformer-b0-finetuned-cityscapes-512-1024')
-        self.encoder = self.model.encoder
+        self.encoder = SegformerModel.from_pretrained('nvidia/segformer-b0-finetuned-cityscapes-512-1024').encoder
 
 
     def forward(self, x):
@@ -350,9 +349,14 @@ class Fast_ACVNet_plus(nn.Module):
             kv_stride=4                # K/V 절반의 절반(가로 1/4)
         )
         
-        self.semantic_cross = SemanticCostCrossAtt(cv_chan=8, feat_chan=256,
-                                                   heads=2, dim_qk=16, dim_v=16,
-                                                   max_tokens=256, dropout=0.0)
+        self.semantic_cross = SemanticCostCrossAttLite(
+            cv_chan=8, feat_chan=256,
+            heads=1, dim_qk=12, dim_v=12,
+            max_tokens=128,      # 여유 없으면 64
+            spatial_down=2,      # 쿼리(H/4,W/4) -> (H/8,W/8)에서만 어텐션
+            q_chunk=1024,        # 메모리 더 빡세면 512
+            dropout=0.0
+        )
         self.enable_sematic_attn = True
 
 

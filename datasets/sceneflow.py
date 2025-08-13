@@ -33,7 +33,7 @@ class StereoAugmentor:
                  p_jpeg=0.5,         # JPEG 압축
                  p_vignette=0.5,     # 비네팅
                  p_color_shade=0.5,  # 컬러 셰이딩(R/G/B 게인)
-                 p_shadow=0.4,       # 그림자
+                 p_shadow=0.6,       # 그림자
                  p_fog=0.4,          # 안개
                  p_rain=0.3,         # 비/스프레이
                  p_glass=0.4,        # 유리(반사/플레어/편광)

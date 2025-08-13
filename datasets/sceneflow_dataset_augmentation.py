@@ -98,10 +98,10 @@ class StereoAugmentor:
                  p_jpeg=0.5,
                  p_vignette=0.5,
                  p_color_shade=0.5,
-                 p_shadow=0.4,
+                 p_shadow=0.6,
                  p_fog=0.2,
                  p_rain=0.2,
-                 p_glass=0.2,
+                 p_glass=0.4,
                  p_wet=0.2,
                  p_lowtex=0.4,
                  seed=None):
@@ -452,8 +452,8 @@ class StereoAugmentor:
         #     imgL, imgR = self._basic_photometric_lr(imgL, imgR)
 
         # # (3) 센서 잡음/블러/JPEG/비네팅/컬러셰이딩
-        # imgL = self._noise_blur_jpeg_vignette_color(imgL)
-        # imgR = self._noise_blur_jpeg_vignette_color(imgR)
+        imgL = self._noise_blur_jpeg_vignette_color(imgL)
+        imgR = self._noise_blur_jpeg_vignette_color(imgR)
 
         # (4) 날씨/그림자
         imgL, imgR = self._pair_weather_shadows(imgL, imgR)
