@@ -209,7 +209,7 @@ class Logger:
         
     def save_occlusion_mask_simple(self, data_batch):
         # occlusion mask 가져오기
-        occlusion_mask = data_batch['occlusion_mask_l']
+        occlusion_mask = data_batch['tgt_occ_up']
         
         # 텐서를 numpy로 변환
         occlusion_mask_np = occlusion_mask.squeeze(0).cpu().numpy()
@@ -272,8 +272,8 @@ class Logger:
     """ 
     def save_error_map(self,
                         data_batch,
-                        abs_thresh: float = 1.5,
-                        rel_thresh: float = 0.08,
+                        abs_thresh: float = 3.0,
+                        rel_thresh: float = 0.05,
                         dilation: int = 1,
                         bins: int = 50,
                         # Robust consensus parameters (multiscale 제거)

@@ -8,6 +8,7 @@ from models.estimator.submodules import *
 from models.estimator.refiner import *
 from models.estimator.adaptor2 import *
 from models.estimator.attention_modules.semantic_attn import *
+from models.estimator.occlusion import *
 import math
 import gc
 import time
@@ -52,21 +53,6 @@ class FeatureMiTPtr(SubModule):
         # return outputs.hidden_states, outputs.attentions
         return outputs.hidden_states, None
 
-
-class FeatureMiT(SubModule):
-    def __init__(self):
-        super(FeatureMiT, self).__init__()
-        self.model = MixVisionTransformer(img_size=[256, 512], in_chans=3, embed_dim=[32, 64, 160, 256],
-                                      depth=[2, 2, 2, 2], num_heads=[1, 2, 4, 8], qkv_bias=True,
-                                      qk_scale=1.0, sr_ratio=[8, 4, 2, 1], proj_drop=[0.0, 0.0, 0.0, 0.0], attn_drop=[0.0, 0.0, 0.0, 0.0],
-                                      drop_path_rate=0.1)
-
-
-    def forward(self, x):
-        features, attn_weights = self.model(x)
-
-
-        return features, attn_weights  # [stage1, stage2, stage3, stage4]
 
 
 
@@ -357,7 +343,7 @@ class Fast_ACVNet_plus(nn.Module):
             q_chunk=1024,        # 메모리 더 빡세면 512
             dropout=0.0
         )
-        self.enable_sematic_attn = True
+        self.enable_sematic_attn = False
 
 
         # if self.enable_lora:
@@ -366,6 +352,7 @@ class Fast_ACVNet_plus(nn.Module):
             self.adaptor = Adaptor(self.corr_stem, self.corr_feature_att_4, self.hourglass_att, 
                  adaptor_rank=16, adaptor_alpha=0.3)
 
+        self.occ_head = OcclusionPredictor(feat_ch=80, use_corr=True, use_att=True)
 
 
     def concat_volume_generator(self, left_input, right_input, disparity_samples):
@@ -489,6 +476,12 @@ class Fast_ACVNet_plus(nn.Module):
             
             spx_pred = F.softmax(spx_pred, 1)    
             
+            occ_up, occ_1_4, occ_logit, _ = self.occ_head(
+                features_left_cat,         # [B,80,H/4,W/4]
+                att_logits=att_weights,    # [B,1,D/4,H/4,W/4]
+                corr_volume=corr_volume_1, # [B,1,D/4,H/4,W/4]
+                spx_pred=spx_pred          # [B,9, ...]
+            )
             ### 여기가 upsample할 때 필요한 context
 
 
@@ -517,7 +510,8 @@ class Fast_ACVNet_plus(nn.Module):
         confidence_map, _ = att_prob.max(dim=1, keepdim=True)
         return [pred_up * 4, pred.squeeze(1) * 4, pred_att_up * 4, pred_att * 4], \
             [disp_diff.detach(), corr_volume_1.detach(), confidence, corr_volume_1.detach()], \
-            [None, att_weights.detach(), cost.detach(), match_left.detach(), match_right.detach()]
+            [None, att_weights.detach(), cost.detach(), match_left.detach(), match_right.detach()], \
+            [occ_up, occ_logit]
             # [feature_left, att_weights.detach(), cost.detach(), match_left.detach(), match_right.detach()]
     
     

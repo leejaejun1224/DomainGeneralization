@@ -11,10 +11,11 @@ def onclick(event):
     if x is not None and y is not None and 0 <= y < disparity.shape[0] and 0 <= x < disparity.shape[1]:
         # 해당 위치의 disparity 값
         disp_value = disparity[y, x]
-        print(f"좌표: ({x}, {y}), Disparity 값: {disp_value}")
+        print(f"좌표: ({x}, {y}), Disparity 값: {disp_value/256}")
 
 # Disparity 맵 로드 (DrivingStereo 기준)
-disparity_path = "/home/jaejun/dataset/kitti_2015/testing/image_2/000116_10.png"  # 실제 disparity 맵 경로로 변경
+disparity_path = "/home/jaejun/dataset/kitti_2015/training/disp_occ_0/000059_10.png"  # 실제 disparity 맵 경로로 변경
+# disparity_path = "/home/jaejun/DomainGeneralization/log/2025-08-15_01_06/pseudo_disp/000059_10.png"  # 실제 disparity 맵 경로로 변경
 disparity = cv2.imread(disparity_path, cv2.IMREAD_UNCHANGED)  # uint16 형식으로 읽기
 # disparity = disparity.astype(np.float32) / 256.0  # float로 변환 및 스케일링
 

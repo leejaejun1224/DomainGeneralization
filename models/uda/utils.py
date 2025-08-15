@@ -8,7 +8,7 @@ def refine_disparity(data_batch, mask=None, threshold=3.0):
     pred_disp = data_batch['pseudo_disp'][0].unsqueeze(1)
     
     if mask is None:
-        mask = (pred_disp > 0) & (pred_disp < 192)
+        mask = (top_one > 0) & (top_one < 80)
     top_one = top_one * mask 
     pred_disp = pred_disp * mask
 
@@ -20,7 +20,7 @@ def refine_disparity(data_batch, mask=None, threshold=3.0):
     pred_disp = pred_disp * diff_mask
 
     # result = top_one + pred_disp
-    result = pred_disp
+    result = top_one
     result = torch.clamp(result, 0, 192-1)
     # print(result.max())
     return result, diff_mask

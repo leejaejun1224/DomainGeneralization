@@ -39,18 +39,18 @@ class StereoDepthUDAInference(nn.Module):
             self.teacher_model.eval()
 
     def student_forward(self, left, right, mode='left'):
-        output, map, features = self.student_model(left, right, mode)
-        return output, map, features
+        output, map, features,others = self.student_model(left, right, mode)
+        return output, map, features, others
     
 
     def teacher_forward(self, left, right, mode='left'):
         if self.cfg['uda']['train_source_only']:
             with torch.no_grad():
-                output, map, features = self.teacher_model(left, right, mode)
+                output, map, features,others = self.teacher_model(left, right, mode)
         else:
-            output, map, features = self.teacher_model(left, right, mode)
+            output, map, features,others = self.teacher_model(left, right, mode)
         
-        return output, map, features
+        return output, map, features, others
     
         
     def decode_forward(self, features):
