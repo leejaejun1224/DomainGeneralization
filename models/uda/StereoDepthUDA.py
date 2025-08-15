@@ -285,7 +285,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
         band_kl_loss = calc_band_kl_loss(data_batch)
         
         
-
+        vanishing_point_loss = vp_smooth_loss(data_batch)
 
         # patch_size = random.randint(1, 8)
 
@@ -304,8 +304,8 @@ class StereoDepthUDA(StereoDepthUDAInference):
         # total_loss = 0.5 * supervised_loss + 1.0 * directional_loss # + 0.0 * pseudo_loss + 0.5 * jino_loss 
         # total_loss = consist_photo_loss['loss_total'] 
         # total_loss = 0.2 * supervised_loss + 1.0 * pseudo_loss + 1.0 * lora_loss
-        total_loss = 1.0*supervised_loss + 0.5 * loss_occ + 0.5 * loss_occ_up# + 1.0 * pseudo_loss #+ 0.5*lora_loss #+ 0.2*band_kl_loss
-        
+        total_loss = 1.0*supervised_loss + 0.0 * loss_occ + 1.0 * loss_occ_up #+ 0.5*vanishing_point_loss# + 1.0 * pseudo_loss #+ 0.5*lora_loss #+ 0.2*band_kl_loss
+        # vp_smooth_loss()
         
         ## pred, gt, mask, weights
         weight = [1.0]
@@ -379,7 +379,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
             data_batch['tgt_occ_up'] = others[0]
             data_batch['tgt_occ_logit'] = others[1]
             
-            # for i in range(0, 9):
+            # for i in range(0, 5):
             #     pseudo_disp, map, features,others = self.teacher_forward(
             #         data_batch[f'tgt_left_random_{i+1}'], data_batch[f'tgt_right_random_{i+1}'])
             #     data_batch[f'pseudo_disp_random_{i+1}'] = pseudo_disp

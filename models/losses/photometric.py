@@ -4,6 +4,142 @@ from torch import nn
 from typing import Dict, Tuple
 import cv2
 
+import torch
+import torch.nn.functional as F
+
+
+
+# --------- 유틸 ---------
+def _normalize_vp(vp_in, B, device, dtype=torch.float32):
+    # list/tuple/torch 모두 허용, [2] / [1,2] / [B,2] 전부 OK
+    if isinstance(vp_in, (list, tuple)):
+        vp = torch.tensor(vp_in, dtype=dtype, device=device)
+    else:
+        vp = vp_in.to(device=device, dtype=dtype)
+
+    if vp.ndim == 1:
+        assert vp.numel() == 2, f"vanishing_points must be 2 numbers, got {vp.numel()}"
+        vp = vp.view(1, 2)
+    elif vp.ndim == 2:
+        assert vp.size(1) == 2, f"vanishing_points must be shape [*,2], got {vp.shape}"
+    else:
+        raise ValueError(f"vanishing_points shape not supported: {vp.shape}")
+
+    if vp.size(0) == 1 and B > 1:
+        vp = vp.expand(B, 2).clone()
+    elif vp.size(0) != B:
+        # 길이 불일치 자동 보정(반복/절단)
+        if vp.size(0) > B:
+            vp = vp[:B]
+        else:
+            rep = (B + vp.size(0) - 1) // vp.size(0)
+            vp = vp.repeat(rep, 1)[:B]
+    return vp  # [B,2]
+
+def _to_grid_coords(xp, yp, H, W):
+    """
+    xp, yp : [B,1,H,W] 또는 [B,H,W]
+    return : [B,H,W,2]  (grid_sample 2D 포맷)
+    """
+    if xp.ndim == 4 and xp.size(1) == 1:
+        xp = xp[:, 0]
+        yp = yp[:, 0]
+    gx = (xp / max(W-1, 1)) * 2.0 - 1.0
+    gy = (yp / max(H-1, 1)) * 2.0 - 1.0
+    return torch.stack((gx, gy), dim=-1)  # [B,H,W,2]
+
+def _samp2d(img, grid, mode='bilinear'):
+    """
+    img : [B,1,H,W]  (float)
+    grid: [B,H,W,2]  (float)
+    """
+    if img.ndim == 3:  # [B,H,W] -> [B,1,H,W]
+        img = img.unsqueeze(1)
+    img  = img.to(torch.float32).contiguous()
+    grid = grid.to(torch.float32).contiguous()
+    return F.grid_sample(img, grid, mode=mode, padding_mode='border', align_corners=True)
+
+# --------- 메인 로스 ---------
+def vp_smooth_loss(
+    data_batch,  # [B,2] 또는 [2] 등 (disp 해상도 기준 좌표)
+    step=1.0,           # 소실점 방향 스텝(픽셀)
+    tau=3.0,            # 인접 차이 >= tau 면 스무딩 배제
+    use_pseudo_for_gate=True,
+    reduction='mean',
+    eps=1e-6
+):  
+    disp_pred = data_batch['tgt_pred_disp_s_for_loss'].unsqueeze(1)  # [B,1,H,W]
+    disp_pseudo = data_batch['pseudo_disp'][0].unsqueeze(1) 
+    valid_mask = data_batch['tgt_mask_pred_s'] > 0.8
+    vanishing_points = torch.tensor(
+        [[1248/2, 384/2]] * 1,     # 배치 모두 같은 VP
+        dtype=torch.float32, device=disp_pred.device
+    )
+    B, _, H, W = disp_pred.shape
+    device = disp_pred.device
+
+    # 1) VP 정규화
+    vp = _normalize_vp(vanishing_points, B, device)  # [B,2]
+    x_v = vp[:, 0].view(B,1,1,1)
+    y_v = vp[:, 1].view(B,1,1,1)
+
+    # 2) 좌표/방향 필드
+    ys, xs = torch.meshgrid(
+        torch.arange(H, device=device, dtype=torch.float32),
+        torch.arange(W, device=device, dtype=torch.float32),
+        indexing='ij'
+    )
+    xs = xs[None, None].expand(B, 1, H, W)
+    ys = ys[None, None].expand(B, 1, H, W)
+
+    dx = x_v - xs
+    dy = y_v - ys
+    norm = torch.sqrt(dx*dx + dy*dy + eps)
+    rx = dx / norm
+    ry = dy / norm
+
+    dx1 = step * rx;  dy1 = step * ry
+    dx2 = 2.0 * dx1;  dy2 = 2.0 * dy1
+
+    # 3) 그리드 생성 (2D 포맷으로)
+    g0 = _to_grid_coords(xs,          ys,          H, W)  # [B,H,W,2]
+    g1 = _to_grid_coords(xs + dx1,    ys + dy1,    H, W)
+    g2 = _to_grid_coords(xs + dx2,    ys + dy2,    H, W)
+
+    # 4) 샘플링
+    d0 = _samp2d(disp_pred, g0, mode='bilinear')  # [B,1,H,W]
+    d1 = _samp2d(disp_pred, g1, mode='bilinear')
+    d2 = _samp2d(disp_pred, g2, mode='bilinear')
+
+    base = disp_pseudo if use_pseudo_for_gate else disp_pred
+    b0 = _samp2d(base,       g0, mode='bilinear')
+    b1 = _samp2d(base,       g1, mode='bilinear')
+    b2 = _samp2d(base,       g2, mode='bilinear')
+
+    if valid_mask.ndim == 3:
+        valid_mask = valid_mask.unsqueeze(1)
+    m0 = _samp2d(valid_mask, g0, mode='nearest')   # [B,1,H,W]
+    m1 = _samp2d(valid_mask, g1, mode='nearest')
+    m2 = _samp2d(valid_mask, g2, mode='nearest')
+    m012 = (m0 > 0.5) & (m1 > 0.5) & (m2 > 0.5)
+
+    # 5) 게이팅(이미 급변이면 제외)
+    gate_small_jump = ((b1 - b0).abs() < tau) & ((b2 - b1).abs() < tau)
+    gate = (m012 & gate_small_jump).float()  # [B,1,H,W]
+
+    # 6) 2차차분 + Charbonnier
+    curv = d0 - 2.0*d1 + d2
+    loss_map = torch.sqrt(curv*curv + eps*eps) * gate
+
+    denom = gate.sum() + eps
+    if reduction == 'sum':
+        return loss_map.sum() / denom
+    else:  # 'mean'
+        return loss_map.sum() / denom
+
+
+
+
 def compute_photometric_error(data_batch, threshold):
     """
     img_left, img_right: (B, C, H, W), normalized [0,1]

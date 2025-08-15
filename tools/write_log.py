@@ -272,7 +272,7 @@ class Logger:
     """ 
     def save_error_map(self,
                         data_batch,
-                        abs_thresh: float = 3.0,
+                        abs_thresh: float = 1.0,
                         rel_thresh: float = 0.05,
                         dilation: int = 1,
                         bins: int = 50,

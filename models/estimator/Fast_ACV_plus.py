@@ -9,6 +9,7 @@ from models.estimator.refiner import *
 from models.estimator.adaptor2 import *
 from models.estimator.attention_modules.semantic_attn import *
 from models.estimator.occlusion import *
+from models.estimator.refine.bandwith import *
 import math
 import gc
 import time
@@ -54,37 +55,6 @@ class FeatureMiTPtr(SubModule):
         return outputs.hidden_states, None
 
 
-
-
-class Feature(SubModule):
-    def __init__(self):
-        super(Feature, self).__init__()
-        pretrained =  True
-        model = timm.create_model('mobilenetv2_100', pretrained=pretrained, features_only=True)
-        layers = [1,2,3,5,6]
-        chans = [16, 24, 32, 96, 160]
-        self.conv_stem = model.conv_stem
-        self.bn1 = model.bn1
-        # self.act1 = model.act1
-        self.act1 = nn.ReLU6()
-
-
-
-        self.block0 = torch.nn.Sequential(*model.blocks[0:layers[0]])
-        self.block1 = torch.nn.Sequential(*model.blocks[layers[0]:layers[1]])
-        self.block2 = torch.nn.Sequential(*model.blocks[layers[1]:layers[2]])
-        self.block3 = torch.nn.Sequential(*model.blocks[layers[2]:layers[3]])
-        self.block4 = torch.nn.Sequential(*model.blocks[layers[3]:layers[4]])
-
-
-    def forward(self, x):
-        x = self.act1(self.bn1(self.conv_stem(x)))
-        x2 = self.block0(x)
-        x4 = self.block1(x2)
-        x8 = self.block2(x4)
-        x16 = self.block3(x8)
-        x32 = self.block4(x16)
-        return [x4, x8, x16, x32]
 
 
 class FeatUp(SubModule):
@@ -353,7 +323,18 @@ class Fast_ACVNet_plus(nn.Module):
                  adaptor_rank=16, adaptor_alpha=0.3)
 
         self.occ_head = OcclusionPredictor(feat_ch=80, use_corr=True, use_att=True)
-
+        
+        # === [추가] 픽셀별 밴드폭 제어 스위치/범위/헤드 등록 ===
+        self.enable_adaptive_bandwidth = True     # 켜고 끌 수 있는 스위치
+        self.tau_range = (0.5, 2.0)               # 온도 범위(클램프)
+        self.r_range   = (2.0, 8.0)               # 연속 윈도우 반경 범위(픽셀, 1/4 해상도 기준)
+        self.use_radius_mask = True               # r-마스킹 사용할지
+        # features_left_cat(80) + entropy(1) + gap(1) = 82ch
+        self.bandwidth_head = BandwidthHead(in_ch=82, hidden=64,
+                                            tau_range=self.tau_range,
+                                            r_range=self.r_range,
+                                            predict_r=True)
+        # =========================================================
 
     def concat_volume_generator(self, left_input, right_input, disparity_samples):
         
@@ -425,8 +406,47 @@ class Fast_ACVNet_plus(nn.Module):
         ## second adaptor
         
         ##### 여기까지 한 뭉탱이
+        att_logits = att_weights  # alias
+
+        if self.enable_adaptive_bandwidth:
+            # 분포 통계(엔트로피/Top2 gap) - 로짓에서 stop-grad로 추출
+            with torch.no_grad():
+                p0  = F.softmax(att_logits, dim=2)                 # [B,1,D,H,W]
+                p0c = p0.clamp_min(1e-12)
+                H0  = -(p0c * p0c.log()).sum(dim=2)               # [B,1,H,W]
+                top2 = p0.squeeze(1).topk(2, dim=1).values        # [B,2,H,W]
+                gap  = (top2[:,0] - top2[:,1]).unsqueeze(1)       # [B,1,H,W]
+
+            # τ/r 맵 예측
+            tau_map, r_map = self.bandwidth_head(features_left_cat, H0, gap)  # [B,1,H,W] each
+
+            # 온도 스케일링
+            att_logits_scaled = att_logits / tau_map.unsqueeze(2)             # [B,1,D,H,W]
+
+            # 연속 윈도우 마스킹 (Top-1 주변 |d-d0|<=r)
+            if self.use_radius_mask:
+                B_, C_, D_, H4_, W4_ = att_logits_scaled.shape
+                d0 = att_logits_scaled.argmax(dim=2, keepdim=True)            # [B,1,1,H,W]
+                r_int = torch.clamp(r_map.round().long(),
+                                    min=1,
+                                    max=min(D_//2, int(self.r_range[1])))     # [B,1,H,W]
+                all_d = torch.arange(D_, device=att_logits_scaled.device).view(1,1,D_,1,1)
+                win   = (all_d - d0).abs()                                    # [B,1,D,H,W]
+                mask  = (win <= r_int.unsqueeze(2))                            # [B,1,D,H,W]
+                masked_logits = att_logits_scaled.masked_fill(~mask, -1e9)
+            else:
+                masked_logits = att_logits_scaled
+        else:
+            masked_logits = att_logits
+            
+        T = 1.0
+        att_weights_prob = F.softmax(masked_logits/T, dim=2)
         
-        att_weights_prob = F.softmax(att_weights, dim=2)
+        
+        # T = 1.0
+        # att_weights_prob = F.softmax(att_weights/T, dim=2)
+        
+        
         prob_flat          = att_weights_prob.squeeze(1)
         top2_probs, idx_2  = prob_flat.topk(2, dim=1, largest=True)
         
@@ -438,10 +458,11 @@ class Fast_ACVNet_plus(nn.Module):
         k = 24
         ind_k = ind[:, :, :k]
         ind_k = ind_k.sort(2, False)[0]
+
+
+
         att_topk = torch.gather(att_weights_prob, 2, ind_k)
         disparity_sample_topk = ind_k.squeeze(1).float()
-
-
         
         if not self.att_weights_only:
             concat_features_left = self.concat_feature(features_left_cat)
