@@ -430,3 +430,50 @@ def regression_topk(cost, disparity_samples, k):
     return pred, prob
 
 
+def normalize_channelwise(f, eps=1e-5):
+    mean = f.mean(dim=1, keepdim=True)
+    std = f.std(dim=1, keepdim=True)
+    f = (f-mean)/std
+    f = F.normalize(f, p=2, dim=1, eps=eps)
+    return f
+
+def cosine_corr(ref, tgt):
+    return (ref*tgt).sum(dim=1, keepdim=True)
+
+def build_norm_correlation_volume_dn(ref, tgt, masdisp, as_prob=True, temperature=1.0, eps=1e-5):
+    B, C, H, W = ref.shape
+
+    ref = normalize_channelwise(ref, eps=eps)
+    tgt = normalize_channelwise(tgt, eps=eps)
+    
+    volume = ref.new_full([B, 1, masdisp, H, W], fill_value=-1.0)
+    mask = ref.new_ones([B, 1, masdisp, H, W], dtype=torch.bool)
+    
+    for i in range(masdisp):
+        if i > 0:
+            sim = cosine_corr(ref[:, :, :, i:], tgt[:,:,:,:-i])
+            volume[:,:,i, :, i:] = sim
+            mask[:,:,i,:,i:] = True
+            
+        else:
+            sim = cosine_corr(ref=ref, tgt=tgt)
+            volume[:,:,i] = sim
+            mask[:,:,i]=True
+
+    valid = mask.float()
+    cnt = valid.sum(dim=2, keepdim=True).clamp_min(1.0)
+    mean = (volume*valid).sum(dim=2, keepdim=True) / cnt
+    var = ((volume-mean)**2 * valid).sum(dim=2, keepdim=True) / cnt
+    std = var.sqrt().clamp_min(eps)
+    zvol = (volume - mean) / std
+    
+    if not as_prob:
+        zvol = torch.where(mask, zvol, zvol.new_fill((),-1.0))
+        return zvol.contiguous()
+    
+    logits = zvol / float(temperature)
+    logits = logits.masked_fill(~mask, float('-inf'))
+    prob = torch.softmax(logits, dim=2)
+
+
+    return prob.contiguous()

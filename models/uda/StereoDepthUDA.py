@@ -281,8 +281,8 @@ class StereoDepthUDA(StereoDepthUDAInference):
         # consist_photo_loss = consistency_photometric_loss(data_batch)
         # confidence_loss = calc_entropy_loss(data_batch)
 
-        lora_loss = calc_adaptor_loss(data_batch, T=2.0)
-        band_kl_loss = calc_band_kl_loss(data_batch)
+        # lora_loss = calc_adaptor_loss(data_batch, T=2.0)
+        # band_kl_loss = calc_band_kl_loss(data_batch)
         
         
         vanishing_point_loss = vp_smooth_loss(data_batch)

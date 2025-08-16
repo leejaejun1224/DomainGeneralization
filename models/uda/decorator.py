@@ -19,7 +19,7 @@ class StereoDepthUDAInference(nn.Module):
         self.student_model = __models__[cfg['model']](maxdisp=cfg['maxdisp'], 
                                 att_weights_only=cfg['att_weights_only'], enable_lora=cfg['student_lora'])
         # ema teacher model
-        self.teacher_model = __models__[cfg['model']](maxdisp=cfg['maxdisp'],
+        self.teacher_model = __models__[cfg['model']](maxdisp=96,
                                     att_weights_only=cfg['att_weights_only'], enable_lora=cfg['teacher_lora'])
         print("double check for lora enable")
         print(self.student_model.enable_lora)

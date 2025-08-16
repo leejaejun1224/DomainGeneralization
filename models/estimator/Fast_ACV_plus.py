@@ -325,7 +325,7 @@ class Fast_ACVNet_plus(nn.Module):
         self.occ_head = OcclusionPredictor(feat_ch=80, use_corr=True, use_att=True)
         
         # === [추가] 픽셀별 밴드폭 제어 스위치/범위/헤드 등록 ===
-        self.enable_adaptive_bandwidth = True     # 켜고 끌 수 있는 스위치
+        self.enable_adaptive_bandwidth = False     # 켜고 끌 수 있는 스위치
         self.tau_range = (0.5, 2.0)               # 온도 범위(클램프)
         self.r_range   = (2.0, 8.0)               # 연속 윈도우 반경 범위(픽셀, 1/4 해상도 기준)
         self.use_radius_mask = True               # r-마스킹 사용할지
@@ -371,8 +371,9 @@ class Fast_ACVNet_plus(nn.Module):
 
 
         ## shape [batch, 1, max_disparity//4, h, w]
-        corr_volume_1 = build_norm_correlation_volume(match_left, match_right, self.maxdisp//4, mode=mode)
-
+        # corr_volume_1 = build_norm_correlation_volume(match_left, match_right, self.maxdisp//4, mode=mode)
+        corr_volume_1 = build_norm_correlation_volume_dn(match_left, match_right, self.maxdisp//4)
+        
 
         #### 여기부터
         ## shape [batch, 8, max_disparity//4, h, w]
