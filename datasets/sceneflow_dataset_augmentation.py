@@ -32,6 +32,7 @@ class FlyingThingDataset(Dataset):
                  min_valid_ratio=0.01,           # 크롭 내 유효 disparity 최소 비율
                  max_crop_tries=30,
                  occ_root="~/dataset/flyingthing/FlyingThings3D_subset_disparity_occlusions/FlyingThings3D_subset/train/disparity_occlusions",
+                 right_disp_root="/home/jaejun/dataset/flyingthing/FlyingThings3D_subset_disparity/FlyingThings3D_subset/train/disparity/right",
                  use_occ_left=True   # 왼쪽 뷰 기준 마스크 사용
                  ):             # 크롭 재시도 횟수
         self.datapath = datapath
@@ -50,6 +51,7 @@ class FlyingThingDataset(Dataset):
         self.max_crop_tries = int(max_crop_tries)
         
         self.occ_root = os.path.expanduser(occ_root) if occ_root is not None else None
+        self.right_disp_root = os.path.expanduser(right_disp_root) if right_disp_root is not None else None
         self.use_occ_left = bool(use_occ_left)
         self._occ_idx = {"left": None, "right": None}  # suffix/basename 매핑
 
@@ -109,6 +111,22 @@ class FlyingThingDataset(Dataset):
         # NaN/Inf 정리
         data = np.nan_to_num(data, nan=0.0, posinf=0.0, neginf=0.0)
         return data
+    
+    
+    def _derive_right_disp_path(self, left_disp_full_path):
+        """
+        left disp의 전체 경로(full path)에서 '/left/'를 '/right/'로 치환하여
+        대응되는 오른쪽 disp 경로를 생성. 만약 '/left/' 토큰이 없다면
+        basename만 사용해 self.right_disp_root 아래로 붙임.
+        """
+        p = os.path.expanduser(left_disp_full_path).replace("\\", "/")
+        if "/left/" in p:
+            right_p = p.replace("/left/", "/right/")
+        else:
+            # 안전장치: left 경로에 'left' 토큰이 없을 경우, 파일명만 사용
+            right_p = os.path.join(self.right_disp_root, os.path.basename(p))
+        return right_p
+    
     # ---- 추가: occlusion 파일 인덱싱(좌/우 각각) ----
     def _build_occ_index(self):
         def collect(view):
@@ -267,7 +285,6 @@ class FlyingThingDataset(Dataset):
 
             # ---------- 저해상도 GT ----------
             disparity_low    = cv2.resize(disparity, (crop_w//4, crop_h//4), interpolation=cv2.INTER_NEAREST)
-            disparity_low_r8 = cv2.resize(disparity, (crop_w//8, crop_h//8), interpolation=cv2.INTER_NEAREST)
             
             if occ_full is not None:
                 occ_low = cv2.resize(occ_full, (crop_w//4, crop_h//4), interpolation=cv2.INTER_NEAREST)
@@ -312,7 +329,6 @@ class FlyingThingDataset(Dataset):
                 "valid_mask": valid_mask,
                 "gradient_map": gradient_map,
                 "disparity_low": torch.from_numpy(disparity_low).float(),
-                "disparity_low_r8": torch.from_numpy(disparity_low_r8).float(),
                 "left_filename": self.left_filenames[index],
                 "right_filename": self.right_filenames[index],
                 "prior": prior_t,
@@ -332,7 +348,6 @@ class FlyingThingDataset(Dataset):
             if self.negate_disp:
                 sample["disparity"]        = -sample["disparity"]
                 sample["disparity_low"]    = -sample["disparity_low"]
-                sample["disparity_low_r8"] = -sample["disparity_low_r8"]
 
             return sample
 

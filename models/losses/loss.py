@@ -164,6 +164,33 @@ def calc_supervised_train_loss(data_batch, model='s', epoch=0):
     
     return loss
 
+# dont touch 
+def calc_supervised_train_loss_right(data_batch, model='s', epoch=0):
+    
+
+    key = 'src_pred_disp_' + model + '_reverse'
+    pred_disp, gt_disp, gt_disp_low = data_batch[key], data_batch['src_disparity_right'], data_batch['src_disparity_right_low']
+    
+    mask = (gt_disp > 0) & (gt_disp < 256)
+    data_batch['mask'] = mask
+    mask_low = (gt_disp_low > 0) & (gt_disp_low < 256)
+    data_batch['mask_low'] = mask_low
+    masks = [mask, mask_low, mask, mask_low]
+    gt_disps = [gt_disp, gt_disp_low, gt_disp, gt_disp_low]
+    # scale별 weight 예시
+    weights = [1.0, 0.3, 0.5, 0.3]
+    
+    if 'warm_up' in data_batch and epoch < data_batch['warm_up']:
+        if 'src_prior' in data_batch:
+            prior_ratio = calc_prior(data_batch)
+            loss = get_loss_with_prior(pred_disp, gt_disps, masks, weights, prior_ratio=prior_ratio)
+        else:
+            loss = get_loss(pred_disp, gt_disps, masks, weights)
+    else:    
+        loss = get_loss(pred_disp, gt_disps, masks, weights)
+    
+    return loss
+
 
 def calc_supervised_val_loss(data_batch, model='s'):
     key = 'src_pred_disp_' + model

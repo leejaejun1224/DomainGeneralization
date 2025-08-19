@@ -152,15 +152,15 @@ class DisparityRefinement(nn.Module):
 
         self.stem = nn.Sequential(
             nn.Conv2d(in_ch, base_ch, 3, padding=1, bias=False),
-            nn.BatchNorm2d(base_ch), nn.ReLU(inplace=True),
+            nn.GroupNorm(base_ch), nn.ReLU(inplace=True),
             nn.Conv2d(base_ch, base_ch, 3, padding=1, bias=False),
-            nn.BatchNorm2d(base_ch), nn.ReLU(inplace=True),
+            nn.GroupNorm(base_ch), nn.ReLU(inplace=True),
         )
         dilations = [1, 1, 2, 4, 1][:num_blocks]
         self.blocks = nn.Sequential(*[ResBlock(base_ch, d) for d in dilations])
         self.head = nn.Sequential(
             nn.Conv2d(base_ch, base_ch//2, 3, padding=1, bias=False),
-            nn.BatchNorm2d(base_ch//2), nn.ReLU(inplace=True),
+            nn.GroupNorm(base_ch//2), nn.ReLU(inplace=True),
             nn.Conv2d(base_ch//2, 1, 3, padding=1, bias=True)
         )
         nn.init.zeros_(self.head[-1].weight)
@@ -312,7 +312,7 @@ class hourglass_att(nn.Module):
 
 class Fast_ACVNet_plus(nn.Module):
     def __init__(self, maxdisp, att_weights_only, enable_lora=True,
-                 refine_base_ch=64, refine_blocks=5, refine_max_residual=1.5,
+                 refine_base_ch=64, refine_blocks=5, refine_max_residual=4.0,
                  reg_alpha_ssim=0.85, reg_w_photo=1.0, reg_w_lr=0.2, reg_occ_tau=1.0):
         super(Fast_ACVNet_plus, self).__init__()
         self.maxdisp = maxdisp
@@ -353,9 +353,9 @@ class Fast_ACVNet_plus(nn.Module):
         self.concat_feature_att_4 = channelAtt(16, 80)
         self.hourglass = hourglass(16)
 
-        if enable_lora:
-            self.adaptor = Adaptor(self.corr_stem, self.corr_feature_att_4, self.hourglass_att,
-                                   adaptor_rank=16, adaptor_alpha=0.3)
+        # if enable_lora:
+        #     self.adaptor = Adaptor(self.corr_stem, self.corr_feature_att_4, self.hourglass_att,
+        #                            adaptor_rank=16, adaptor_alpha=0.3)
 
         self.occ_head = OcclusionPredictor(feat_ch=80, use_corr=True, use_att=True)
 
@@ -364,10 +364,10 @@ class Fast_ACVNet_plus(nn.Module):
                                                num_blocks=refine_blocks,
                                                use_error_map=True,
                                                max_residual=refine_max_residual)
-        self.reg_loss = StereoRegularizationLoss(alpha_ssim=reg_alpha_ssim,
-                                                 w_photo=reg_w_photo,
-                                                 w_lr=reg_w_lr,
-                                                 occlusion_tau=reg_occ_tau)
+        # self.reg_loss = StereoRegularizationLoss(alpha_ssim=reg_alpha_ssim,
+        #                                          w_photo=reg_w_photo,
+        #                                          w_lr=reg_w_lr,
+        #                                          occlusion_tau=reg_occ_tau)
         self.occ_blend_alpha = 1.0  # 기본: GT 없으면 예측 마스크만 사용
 
         # 오클루전 감독 손실(옵션)

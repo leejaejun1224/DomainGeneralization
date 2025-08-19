@@ -259,6 +259,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
             #     data_batch[f'pseudo_disp_random_{i+1}'] = pseudo_disp
 
         supervised_loss = calc_supervised_train_loss(data_batch, model='s', epoch=epoch)
+        # supervised_loss_right = calc_supervised_train_loss_right(data_batch, model='s', epoch=epoch)
         calc_entropy(data_batch, temperature=temperature, threshold=self.entropy_threshold)
         # calc_confidence_entropy(data_batch,threshold=10, k=12, temperature=0.5)
         # compute_photometric_error(data_batch, threshold=0.010)
@@ -304,7 +305,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
         # total_loss = 0.5 * supervised_loss + 1.0 * directional_loss # + 0.0 * pseudo_loss + 0.5 * jino_loss 
         # total_loss = consist_photo_loss['loss_total'] 
         # total_loss = 0.2 * supervised_loss + 1.0 * pseudo_loss + 1.0 * lora_loss
-        total_loss = 1.0*supervised_loss + 0.5 * loss_occ + 0.5 * loss_occ_up #+ 0.5*vanishing_point_loss# + 1.0 * pseudo_loss #+ 0.5*lora_loss #+ 0.2*band_kl_loss
+        total_loss = 1.0*supervised_loss  + 0.5 * loss_occ + 0.5 * loss_occ_up #+ 0.5*vanishing_point_loss# + 1.0 * pseudo_loss #+ 0.5*lora_loss #+ 0.2*band_kl_loss
         # vp_smooth_loss()
         
         ## pred, gt, mask, weights
