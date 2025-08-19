@@ -131,7 +131,7 @@ def pad_to_size_value(arr: np.ndarray, target_size, value: int):
 class KITTI2015Dataset(Dataset):
     """KITTI 2015 stereo dataset"""
     
-    NUM_RANDOM_CROPS = 9
+    NUM_RANDOM_CROPS = 1
     
     def __init__(self, datapath, list_filename, training, max_len=None, aug=False, prior=None):
         self.datapath = datapath
@@ -344,8 +344,8 @@ class KITTI2015Dataset(Dataset):
         right_full = self.processor.pad_to_size(right_full, self.processor.TARGET_SIZE)
         
         # Create random crops
-        left_crops = self._create_random_crops(left_full, random_coords)
-        right_crops = self._create_random_crops(right_full, random_coords)
+        # left_crops = self._create_random_crops(left_full, random_coords)
+        # right_crops = self._create_random_crops(right_full, random_coords)
         
         
         # Prepare base return data
@@ -355,7 +355,7 @@ class KITTI2015Dataset(Dataset):
             "textureless_score": textureless_score,
             "left": left_full,
             "right": right_full,
-            "overlap_coords": self._calculate_overlap(random_coords[0], random_coords[1])
+            # "overlap_coords": self._calculate_overlap(random_coords[0], random_coords[1])
         }
         
         if self.seg_root is not None:
@@ -371,10 +371,10 @@ class KITTI2015Dataset(Dataset):
         return_data.update(multiscale_data)
         
         # Add random crops and coordinates
-        for i, coord in enumerate(random_coords, 1):
-            return_data[f"random_coord_{i}"] = coord
-            return_data[f"left_random_{i}"] = left_crops[f'crop_{i}']
-            return_data[f"right_random_{i}"] = right_crops[f'crop_{i}']
+        # for i, coord in enumerate(random_coords, 1):
+        #     return_data[f"random_coord_{i}"] = coord
+        #     return_data[f"left_random_{i}"] = left_crops[f'crop_{i}']
+        #     return_data[f"right_random_{i}"] = right_crops[f'crop_{i}']
         
         # Handle training-specific data
         # if self.training:

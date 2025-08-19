@@ -326,16 +326,12 @@ class FlyingThingDataset(Dataset):
                 "left": left_img_t,
                 "right": right_img_t,
                 "disparity": torch.from_numpy(disparity).float(),
-                "valid_mask": valid_mask,
-                "gradient_map": gradient_map,
                 "disparity_low": torch.from_numpy(disparity_low).float(),
                 "left_filename": self.left_filenames[index],
                 "right_filename": self.right_filenames[index],
                 "prior": prior_t,
             }
-            if self.use_aux_feats:
-                sample["robust_left"]  = robust_left
-                sample["robust_right"] = robust_right
+
                 
                 
             if occ_full is not None:
@@ -396,15 +392,11 @@ class FlyingThingDataset(Dataset):
                 "disparity": torch.from_numpy(disparity).float(),
                 "top_pad": 0,
                 "right_pad": 0,
-                "gradient_map": gradient_map,
                 "disparity_low": torch.from_numpy(disparity_low).float(),
-                "valid_mask": valid_mask,
                 "left_filename": self.left_filenames[index],
                 "right_filename": self.right_filenames[index],
             }
-            if self.use_aux_feats:
-                sample["robust_left"]  = robust_left
-                sample["robust_right"] = robust_right
+
             if occ_full is not None:
                 
                 sample["occ_mask"] = torch.from_numpy(occ_full).float()

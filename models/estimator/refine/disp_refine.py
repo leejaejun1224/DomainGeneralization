@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
+from models.estimator.submodules import DomainNorm
 # =========================
 #  유틸: 좌→우 워핑(스테레오)
 # =========================
@@ -167,97 +167,150 @@ class StereoRegularizationLoss(nn.Module):
             'lr': lr_loss.detach(),
             'valid_ratio': (valid.mean().detach())
         }
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
 
-# =========================
-#  Refinement Head
-# =========================
+def grad_xy(d):
+    # 허용 형태: [H,W], [B,H,W], [B,1,H,W] → 반환: [B,1,H,W]
+    if d.dim() == 2:        # [H,W]
+        d = d.unsqueeze(0).unsqueeze(0)
+    elif d.dim() == 3:      # [B,H,W]
+        d = d.unsqueeze(1)
+    elif d.dim() != 4:
+        raise ValueError(f"disp tensor must be 2D/3D/4D, got dim={d.dim()}")
+    dx = d[:, :, :, 1:] - d[:, :, :, :-1]
+    dy = d[:, :, 1:, :] - d[:, :, :-1, :]
+    dx = F.pad(dx, (0,1,0,0))  # pad right
+    dy = F.pad(dy, (0,0,0,1))  # pad bottom
+    return dx, dy
 
-class ResBlock(nn.Module):
-    def __init__(self, ch, dilation=1):
+class GNResBlock(nn.Module):
+    def __init__(self, ch, dilation=1, groups=8):
         super().__init__()
         pad = dilation
         self.conv1 = nn.Conv2d(ch, ch, 3, padding=pad, dilation=dilation, bias=False)
-        self.bn1   = nn.BatchNorm2d(ch)
+        # self.gn1   = nn.GroupNorm(groups, ch)
+        self.gn1   = DomainNorm(ch)
+        self.act1  = nn.SiLU(inplace=True)
         self.conv2 = nn.Conv2d(ch, ch, 3, padding=pad, dilation=dilation, bias=False)
-        self.bn2   = nn.BatchNorm2d(ch)
-        self.relu  = nn.ReLU(inplace=True)
+        # self.gn2   = nn.GroupNorm(groups, ch)
+        self.gn2   = DomainNorm(ch)
+        self.act2  = nn.SiLU(inplace=True)
 
     def forward(self, x):
-        out = self.relu(self.bn1(self.conv1(x)))
-        out = self.bn2(self.conv2(out))
-        return self.relu(x + out)
+        out = self.act1(self.gn1(self.conv1(x)))
+        out = self.gn2(self.conv2(out))
+        return self.act2(x + out)
 
-class DisparityRefinement(nn.Module):
+class SignedResidualHead(nn.Module):
+    """
+    Δd = max_residual * (sigmoid(hp) - sigmoid(hn)) ∈ [-M, M]
+    - 두 분기 모두 0 초기화 → 시작 시 Δd≈0
+    """
+    def __init__(self, ch, max_residual=2.0, groups=8):
+        super().__init__()
+        self.trunk = nn.Sequential(
+            nn.Conv2d(ch, ch, 3, padding=1, bias=False),
+            # nn.GroupNorm(groups, ch),
+            DomainNorm(ch),
+            nn.SiLU(inplace=True),
+            nn.Conv2d(ch, ch, 3, padding=1, bias=False),
+            # nn.GroupNorm(groups, ch),
+            DomainNorm(ch),
+            nn.SiLU(inplace=True),
+        )
+        self.hp = nn.Conv2d(ch, 1, 3, padding=1, bias=True)
+        self.hn = nn.Conv2d(ch, 1, 3, padding=1, bias=True)
+        nn.init.zeros_(self.hp.weight); nn.init.zeros_(self.hp.bias)
+        nn.init.zeros_(self.hn.weight); nn.init.zeros_(self.hn.bias)
+        self.max_residual = float(max_residual)
+
+    def forward(self, f, gate=None):
+        h = self.trunk(f)
+        p = torch.sigmoid(self.hp(h))  # [0,1]
+        n = torch.sigmoid(self.hn(h))  # [0,1]
+        delta = self.max_residual * (p - n)  # in [-M, M]
+        if gate is not None:
+            delta = delta * gate
+        return delta
+
+class DisparityRefinementV2(nn.Module):
     """
     입력: left, right, disp_init(full-res, px)
-    출력: disp_refined, aux(dict: warped_right, valid_mask, delta)
-    - 입력 특징: [left, right_warped_by_disp, disp_init, |left-right_warped|] 를 concat
-    - 얕은 ResNet으로 Δd 예측, tanh 스케일로 안정적 잔차(픽셀 단위) 제한
+    출력: disp_refined, aux
+    - 입력 특징: [L, R_w, d0, |L-R_w|, (L-R_w), ∂x d0, ∂y d0, valid]
+    - Pos–Neg head로 Δd ∈ [-M, M] (기본 M=2.0)
     """
-    def __init__(self, base_ch=64, num_blocks=5, use_error_map=True, max_residual=1.5):
+    def __init__(self,
+                 base_ch=64,
+                 num_blocks=5,
+                 dilations=(1,1,2,4,1),
+                 max_residual=2.0,
+                 use_valid_gate=True,
+                 groups=8):
         super().__init__()
-        self.use_error_map = use_error_map
-        self.max_residual = max_residual
+        self.max_residual = float(max_residual)
+        self.use_valid_gate = use_valid_gate
 
-        in_ch = 3 + 3 + 1 + (1 if use_error_map else 0)  # L, R_warp, d, |L-Rw|
-        mid_ch = base_ch
-
+        in_ch = 3 + 3 + 1 + 1 + 1 + 1 + 1 + 1  # L(3), Rw(3), d0(1), err_abs(1), err_sgn(1), dx(1), dy(1), valid(1)
         self.stem = nn.Sequential(
-            nn.Conv2d(in_ch, mid_ch, 3, padding=1, bias=False),
-            nn.BatchNorm2d(mid_ch),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(mid_ch, mid_ch, 3, padding=1, bias=False),
-            nn.BatchNorm2d(mid_ch),
-            nn.ReLU(inplace=True),
+            nn.Conv2d(in_ch, base_ch, 3, padding=1, bias=False),
+            # nn.GroupNorm(groups, base_ch),
+            DomainNorm(base_ch),
+            nn.SiLU(inplace=True),
+            nn.Conv2d(base_ch, base_ch, 3, padding=1, bias=False),
+            # nn.GroupNorm(groups, base_ch),
+            DomainNorm(base_ch),
+            nn.SiLU(inplace=True),
         )
 
-        # 다양한 수용영역 확보를 위한 팁: 중간 몇 개 블록에 팽창(dilation) 사용
-        dilations = [1, 1, 2, 4, 1][:num_blocks]
         blocks = []
-        for d in dilations:
-            blocks.append(ResBlock(mid_ch, dilation=d))
+        for i in range(num_blocks):
+            d = dilations[i] if i < len(dilations) else 1
+            blocks.append(GNResBlock(base_ch, dilation=d, groups=groups))
         self.blocks = nn.Sequential(*blocks)
 
-        self.head = nn.Sequential(
-            nn.Conv2d(mid_ch, mid_ch // 2, 3, padding=1, bias=False),
-            nn.BatchNorm2d(mid_ch // 2),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(mid_ch // 2, 1, 3, padding=1, bias=True)
-        )
-        # Δd의 폭을 제한하기 위한 초기화(작은 값)
-        nn.init.zeros_(self.head[-1].weight)
-        nn.init.zeros_(self.head[-1].bias)
+        self.head = SignedResidualHead(base_ch, max_residual=self.max_residual, groups=groups)
 
-    @torch.no_grad()
-    def _safe_cast(self, x, ref):
-        # AMP/정밀도 안전 캐스트
-        if x.dtype != ref.dtype:
-            x = x.to(ref.dtype)
-        return x
-
+    # def forward(self, left, right, disp_init):
     def forward(self, left, right, disp_init):
-        """
-        left, right: [B,3,H,W] (0~1)
-        disp_init: [B,1,H,W]  (px)
-        """
+        # --- shape guard: disp_init을 [B,1,H,W]로 강제
+        if disp_init.dim() == 2:      # [H,W]
+            disp_init = disp_init.unsqueeze(0).unsqueeze(0)
+        elif disp_init.dim() == 3:    # [B,H,W]
+            disp_init = disp_init.unsqueeze(1)
+        elif disp_init.dim() == 4 and disp_init.size(1) != 1:
+            raise ValueError(f"disp_init must have 1 channel; got C={disp_init.size(1)}")
+        # 1) warp right to left, get valid mask (H×W 유지)
         right_warp, valid = warp_right_to_left(right, disp_init, padding_mode='border')
-        if self.use_error_map:
-            err = torch.abs(left - right_warp).mean(1, keepdim=True)  # [B,1,H,W]
-            feat_in = torch.cat([left, right_warp, disp_init, err], dim=1)
-        else:
-            feat_in = torch.cat([left, right_warp, disp_init], dim=1)
 
+        # 2) photometric cues
+        err_abs = (left - right_warp).abs().mean(1, keepdim=True)   # H×W,1
+        err_sgn = (left - right_warp).mean(1, keepdim=True)         # H×W,1 (부호)
+
+        # 3) disparity gradients
+        dx, dy = grad_xy(disp_init)                                 # H×W,1 each
+
+        # 4) concat features  (모두 H×W 유지)
+        feat_in = torch.cat([left, right_warp, disp_init, err_abs, err_sgn, dx, dy, valid], dim=1)
+
+        # 5) shallow encoder + context blocks
         f = self.stem(feat_in)
         f = self.blocks(f)
-        delta = self.head(f)  # [B,1,H,W], 초기엔 거의 0
 
-        # 안정성: 한 스텝 잔차를 적정 범위로 제한(과보정 방지)
-        delta = self.max_residual * torch.tanh(delta)
+        # 6) signed residual head (게이팅 옵션)
+        gate = valid if self.use_valid_gate else None
+        delta = self.head(f, gate=gate)                             # Δd ∈ [-M, M], H×W,1
 
+        # 7) refine
         disp_refined = disp_init + delta
+
         aux = {
-            'warped_right': right_warp,
-            'valid_mask': valid,
-            'delta': delta
+            # 'warped_right': right_warp,
+            # 'valid_mask': valid,
+            # 'delta': delta,
+            # 'err_abs': err_abs,
+            # 'err_sgn': err_sgn
         }
         return disp_refined, aux

@@ -10,6 +10,7 @@ from models.estimator.adaptor2 import *
 from models.estimator.attention_modules.semantic_attn import *
 from models.estimator.occlusion import *
 from models.estimator.refine.bandwith import *
+from models.estimator.refine.disp_refine import DisparityRefinementV2
 import math
 import gc
 import time
@@ -129,9 +130,11 @@ class ResBlock(nn.Module):
         super().__init__()
         pad = dilation
         self.conv1 = nn.Conv2d(ch, ch, 3, padding=pad, dilation=dilation, bias=False)
-        self.bn1   = nn.BatchNorm2d(ch)
+        # self.bn1   = nn.BatchNorm2d(ch)
+        self.bn1   = DomainNorm(ch)
         self.conv2 = nn.Conv2d(ch, ch, 3, padding=pad, dilation=dilation, bias=False)
-        self.bn2   = nn.BatchNorm2d(ch)
+        # self.bn2   = nn.BatchNorm2d(ch)
+        self.bn2   = DomainNorm(ch)
         self.relu  = nn.ReLU(inplace=True)
 
     def forward(self, x):
@@ -152,15 +155,18 @@ class DisparityRefinement(nn.Module):
 
         self.stem = nn.Sequential(
             nn.Conv2d(in_ch, base_ch, 3, padding=1, bias=False),
-            nn.GroupNorm(base_ch), nn.ReLU(inplace=True),
+            # nn.BatchNorm2d(base_ch), nn.ReLU(inplace=True),
+            DomainNorm(base_ch), nn.ReLU(inplace=True),
             nn.Conv2d(base_ch, base_ch, 3, padding=1, bias=False),
-            nn.GroupNorm(base_ch), nn.ReLU(inplace=True),
+            # nn.BatchNorm2d(base_ch), nn.ReLU(inplace=True),
+            DomainNorm(base_ch), nn.ReLU(inplace=True),
         )
         dilations = [1, 1, 2, 4, 1][:num_blocks]
         self.blocks = nn.Sequential(*[ResBlock(base_ch, d) for d in dilations])
         self.head = nn.Sequential(
             nn.Conv2d(base_ch, base_ch//2, 3, padding=1, bias=False),
-            nn.GroupNorm(base_ch//2), nn.ReLU(inplace=True),
+            # nn.BatchNorm2d(base_ch//2), nn.ReLU(inplace=True),
+            DomainNorm(base_ch//2), nn.ReLU(inplace=True),
             nn.Conv2d(base_ch//2, 1, 3, padding=1, bias=True)
         )
         nn.init.zeros_(self.head[-1].weight)
@@ -341,9 +347,9 @@ class Fast_ACVNet_plus(nn.Module):
         self.desc = nn.Conv2d(80, 80, kernel_size=1, padding=0, stride=1)
         self.desc_dropout = nn.Dropout2d(0.)
 
-        self.corr_stem = BasicConv(1, 8, is_3d=True, kernel_size=3, stride=1, padding=1)
-        self.corr_feature_att_4 = channelAtt(8, 80)
-        self.hourglass_att = hourglass_att(8)
+        self.corr_stem = BasicConv(1, 12, is_3d=True, kernel_size=3, stride=1, padding=1)
+        self.corr_feature_att_4 = channelAtt(12, 80)
+        self.hourglass_att = hourglass_att(12)
 
         self.concat_feature = nn.Sequential(
             BasicConv(80, 32, kernel_size=3, stride=1, padding=1),
@@ -364,6 +370,8 @@ class Fast_ACVNet_plus(nn.Module):
                                                num_blocks=refine_blocks,
                                                use_error_map=True,
                                                max_residual=refine_max_residual)
+        # self.refine_head = DisparityRefinementV2(base_ch=refine_base_ch,
+        #                                        num_blocks=refine_blocks)
         # self.reg_loss = StereoRegularizationLoss(alpha_ssim=reg_alpha_ssim,
         #                                          w_photo=reg_w_photo,
         #                                          w_lr=reg_w_lr,
@@ -371,7 +379,7 @@ class Fast_ACVNet_plus(nn.Module):
         self.occ_blend_alpha = 1.0  # 기본: GT 없으면 예측 마스크만 사용
 
         # 오클루전 감독 손실(옵션)
-        self.bce_logits = nn.BCEWithLogitsLoss(reduction='mean')
+        # self.bce_logits = nn.BCEWithLogitsLoss(reduction='mean')
 
     def set_occ_blend_alpha(self, alpha: float):
         """GT/non-GT 마스크 블렌딩 가중치(0=GT만, 1=예측만)."""
