@@ -126,8 +126,8 @@ class Logger:
 
     def save_pseudo_disp_map(self, data_batch):
         
-        disp = data_batch['avg_pseudo_disp'].squeeze(0).cpu().numpy()
-        total_pixels = data_batch['avg_pseudo_disp'].numel()  # 전체 요소 개수
+        disp = data_batch['src_pred_disp_s'][0].squeeze(0).cpu().numpy()
+        total_pixels = data_batch['src_pred_disp_s'][0].numel()  # 전체 요소 개수
         non_zero_pixels = torch.count_nonzero(data_batch['avg_pseudo_disp'])  # 0이 아닌 요소 개수
         ratio = non_zero_pixels.float() / total_pixels
         

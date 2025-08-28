@@ -232,26 +232,26 @@ class StereoDepthUDA(StereoDepthUDAInference):
         # data_batch['tgt_right_feature_s_aug'] = features[4]
         
 
-        tgt_pred, _, _,others = self.student_forward(data_batch['tgt_left'], data_batch['tgt_right'])  
-        data_batch['tgt_pred_disp_s_for_loss'] = tgt_pred[0]
+        with torch.no_grad():
+            tgt_pred, _, _,others = self.student_forward(data_batch['tgt_left'], data_batch['tgt_right'])  
+            data_batch['tgt_pred_disp_s_for_loss'] = tgt_pred[0]
 
-        
         # tgt_pred, map, features,others = self.student_forward(data_batch['tgt_right'], data_batch['tgt_left'], mode='right')  
         # data_batch['tgt_pred_disp_s_reverse'] = tgt_pred
 
-        with torch.no_grad():
-            pseudo_disp, map, features,others = self.teacher_forward(
-                data_batch['tgt_left'], data_batch['tgt_right'])
-            data_batch['pseudo_disp'] = pseudo_disp
-            data_batch['pseudo_disp_for_loss'] = pseudo_disp[0]
-            data_batch['confidence_map'] = map[0]
-            data_batch['tgt_corr_volume_t_1'] = map[1]
-            data_batch['tgt_mask_pred_t'] = map[2]
-            data_batch['tgt_corr_volume_t_2'] = map[3]
-            data_batch['features_t'] = features[0]
-            data_batch['tgt_attn_weights_t'] = features[1]
-            data_batch['tgt_left_feature_t'] = features[3]
-            data_batch['tgt_right_feature_t'] = features[4]
+        # with torch.no_grad():
+        #     pseudo_disp, map, features,others = self.teacher_forward(
+        #         data_batch['tgt_left'], data_batch['tgt_right'])
+        #     data_batch['pseudo_disp'] = pseudo_disp
+        #     data_batch['pseudo_disp_for_loss'] = pseudo_disp[0]
+        #     data_batch['confidence_map'] = map[0]
+        #     data_batch['tgt_corr_volume_t_1'] = map[1]
+        #     data_batch['tgt_mask_pred_t'] = map[2]
+        #     data_batch['tgt_corr_volume_t_2'] = map[3]
+        #     data_batch['features_t'] = features[0]
+        #     data_batch['tgt_attn_weights_t'] = features[1]
+        #     data_batch['tgt_left_feature_t'] = features[3]
+        #     data_batch['tgt_right_feature_t'] = features[4]
             
             # for i in range(0, 9):
             #     pseudo_disp, map, features,others = self.teacher_forward(
@@ -313,7 +313,9 @@ class StereoDepthUDA(StereoDepthUDAInference):
         gt_tgt_disp = data_batch['tgt_disparity']
         mask = (gt_tgt_disp > 0) & (gt_tgt_disp < 256)
         student_loss = get_loss(data_batch['tgt_pred_disp_s_for_loss'], gt_tgt_disp, mask, weight)
-        teacher_loss = get_loss(data_batch['pseudo_disp_for_loss'], gt_tgt_disp, mask, weight)
+        # teacher_loss = get_loss(data_batch['pseudo_disp_for_loss'], gt_tgt_disp, mask, weight)
+        # student_loss = 0.0#get_loss(data_batch['tgt_pred_disp_s_for_loss'], gt_tgt_disp, mask, weight)
+        # teacher_loss = 0.0#get_loss(data_batch['pseudo_disp_for_loss'], gt_tgt_disp, mask, weight)
 
         log_vars = {
             'loss': total_loss.item(),
@@ -325,7 +327,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
             'entropy_loss': 0.0,
             'consist_loss' : 0.0, #consist_photo_loss["loss_total"].item(),
             'target_valid_loss_student' : student_loss.item(),
-            'target_valid_loss_teacher' : teacher_loss.item(),
+            'target_valid_loss_teacher' : 0.0,
         }
 
         total_loss.backward()

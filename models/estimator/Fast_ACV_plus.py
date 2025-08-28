@@ -17,7 +17,7 @@ import time
 import timm
 from models.encoder.MiTbackbone import MixVisionTransformer
 from transformers import SegformerModel
-
+from models.estimator.refine.refine_fullres import StereoRefiner
 # =========================
 # 추가: 워핑/SSIM/정규화 손실/정제 헤드
 # =========================
@@ -161,7 +161,7 @@ class DisparityRefinement(nn.Module):
             # nn.BatchNorm2d(base_ch), nn.ReLU(inplace=True),
             DomainNorm(base_ch), nn.ReLU(inplace=True),
         )
-        dilations = [1, 1, 2, 4, 1][:num_blocks]
+        dilations = [1, 2, 4, 8, 1][:num_blocks]
         self.blocks = nn.Sequential(*[ResBlock(base_ch, d) for d in dilations])
         self.head = nn.Sequential(
             nn.Conv2d(base_ch, base_ch//2, 3, padding=1, bias=False),
@@ -245,6 +245,7 @@ class channelAtt(SubModule):
             nn.Conv2d(im_chan//2, cv_chan, 1)
         )
         self.weight_init()
+        
     def forward(self, cv, im):
         channel_att = self.im_att(im).unsqueeze(2)
         return torch.sigmoid(channel_att) * cv
@@ -365,13 +366,13 @@ class Fast_ACVNet_plus(nn.Module):
 
         self.occ_head = OcclusionPredictor(feat_ch=80, use_corr=True, use_att=True)
 
-        # === 추가: 정제 헤드 + 정규화 손실 ===
         self.refine_head = DisparityRefinement(base_ch=refine_base_ch,
                                                num_blocks=refine_blocks,
                                                use_error_map=True,
                                                max_residual=refine_max_residual)
-        # self.refine_head = DisparityRefinementV2(base_ch=refine_base_ch,
-        #                                        num_blocks=refine_blocks)
+        
+        # self.refine_head = StereoRefiner()
+
         # self.reg_loss = StereoRegularizationLoss(alpha_ssim=reg_alpha_ssim,
         #                                          w_photo=reg_w_photo,
         #                                          w_lr=reg_w_lr,
@@ -443,7 +444,8 @@ class Fast_ACVNet_plus(nn.Module):
             features_left_for_hg = [feat.detach() if self.training else feat for feat in features_left]
             cost = self.hourglass(volume, features_left_for_hg)
 
-            xspx = self.spx_4(features_left_cat); xspx = self.spx_2(xspx, stem_2x)
+            xspx = self.spx_4(features_left_cat)
+            xspx = self.spx_2(xspx, stem_2x)
             spx_pred = F.softmax(self.spx(xspx), 1)
 
             # 오클루전 예측
@@ -476,7 +478,11 @@ class Fast_ACVNet_plus(nn.Module):
         right_det = right.detach()
         out_full_px_det = out_full_px.detach()
 
+        # jaejun refine
         disp_refined, aux_ref = self.refine_head(left_det, right_det, out_full_px_det)
+        
+        # conv gru
+        # disp_refined, aux_ref = self.refine_head(left_det, right_det, out_full_px_det, features_left[0], feature_right[0])
 
         # # ========= Photometric/LR 정규화 손실(선택) =========
         # reg_dict = None
