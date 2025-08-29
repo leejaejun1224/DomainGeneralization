@@ -194,6 +194,37 @@ class FlyingThingDataset(Dataset):
         if m is None:
             return None
         return (m > 127).astype(np.float32)
+    
+    # ---- 추가: 원본 right 파일 경로로부터 occlusion 파일 경로 찾기 ----
+    def _find_occ_path_for_right(self, right_rel_path):
+        """
+        right_rel_path: 리스트 파일에 들어있던 right 상대경로(또는 그에 준하는 문자열).
+        우선 순위:
+          1) '.../right/<suffix>' 의 <suffix>로 매칭
+          2) basename(예: '000000.png')으로 매칭
+        """
+        if not self.occ_root:
+            return None
+
+        p = right_rel_path.replace("\\", "/")
+        key = None
+        if "/right/" in p:
+            key = p.split("/right/", 1)[1]
+        elif p.startswith("right/"):
+            key = p[len("right/"):]
+        # 1) suffix 매칭
+        if key:
+            hit = self._occ_idx["right"]["by_rel"].get(key)
+            if hit and os.path.exists(hit):
+                return hit
+        # 2) basename fallback
+        base = os.path.basename(p)
+        cands = self._occ_idx["right"]["by_base"].get(base, [])
+        if len(cands) == 1:
+            return cands[0]
+        elif len(cands) > 1:
+            return sorted(cands)[0]
+        return None
 
     def __len__(self):
         return self.max_len if self.max_len is not None else self.data_len
@@ -206,12 +237,23 @@ class FlyingThingDataset(Dataset):
 
         left_img = self.load_image(os.path.join(self.datapath, left_path_rel))
         right_img = self.load_image(os.path.join(self.datapath, right_path_rel))
-        disparity = self.load_disp(os.path.join(self.datapath, self.disp_filenames[index]))
+        disp_left_full = os.path.join(self.datapath, self.disp_filenames[index])
+        disparity = self.load_disp(disp_left_full)        
+        # >>> 추가: right disp 경로 유도 및 로드
+        disparity_right = None
+        right_disp_full = self._derive_right_disp_path(disp_left_full)
+        if right_disp_full and os.path.exists(right_disp_full):
+            disparity_right = self.load_disp(right_disp_full)
         
         occ_full = None
-        if self.use_occ_left and self.occ_root:
-            occ_path = self._find_occ_path_for_left(left_path_rel)
-            occ_full = self._read_occ_mask_png(occ_path)
+        occ_right_full = None
+        if self.occ_root:
+            if self.use_occ_left:
+                occ_path = self._find_occ_path_for_left(left_path_rel)
+                occ_full = self._read_occ_mask_png(occ_path)
+            if self.use_occ_right:
+                occ_r_path = self._find_occ_path_for_right(right_path_rel)
+                occ_right_full = self._read_occ_mask_png(occ_r_path)
         # === disparity 기본 정리 ===
         # if self.erase_low:
         #     # 구코드 호환(권장 X): 대부분 0이 될 수 있어 주의
@@ -258,7 +300,9 @@ class FlyingThingDataset(Dataset):
                 w, h = left_img.size
                 if occ_full is not None:
                     occ_full = np.pad(occ_full, ((pad_h, 0), (0, pad_w)), mode="constant", constant_values=0.0)
-
+                # >>> 추가: right disparity 패딩
+                if disparity_right is not None:
+                    disparity_right = np.pad(disparity_right, ((pad_h, 0), (0, pad_w)), mode='edge')
 
             # 크롭 재시도 루프
             # tries = 0
@@ -281,6 +325,12 @@ class FlyingThingDataset(Dataset):
             disparity = disparity[y1:y1 + crop_h, x1:x1 + crop_w]
             if occ_full is not None:
                 occ_full = occ_full[y1:y1 + crop_h, x1:x1 + crop_w]
+                # ---------- 저해상도 GT ----------
+            disparity_low = cv2.resize(disparity, (crop_w//4, crop_h//4), interpolation=cv2.INTER_NEAREST)
+            disparity_right_low = None
+            if disparity_right is not None:
+                disparity_right_low = cv2.resize(disparity_right, (crop_w//4, crop_h//4), interpolation=cv2.INTER_NEAREST)
+
             # disparity = np.nan_to_num(disparity, nan=0.0, posinf=0.0, neginf=0.0)
 
             # ---------- 저해상도 GT ----------
@@ -331,7 +381,11 @@ class FlyingThingDataset(Dataset):
                 "right_filename": self.right_filenames[index],
                 "prior": prior_t,
             }
-
+            # >>> 추가: 오른쪽 항목들
+            if disparity_right is not None:
+                sample["disparity_right"] = torch.from_numpy(disparity_right).float()
+            if disparity_right_low is not None:
+                sample["disparity_right_low"] = torch.from_numpy(disparity_right_low).float()
                 
                 
             if occ_full is not None:
@@ -401,8 +455,16 @@ class FlyingThingDataset(Dataset):
                 
                 sample["occ_mask"] = torch.from_numpy(occ_full).float()
                 sample["occ_mask_low"] = torch.from_numpy(occ_low).float()
-                
+            if occ_right_full is not None:
+                occ_right_low = cv2.resize(occ_right_full, (crop_w//4, crop_h//4), interpolation=cv2.INTER_NEAREST)
+                sample["occ_mask_right"] = torch.from_numpy(occ_right_full).float()
+                sample["occ_mask_right_low"] = torch.from_numpy(occ_right_low).float()
+
             if self.negate_disp:
                 sample["disparity"]     = -sample["disparity"]
                 sample["disparity_low"] = -sample["disparity_low"]
+                if "disparity_right" in sample:
+                    sample["disparity_right"] = -sample["disparity_right"]
+                if "disparity_right_low" in sample:
+                    sample["disparity_right_low"] = -sample["disparity_right_low"]
             return sample

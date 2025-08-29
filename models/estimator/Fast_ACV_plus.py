@@ -183,7 +183,7 @@ class DisparityRefinement(nn.Module):
         f = self.stem(feat)
         f = self.blocks(f)
         delta = self.head(f)
-        delta = self.max_residual * torch.tanh(delta)
+        # delta = self.max_residual * torch.tanh(delta)
         disp_refined = disp_init + delta
         return disp_refined, {'warped_right': right_warp, 'valid_mask': valid, 'delta': delta}
 

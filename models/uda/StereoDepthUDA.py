@@ -236,8 +236,10 @@ class StereoDepthUDA(StereoDepthUDAInference):
             tgt_pred, _, _,others = self.student_forward(data_batch['tgt_left'], data_batch['tgt_right'])  
             data_batch['tgt_pred_disp_s_for_loss'] = tgt_pred[0]
 
-        # tgt_pred, map, features,others = self.student_forward(data_batch['tgt_right'], data_batch['tgt_left'], mode='right')  
-        # data_batch['tgt_pred_disp_s_reverse'] = tgt_pred
+        tgt_pred, map, features,others = self.student_forward(data_batch['src_right'], data_batch['src_left'], mode='right')  
+        data_batch['tgt_pred_disp_s_reverse'] = tgt_pred
+        data_batch['occ_right_up'] = others[0]
+        data_batch['occ_right_logit'] = others[1]
 
         # with torch.no_grad():
         #     pseudo_disp, map, features,others = self.teacher_forward(
@@ -259,7 +261,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
             #     data_batch[f'pseudo_disp_random_{i+1}'] = pseudo_disp
 
         supervised_loss = calc_supervised_train_loss(data_batch, model='s', epoch=epoch)
-        # supervised_loss_right = calc_supervised_train_loss_right(data_batch, model='s', epoch=epoch)
+        supervised_loss_right = calc_supervised_train_loss_right(data_batch, model='s', epoch=epoch)
         # calc_entropy(data_batch, temperature=temperature, threshold=self.entropy_threshold)
         # # calc_confidence_entropy(data_batch,threshold=10, k=12, temperature=0.5)
         # # compute_photometric_error(data_batch, threshold=0.010)
@@ -274,7 +276,9 @@ class StereoDepthUDA(StereoDepthUDAInference):
         # data_batch['avg_pseudo_disp'] = avg_disparity.unsqueeze(0)
         loss_occ = nn.BCEWithLogitsLoss()(data_batch['occ_logit'].squeeze(1), data_batch['src_occ_mask_low'])  
         loss_occ_up = nn.BCEWithLogitsLoss()(data_batch['occ_up'].squeeze(1), data_batch['src_occ_mask'])  
-
+        
+        loss_occ_right = nn.BCEWithLogitsLoss()(data_batch['occ_right_logit'].squeeze(1), data_batch['src_occ_mask_right_low'])  
+        loss_occ_right_up = nn.BCEWithLogitsLoss()(data_batch['occ_right_up'].squeeze(1), data_batch['src_occ_mask_right'])
         # pseudo_loss, true_ratio = calc_pseudo_loss(data_batch, diff_mask, threshold=0.2, model='s')
         # if torch.isnan(pseudo_loss).any():
         #     pseudo_loss = torch.tensor(0.0, device=data_batch['tgt_pred_disp_s'][0].device)
@@ -305,7 +309,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
         # total_loss = 0.5 * supervised_loss + 1.0 * directional_loss # + 0.0 * pseudo_loss + 0.5 * jino_loss 
         # total_loss = consist_photo_loss['loss_total'] 
         # total_loss = 0.2 * supervised_loss + 1.0 * pseudo_loss + 1.0 * lora_loss
-        total_loss = 1.0*supervised_loss  + 0.5 * loss_occ + 0.5 * loss_occ_up #+ 0.5*vanishing_point_loss# + 1.0 * pseudo_loss #+ 0.5*lora_loss #+ 0.2*band_kl_loss
+        total_loss = 1.0*supervised_loss +1.0*supervised_loss_right + 0.5 * loss_occ + 0.5 * loss_occ_up +0.5*loss_occ_right + 0.5*loss_occ_right_up#+ 0.5*vanishing_point_loss# + 1.0 * pseudo_loss #+ 0.5*lora_loss #+ 0.2*band_kl_loss
         # vp_smooth_loss()
         
         ## pred, gt, mask, weights
