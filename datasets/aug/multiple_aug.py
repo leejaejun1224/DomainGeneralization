@@ -432,24 +432,24 @@ class StereoAugmentor:
         disp: np.float32 (H,W)
         """
         # (0) H-flip
-        # if self.rng.rand() < self.p_hflip:
-        #     imgL, imgR, disp = self._hflip_pair(imgL, imgR, disp)
+        if self.rng.rand() < self.p_hflip:
+            imgL, imgR, disp = self._hflip_pair(imgL, imgR, disp)
 
-        # # (1) 수평 스케일
-        # if self.rng.rand() < self.p_hscale:
-        #     sx = self.rng.uniform(self.hscale_range[0], self.hscale_range[1])
-        #     imgL, imgR, disp = self._horizontal_scale_pair(imgL, imgR, disp, sx)
+        # (1) 수평 스케일
+        if self.rng.rand() < self.p_hscale:
+            sx = self.rng.uniform(self.hscale_range[0], self.hscale_range[1])
+            imgL, imgR, disp = self._horizontal_scale_pair(imgL, imgR, disp, sx)
 
-        # # (2) 좌/우 비대칭 포토메트릭
-        # if self.rng.rand() < self.p_basic:
-        #     imgL, imgR = self._basic_photometric_lr(imgL, imgR)
+        # (2) 좌/우 비대칭 포토메트릭
+        if self.rng.rand() < self.p_basic:
+            imgL, imgR = self._basic_photometric_lr(imgL, imgR)
 
         # # (3) 센서 잡음 / 블러 / JPEG / 비네팅 / 컬러셰이딩
-        # imgL = self._noise_blur_jpeg_vignette_color(imgL)
-        # imgR = self._noise_blur_jpeg_vignette_color(imgR)
+        imgL = self._noise_blur_jpeg_vignette_color(imgL)
+        imgR = self._noise_blur_jpeg_vignette_color(imgR)
 
         # # (4) 날씨 / 그림자
-        # imgL, imgR = self._pair_weather_shadows(imgL, imgR)
+        imgL, imgR = self._pair_weather_shadows(imgL, imgR)
 
         # # (5) 유리 / 바닥 특화
         imgL, imgR = self._pair_glass_road(imgL, imgR)

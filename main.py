@@ -220,7 +220,7 @@ def validate(model, source_loader, target_loader, epoch):
         }
     return {'val_loss': 0, 'true_ratio_val': 0, 'val_pseudo_loss': 0, 'reconstruction_loss': 0, 'depth_loss': 0}
 
-def save_checkpoint(model, optimizer, epoch, save_dir, current_lr):
+def save_checkpoint(model, optimizer, epoch, save_dir, current_lr, best=False):
     checkpoint = {
         'epoch': epoch,
         'student_state_dict': model.student_state_dict(),
@@ -228,7 +228,10 @@ def save_checkpoint(model, optimizer, epoch, save_dir, current_lr):
         'optimizer_state_dict': optimizer.state_dict(),
         'learning_rate': current_lr
     }
-    torch.save(checkpoint, os.path.join(save_dir, f'checkpoint_epoch_{epoch+1}.pth'))
+    if best:
+        torch.save(checkpoint, os.path.join(save_dir, 'best.pth'))
+    else:
+        torch.save(checkpoint, os.path.join(save_dir, f'checkpoint_epoch_{epoch+1}.pth'))
 
 def main():
     args = parse_args()
@@ -277,12 +280,16 @@ def main():
     log_dict['teacher_params'] = sum(p.numel() for p in model.teacher_model.parameters())
     
     threshold_manager = EntropyThresholdManager(save_dir=save_dir)
-    
+    best_loss = float('inf')
     for epoch in range(start_epoch, start_epoch + cfg['epoch']):
         train_metrics = train_epoch(model, train_source_loader, train_target_loader, optimizer, threshold_manager, epoch, cfg, args)
         print(f'Epoch [{epoch + 1}/{start_epoch + cfg["epoch"]}] Average Loss: {train_metrics["train_loss"]:.4f}')
         print(f'Epoch [{epoch + 1}/{start_epoch + cfg["epoch"]}] Average Pseudo Loss: {train_metrics["train_pseudo_loss"]:.4f}')
         print(f'Epoch [{epoch + 1}/{start_epoch + cfg["epoch"]}] Average Entropy Loss: {train_metrics["entropy_loss"]:.4f}')
+        if train_metrics["train_pseudo_loss"] < best_loss:
+            save_checkpoint(model, optimizer, epoch, save_dir, train_metrics['learning_rate'], best=True)
+            best_loss = train_metrics["train_pseudo_loss"]
+            print("Best model saved with pseudo loss:", best_loss)
         if (epoch + 1) % cfg['val_interval'] == 0:
             val_metrics = validate(model, test_source_loader, test_target_loader, epoch)
             print(f'Validation Loss: {val_metrics["val_loss"]:.4f}')

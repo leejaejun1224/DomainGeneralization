@@ -358,7 +358,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
         data_batch['tgt_corr_volume_s_2'] = map[3]
         data_batch['features_s'] = features[0]
         data_batch['tgt_attn_weights_s'] = features[1]
-        data_batch['cost_s'] = features[2]
+        data_batch['tgt_cost_s_1'] = features[2]
 
         tgt_pred, _, _,others = self.student_forward(data_batch['tgt_left'], data_batch['tgt_right'])
         data_batch['tgt_pred_disp_s_for_loss'] = tgt_pred[0]
@@ -396,6 +396,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
         supervised_loss = calc_supervised_train_loss(data_batch, model='s', epoch=epoch)
         # calc_entropy(data_batch, threshold=self.entropy_threshold)
         calc_entropy(data_batch, threshold=2.487)
+        print(data_batch['tgt_entropy_map_s_1'].shape)
         data_batch['tgt_refined_pred_disp_t'], diff_mask = refine_disparity(data_batch, threshold=1.8)
         # calc_confidence_entropy(data_batch,threshold=1.3, k=12, temperature=0.2)
         compute_photometric_error(data_batch, threshold=0.03)

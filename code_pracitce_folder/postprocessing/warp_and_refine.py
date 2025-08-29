@@ -312,10 +312,10 @@ def save_and_viz(out_dir, right_rgb, warped_rgb, masked_rgb, hole_mask,
 # ------------------------------------------------------------
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--left", default="/home/jaejun/dataset/kitti_2015/training/image_2/000005_10.png")
-    ap.add_argument("--right", default="/home/jaejun/dataset/kitti_2015/training/image_3/000005_10.png")
-    ap.add_argument("--disp_left", default="/home/jaejun/DomainGeneralization/log/2025-08-19_21_56_st/pseudo_disp/000005_10.png")
-    ap.add_argument("--out_dir", default="./outputs")
+    ap.add_argument("--left", default="/home/jaejun/dataset/kitti_2015/training/image_2/000020_10.png")
+    ap.add_argument("--right", default="/home/jaejun/dataset/kitti_2015/training/image_3/000020_10.png")
+    ap.add_argument("--disp_left", default="/home/jaejun/DomainGeneralization/log/2025-08-19_21_56_st/pseudo_disp/000020_10.png")
+    ap.add_argument("--out_dir", default="./log/outputs")
     ap.add_argument("--min_disp", type=float, default=0.0)
     ap.add_argument("--search_px", type=int, default=4, help="±국소 탐색 범위 (픽셀)")
     ap.add_argument("--win", type=int, default=5, help="AD 집계 윈도우(홀수)")

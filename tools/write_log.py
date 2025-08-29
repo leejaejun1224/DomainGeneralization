@@ -248,7 +248,7 @@ class Logger:
         plt.close()
 
 
-        entropy_map = data_batch['tgt_mask_pred_s']
+        entropy_map = data_batch['tgt_entropy_map_s_1']
         # entropy_map = data_batch['tgt_entropy_map_idx_t_2']
         # entropy_map_resized = F.interpolate(entropy_map.float(), scale_factor=4, mode="bilinear")
         entropy_map_resized = entropy_map.squeeze(0).squeeze(0).cpu().numpy()       

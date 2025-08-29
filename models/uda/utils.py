@@ -3,7 +3,7 @@ import torch.nn.functional as F
 
 
 def refine_disparity(data_batch, mask=None, threshold=3.0):
-    top_one = data_batch['tgt_entropy_map_idx_t_2']*4.0
+    top_one = data_batch['tgt_entropy_map_idx_s_1']*4.0
     top_one = F.interpolate(top_one, scale_factor=4,mode='nearest')
     pred_disp = data_batch['pseudo_disp'][0].unsqueeze(1)
     
@@ -81,7 +81,7 @@ def calc_entropy(data_batch, threshold, k=12, temperature=0.5, eps=1e-6):
                 # ─────────────────────────────────────────────
                 # 1) cost volume 가져오기
                 # ─────────────────────────────────────────────
-                key = f"{data}_corr_volume_{model}_{i}"
+                key = f"{data}_cost_{model}_{i}"
                 if key not in data_batch:
                     continue
                 vol = data_batch[key].squeeze(1)      # [B, D, H, W]

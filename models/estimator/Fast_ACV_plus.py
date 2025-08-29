@@ -161,7 +161,7 @@ class DisparityRefinement(nn.Module):
             # nn.BatchNorm2d(base_ch), nn.ReLU(inplace=True),
             DomainNorm(base_ch), nn.ReLU(inplace=True),
         )
-        dilations = [1, 2, 4, 8, 1][:num_blocks]
+        dilations = [1, 1, 2, 4, 1][:num_blocks]
         self.blocks = nn.Sequential(*[ResBlock(base_ch, d) for d in dilations])
         self.head = nn.Sequential(
             nn.Conv2d(base_ch, base_ch//2, 3, padding=1, bias=False),
@@ -470,7 +470,7 @@ class Fast_ACVNet_plus(nn.Module):
         pred_up = context_upsample(pred, spx_pred)
         prob_up1 = context_upsample(prob[:,0,:,:].unsqueeze(1), spx_pred)
         prob_up2 = context_upsample(prob[:,1,:,:].unsqueeze(1), spx_pred)
-        confidence = prob_up1 + prob_up2
+        confidence = prob_up1 #+ prob_up2
 
         # ========= 정제(Refinement) =========
         out_full_px = pred_up * 4.0  # 기존 최종값(정제 입력)
@@ -526,7 +526,7 @@ class Fast_ACVNet_plus(nn.Module):
         # 1) 최종 풀해상도는 정제 결과로 교체(기존: pred_up*4)
         preds_main = [disp_refined.squeeze(1), pred.squeeze(1) * 4, pred_att_up * 4, pred_att * 4]
         pack_a = [disp_diff.detach(), corr_volume_1.detach(), confidence, corr_volume_1.detach()]
-        pack_b = [None, att_weights.detach(), cost.detach(), match_left.detach(), match_right.detach()]
+        pack_b = [None, att_weights.detach(), cost, match_left.detach(), match_right.detach()]
         pack_occ = [occ_up, occ_logit]
 
         # if return_reg and reg_dict is not None:
