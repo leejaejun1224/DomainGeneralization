@@ -14,7 +14,7 @@ def onclick(event):
         print(f"좌표: ({x}, {y}), Disparity 값: {disp_value/256}")
 
 # Disparity 맵 로드 (DrivingStereo 기준)
-disparity_path = "/home/jaejun/dataset/kitti_2015/training/disp_occ_0/000059_10.png"  # 실제 disparity 맵 경로로 변경
+disparity_path = "/home/jaejun/dataset/kitti_2015/training/disp_occ_0/000018_10.png"  # 실제 disparity 맵 경로로 변경
 # disparity_path = "/home/jaejun/DomainGeneralization/log/2025-08-15_01_06/pseudo_disp/000059_10.png"  # 실제 disparity 맵 경로로 변경
 disparity = cv2.imread(disparity_path, cv2.IMREAD_UNCHANGED)  # uint16 형식으로 읽기
 # disparity = disparity.astype(np.float32) / 256.0  # float로 변환 및 스케일링

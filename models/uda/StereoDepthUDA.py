@@ -237,7 +237,7 @@ class StereoDepthUDA(StereoDepthUDAInference):
             data_batch['tgt_pred_disp_s_for_loss'] = tgt_pred[0]
 
         tgt_pred, map, features,others = self.student_forward(data_batch['src_right'], data_batch['src_left'], mode='right')  
-        data_batch['tgt_pred_disp_s_reverse'] = tgt_pred
+        data_batch['src_pred_disp_s_reverse'] = tgt_pred
         data_batch['occ_right_up'] = others[0]
         data_batch['occ_right_logit'] = others[1]
 
@@ -309,6 +309,13 @@ class StereoDepthUDA(StereoDepthUDAInference):
         # total_loss = 0.5 * supervised_loss + 1.0 * directional_loss # + 0.0 * pseudo_loss + 0.5 * jino_loss 
         # total_loss = consist_photo_loss['loss_total'] 
         # total_loss = 0.2 * supervised_loss + 1.0 * pseudo_loss + 1.0 * lora_loss
+        print("supervised_loss:", supervised_loss.item())
+        print("supervised_loss_right:", supervised_loss_right.item())
+        print("loss_occ:", loss_occ.item())
+        print("loss_occ_up:", loss_occ_up.item())
+        print("loss_occ_right:", loss_occ_right.item())
+        print("loss_occ_right_up:", loss_occ_right_up.item())
+        
         total_loss = 1.0*supervised_loss +1.0*supervised_loss_right + 0.5 * loss_occ + 0.5 * loss_occ_up +0.5*loss_occ_right + 0.5*loss_occ_right_up#+ 0.5*vanishing_point_loss# + 1.0 * pseudo_loss #+ 0.5*lora_loss #+ 0.2*band_kl_loss
         # vp_smooth_loss()
         
@@ -400,7 +407,6 @@ class StereoDepthUDA(StereoDepthUDAInference):
         supervised_loss = calc_supervised_train_loss(data_batch, model='s', epoch=epoch)
         # calc_entropy(data_batch, threshold=self.entropy_threshold)
         calc_entropy(data_batch, threshold=2.487)
-        print(data_batch['tgt_entropy_map_s_1'].shape)
         data_batch['tgt_refined_pred_disp_t'], diff_mask = refine_disparity(data_batch, threshold=1.8)
         # calc_confidence_entropy(data_batch,threshold=1.3, k=12, temperature=0.2)
         compute_photometric_error(data_batch, threshold=0.03)
